@@ -7,6 +7,64 @@ class ProtocolParamsJsonTest extends AnyFunSuite {
 
     private val mainnet = CardanoInfo.mainnet.protocolParams
 
+    private val rewardJsonCodecs
+        : Seq[(String, String, ProtocolParams => String, String => ProtocolParams)] = Seq(
+      (
+        "Blockfrost",
+        "rho",
+        ProtocolParams.toBlockfrostJson,
+        ProtocolParams.fromBlockfrostJson
+      ),
+      (
+        "cardano-cli",
+        "monetaryExpansion",
+        params => write(params)(using ProtocolParams.cardanoCliParamsReadWriter),
+        ProtocolParams.fromCardanoCliJson
+      )
+    )
+
+    for (format, field, encode, decode) <- rewardJsonCodecs do {
+        test(
+          s"$format: exact decimal reader rejects corrected output beyond its Long denominator limit"
+        ) {
+            val params = mainnet.copy(
+              monetaryExpansion = UnitInterval(100000000000000L, 1000000000000000030L)
+            )
+            val json = encode(params)
+            assert(ujson.read(json)(field).num == 0.00009999999999999999)
+            val thrown = intercept[IllegalArgumentException](decode(json))
+            assert(
+              thrown.getMessage.contains(
+                s"$field: 0.00009999999999999999: requirement failed: Reduced fraction " +
+                    "(9999999999999999 / 100000000000000000000) overflows Long"
+              ),
+              thrown.getMessage
+            )
+
+            val oldWriterValue = ujson.read(json)
+            oldWriterValue(field) = ujson.Num(0.0001)
+            assert(decode(ujson.write(oldWriterValue)).monetaryExpansion == UnitInterval(1, 10000))
+        }
+
+        test(s"$format: reward decimals with denominators through 10^18 still round-trip") {
+            val values = (0 to 18).map(scale => UnitInterval(1, BigInt(10).pow(scale).toLong)) ++
+                Seq(
+                  UnitInterval.zero,
+                  UnitInterval.half,
+                  UnitInterval(7, 1000000000000000000L),
+                  UnitInterval(12345678901234568L, 100000000000000000L),
+                  UnitInterval(9999999999999999L, 10000000000000000L),
+                  mainnet.monetaryExpansion,
+                  mainnet.treasuryCut
+                )
+            for value <- values do {
+                val params =
+                    mainnet.copy(monetaryExpansion = value.reduce, treasuryCut = value.reduce)
+                assert(decode(encode(params)) == params, s"$format: $value")
+            }
+        }
+    }
+
     test("Blockfrost writer rounds monetary expansion below one to the nearest double") {
         val params =
             mainnet.copy(monetaryExpansion = UnitInterval(9999999999999999L, 10000000000000000L))
