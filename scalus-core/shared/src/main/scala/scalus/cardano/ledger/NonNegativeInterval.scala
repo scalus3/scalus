@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import upickle.default.{readwriter as upickleReadwriter, ReadWriter as UpickleReadWriter}
+import scalus.cardano.ledger.internal.RationalToDouble
 import scalus.uplc.builtin.{BuiltinList, Data, FromData, ToData}
 import scalus.uplc.builtin.Builtins.{iData, listData, unIData, unListData}
 
@@ -202,7 +203,9 @@ final class NonNegativeInterval(val numerator: Long, val denominator: Long) {
     }
 
     def toBigDecimal: BigDecimal = BigDecimal(numerator) / BigDecimal(denominator)
-    def toDouble: Double = toBigDecimal.toDouble
+
+    /** Returns the nearest double to this fraction, rounding ties to even. */
+    def toDouble: Double = RationalToDouble(numerator, denominator)
     def reduce: NonNegativeInterval = NonNegativeInterval.reduce(numerator, denominator)
 }
 

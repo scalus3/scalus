@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import upickle.{readwriter, ReadWriter}
+import scalus.cardano.ledger.internal.RationalToDouble
 import scalus.uplc.builtin.{BuiltinList, Data, FromData, ToData}
 import scalus.uplc.builtin.Builtins.{iData, listData, unIData, unListData}
 
@@ -21,12 +22,8 @@ case class UnitInterval(numerator: Long, denominator: Long) {
     require(numerator <= denominator, "Numerator must be less than or equal to denominator")
     require(numerator >= 0, "Numerator must be non-negative")
 
-    /** Converts this unit interval to a double value.
-      *
-      * @return
-      *   The double value representation
-      */
-    def toDouble: Double = numerator.toDouble / denominator.toDouble
+    /** Returns the nearest double to this fraction, rounding ties to even. */
+    def toDouble: Double = RationalToDouble(numerator, denominator)
 
     /** Reduces to lowest terms. Mirrors `NonNegativeInterval.reduce`, so the two sibling types
       * share one notion of reduction instead of each carrying its own gcd.
