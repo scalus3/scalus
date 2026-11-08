@@ -13,6 +13,10 @@ import scalus.uplc.builtin.ByteString.hex
   * Positions are zero-based integers below 2^depth. Leaves hash the element once; empty leaves are
   * zero32; parents hash `left ++ right`, without tags or length mixing. Exact depth prevents a leaf
   * from being interpreted as an internal node. Empty leaves have no known element preimage.
+  *
+  * Verification authenticates membership against the root it receives. The caller must bind that
+  * root to current state and every verified position to the actual payout or changed slot. Old
+  * proofs still verify against their old roots; this library does not establish root freshness.
   */
 @Compile
 object PositionalMerkleTree {

@@ -8,7 +8,7 @@ description: Fixed-depth positional commitments with single proofs, SSZ multipro
 
 `PositionalMerkleTree` commits to a fixed number of slots and can empty occupied slots with a proof. A treasury can commit to its payout outputs, pay each selected output once, and retain only the updated root in its datum. Equal outputs at different positions are separate leaves.
 
-The caller authenticates **both the root and the depth**, through a datum or script parameter. An empty slot and an emptied slot have the same value. Emptying preserves positions and capacity.
+The caller authenticates **both the current root and the depth**, through a datum or script parameter, and binds every verified position to the slot actually paid or changed. An empty slot and an emptied slot have the same value. Emptying preserves positions and capacity.
 
 ## Encoding
 
@@ -46,6 +46,8 @@ For example, at depth 3, positions `[0, 1, 6]` have generalized indices `[8, 9, 
 
 The verifier processes selected nodes from right to left within each level. It merges two selected siblings, or reads the next helper when a sibling is absent. Each merge computes both the original and replacement parent. It repeats over the parents until the authenticated depth is exhausted, checks the original root, and returns the replacement root. Missing helpers fail before slicing. Extra helpers and trailing bytes fail at the root; every supplied byte must be consumed.
 
+Helpers are parsed at fixed 32-byte offsets. There are no per-helper length fields: splitting identical wire bytes externally into 31+33 bytes rather than 32+32 does not change the proof. A changed concatenation must still authenticate the root under the fixed 32-byte interpretation. Off-chain custom node digests must also return exactly 32 bytes; invalid widths fail immediately and digest exceptions propagate.
+
 ## Example
 
 Off chain, construct the tree and prove two outputs. Rebuild later proofs from the updated tree:
@@ -65,7 +67,7 @@ val root = PositionalMerkleTree.rootFromElements(outputs.iterator, 15)
 assert(root == tree.rootHash)
 ```
 
-Inside an `@Compile` validator, take `oldRoot` and `depth` from authenticated state and require the continuing datum to contain the returned root:
+Inside an `@Compile` validator, take `oldRoot` and `depth` from current authenticated state and require the continuing datum to contain the returned root. Here `outputs` is a Scalus prelude `List` of canonical element bytes checked against the actual payouts; use the same positions for verification and payment:
 
 ```scala
 import scalus.cardano.onchain.plutus.crypto.tree.PositionalMerkleTree
@@ -85,6 +87,8 @@ val nextRoot = PositionalMerkleTree.verifyAndEmptyMany(
 For one payout use `verifyAndEmpty(root, depth, position, element, proof)`. For read-only membership use `verifyMembership` with the same arguments. A later payout needs a proof against the updated root: old-root single proofs cannot simply be reused after a prior payout.
 
 The treasury validator must also check the actual paid outputs, preserve its state token and continuing value, and authenticate the continuing datum. This library verifies a root transition; it does not authorize a treasury transaction.
+
+Verify-and-empty proves membership against **the root supplied to it**. An old proof still succeeds when deliberately checked against its old root. The caller must require the current state root, and must bind the verified position to the actual payout or changed slot. Verifying slot 0 and paying slot 1 is not authorized by that proof. After emptying slot 0, an untouched slot's old proof can also be stale when one of its helper subtrees contained slot 0; regenerate it against the updated tree.
 
 ## Security
 
@@ -121,7 +125,7 @@ The sequential column evaluates all `k` single operations in one compiled call, 
 
 Multiproofs save bytes in every measured batch. They save CPU and memory for these contiguous batches starting at `k = 4`; the level-fold bookkeeping makes these scattered batches more expensive than sequential single proofs. Choose based on both transaction size and execution budget. These are helper-library costs, not a complete treasury transaction's budget or size.
 
-For 32,768 leaves at depth 15, a standalone JVM measurement on a shared Ryzen 9 7950X3D, restricted to eight logical CPUs, took **36.70–37.16 ms** for the streaming root and **37.67–38.25 ms** for the materialized tree. This used Scala 3.3.9, Java 25, three warmups and five samples per builder, excluding input preparation. The streaming implementation stores a frontier of `D + 1` hashes and a few accumulators; the materialized tree retains all node hashes. These wall times are illustrative and depend on JIT state and machine load; the budget test prints fresh samples on each run.
+For 32,768 leaves at depth 15, a standalone JVM measurement on a shared Ryzen 9 7950X3D, restricted to eight logical CPUs, took **32.37–37.34 ms** for the streaming root and **38.47–42.56 ms** for the materialized tree. This used Scala 3.3.9, Java 25, three warmups and five samples per builder, excluding input preparation. The streaming implementation stores a frontier of `D + 1` hashes and a few accumulators; the materialized tree retains all node hashes. These wall times are illustrative and depend on JIT state and machine load; the budget test prints fresh samples on each run.
 
 ## Scope
 
