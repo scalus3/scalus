@@ -7,6 +7,28 @@ class ProtocolParamsJsonTest extends AnyFunSuite {
 
     private val mainnet = CardanoInfo.mainnet.protocolParams
 
+    test("Blockfrost writer rounds monetary expansion below one to the nearest double") {
+        val params =
+            mainnet.copy(monetaryExpansion = UnitInterval(9999999999999999L, 10000000000000000L))
+        val json = write(params)(using ProtocolParams.blockfrostParamsReadWriter)
+        assert(ujson.read(json)("rho").num == Math.nextDown(1.0))
+        assert(
+          ProtocolParams.fromBlockfrostJson(json).monetaryExpansion ==
+              UnitInterval(9999999999999999L, 10000000000000000L)
+        )
+    }
+
+    test("cardano-cli writer rounds monetary expansion below one to the nearest double") {
+        val params =
+            mainnet.copy(monetaryExpansion = UnitInterval(9999999999999999L, 10000000000000000L))
+        val json = write(params)(using ProtocolParams.cardanoCliParamsReadWriter)
+        assert(ujson.read(json)("monetaryExpansion").num == Math.nextDown(1.0))
+        assert(
+          ProtocolParams.fromCardanoCliJson(json).monetaryExpansion ==
+              UnitInterval(9999999999999999L, 10000000000000000L)
+        )
+    }
+
     test("Blockfrost codec round-trips ProtocolParams (write then read)") {
         val json = write(mainnet)(using ProtocolParams.blockfrostParamsReadWriter)
         val back = ProtocolParams.fromBlockfrostJson(json)
