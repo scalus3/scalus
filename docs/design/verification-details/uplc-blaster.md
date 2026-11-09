@@ -51,8 +51,10 @@ them.
 ranges over the values of its constructor
 ([statement semantics](prop-semantics.md#1-values-and-quantifiers)), so it stands for one
 variable per field, named `variable.field` in `Lowered.binders` and in a counterexample, and a
-field that is a case class is expanded in turn. Each test that uses the variable starts with
-`let variable = Constructor(fields…)`, which the compiler lowers to the class's own
+field that is a case class is expanded in turn. A class or an enum that would be more than 20
+Lean variables so, as a `ScriptContext`, is one `Data` variable instead
+([Mapping a variable](#mapping-a-variable-proposed), rule 3). Each test that uses the variable
+starts with `let variable = Constructor(fields…)`, which the compiler lowers to the class's own
 representation, as it does for a constructor written in the test. `Quantifiable` has an instance
 for every case class whose fields have one. The exception is a function registered without SIR,
 which has no declared type: a call to it can pass only `BigInt`, `Boolean`, `ByteString`,
@@ -186,10 +188,12 @@ Today the statement chooses how a variable of a case class or an enum reaches Le
 it by its fields, and `forAllData` as one `Data`. This section proposes that the tactic choose,
 part by part of the variable's type, from the statement and the types alone.
 
-Status: steps 1 and 2 of [the steps](#steps) are built, and rule 1 of step 3. `lower` records the
-plan as it maps each variable, and `Lowered.plan`, a `MappingPlan`, carries it; a node below the
-root can be `Data`; a type that contains itself is `Data` where it repeats (rule 1). Otherwise the
-plan is the one the statement writes, unless a check is given a fixed one (step 2).
+Status: steps 1 to 4 of [the steps](#steps) are built. `lower` records the plan as it maps each
+variable, and `Lowered.plan`, a `MappingPlan`, carries it; a node below the root can be `Data`; a
+type that contains itself is `Data` where it repeats (rule 1); a node that would be more than 20
+Lean variables by fields is `Data` (rule 3), unless the variable asks for a witness, or its `Data`
+has more values than its type where its fields have not (rule 2). A `forAllData` variable is
+still `Data` at its root, whatever its size: making it another way to write `forAll` is step 5.
 
 ### The mapping does not change what a statement means
 
@@ -297,9 +301,9 @@ where `p3` is the predicate of the encoding of `Option[StakingCredential]`, and 
 ### The plan
 
 `lower` decides each node of a variable as it maps the variable, from the root down, and a node's
-mapping is final before any test that uses the variable is compiled. Rules 1 and 2 decide a node
-before anything below it is mapped; rule 3 decides after the node is expanded by fields, and may
-replace that expansion with one `Data` variable. The plan is recorded by the same walk that makes
+mapping is final before any test that uses the variable is compiled. The rules decide a node
+before anything below it is mapped: rule 3 counts the node's Lean variables by fields with an
+expansion of its own, which it does not record. The plan is recorded by the same walk that makes
 the Lean variables, with each node's final mapping, so it is what they are. A decision reads only
 the statement and the types: the node's type and the types on its path, the encoding of the
 node's type (`DataEncoding.of`) and whether it is exact, whether the compiler gives the type a
@@ -319,23 +323,46 @@ limits, and whether the variable asks for a witness, which the quantifier's posi
      its premise would hold of every `Data`.
    - A variable with limits (`forAllDataLimited`) is `Data` at the root: the guards walk its `Data`
      ([Limits of a variable's collections](#limits-of-a-variables-collections)).
-2. **A witness needs an exact mapping.** Where the variable asks for a witness, a node whose
-   encoding as `Data` is not exact while its fields are, as one with a string field, is by fields:
-   a string is a Lean `String` variable, while as `Data` it is a byte string whose UTF-8 the
-   premise does not check. Found in step 2: by fields, a class with a string field is refused
-   today wherever a test builds the value in its `Data` representation, as `PlanNamed(name,
-   amount)` is, because building it applies `encodeUtf8` to the variable
-   (input-output-hk/Lean-blaster#389). Then the rule leaves no mapping, and the statement is
-   refused either way. A list or a map whose own predicate is not exact, as a map with keys in
-   an order that is not checked, is one variable either way, and is not exact either way.
-3. **Otherwise by fields,** unless the node by fields is more than a number of Lean variables:
-   then it is `Data`. By fields, a test builds its value from typed variables, with no run that
-   fails, and the solver reasons over integers and byte strings. As `Data`, every decoding of a
-   symbolic `Data` is also a run that fails, which its premise does not prune (`#prep_uplc_run`
-   prepares each test for every value), and Z3 seldom finds a witness through a recursive premise.
-   One `Data` is still cheaper than thousands of variables. A node is expanded by fields first,
-   and is one `Data` variable instead where it comes to more; the expansion below it is then not
-   used, and its nodes are not in the plan. The number is to be measured.
+2. **Where `Data` would lose what the fields have, by fields.** A node that rule 3 would map as
+   `Data` is by fields instead (`Reason.LargerByFields(cause)`):
+   - where the variable asks for a witness (`NotAsData.Witness`). The solver finds a witness
+     over typed variables, and seldom through the premise of a `Data`: an `exists` through even a
+     constructor's premise came back undetermined (2026-10-26), and a `Data` that is not exact
+     cannot stand for a witness at all;
+   - where its encoding as `Data` is not exact while its fields are (`NotAsData.Inexact`), as a
+     class with a string field: a string is a Lean `String` variable, while as `Data` it is a byte
+     string whose UTF-8 the premise does not check, so a counterexample can be no value of the
+     type, and a test that reads the string decodes it with `decodeUtf8`, which the tactic
+     refuses (input-output-hk/Lean-blaster#389). Found in step 2: by fields, a class with a
+     string field is refused wherever a test builds the value in its `Data` representation, as
+     `PlanNamed(name, amount)` is, because building it applies `encodeUtf8`. So by fields is
+     exact for a class the compiler builds otherwise, as one marked `@UplcRepr(UplcConstr)`. A
+     list or a map whose own predicate is not exact, as a map with keys in an order that is not
+     checked, is one variable either way, and is not exact either way: a `ScriptContext` is
+     `Data`.
+3. **Otherwise by fields,** unless the node by fields is more than 20 Lean variables
+   (`MappingPlan.mostByFields`): then it is `Data` (`Reason.Larger`), where it can be one: a node
+   with a part that has no `Data` form, or whose encoding is not told, is by fields
+   (`Reason.LargerByFields`), as is one of rule 2. The count is of the node with every node below
+   it by fields, but where a type repeats, which is one variable (rule 1), and stops past 20. So
+   the node that is `Data` is the highest one that is too large, and nothing below it is decided
+   or in the plan: a `ScriptContext`, 141 variables by fields, is one `Data` variable, and its
+   check is the one `forAllData` gives, to the bytes of its programs. The number was measured in
+   step 4 (below).
+
+   By fields, a test builds its value from typed variables, with no run that fails, and the
+   solver reasons over integers and byte strings. But a function takes a case class in its `Data`
+   representation, so the test encodes every field into `Data` first, and an enum's tag is a
+   branch of the symbolic run for each constructor, whether or not the function reads it. As
+   `Data`, the value is no work to build, and is read only where the function reads it; but every
+   decoding of a symbolic `Data` is also a run that fails, which its premise does not prune
+   (`#prep_uplc_run` prepares each test for every value), and the solver works through the
+   premise, and seldom finds a witness through a recursive one. The small node is cheaper by
+   fields, and the large one as `Data`.
+
+   Counting after the nodes below are decided, a node of a few large fields would be by fields,
+   its fields `Data`: a `ScriptContext` would be three variables, its `txInfo` and `scriptInfo`
+   each one `Data`. That plan was measured too, and is slower than the context as one `Data`.
 
 The plan depends only on the statement and the types, never on a time or an earlier run, so a
 statement has the same plan, and the same check, in every run. Nothing chooses another mapping:
@@ -390,9 +417,9 @@ counterexample are named by their nodes' paths, as now
    (the next step, below), so it may be anywhere a variable may; before, it was exact at its first
    level only, and a variable that asked for a witness was refused. A node of a type with a part
    that has no `Data` form is refused. Rule 2's choice of fields over an inexact
-   `Data` has no node to apply to yet: no rule maps as `Data` a node that has fields, until rule 3.
-   It is left to step 4, with the knowledge it needs as `lower` goes, whether a quantifier asks for
-   a witness, which today `lower` tells only once the statement is lowered. `UplcBlasterTest`
+   `Data` had no node to apply to: no rule mapped as `Data` a node that has fields, until rule 3.
+   It was left to step 4, with the knowledge it needs as `lower` goes, whether a quantifier asks
+   for a witness. `UplcBlasterTest`
    proves a statement that decodes a subtree of a `BlasterTree`, and refutes one with the
    counterexample `Node(Leaf, Leaf)`, replayed.
 
@@ -401,7 +428,53 @@ counterexample are named by their nodes' paths, as now
    It lifts the limit of rule 1's nodes, whose premise described their first level only: a test
    may read the value at any depth below such a node, and a witness Lean gives is a value of the
    type.
-4. Rule 3: the suites run under fixed plans, to measure the number.
+4. Rule 3, and rule 2 with it: the suites run under fixed plans, to measure the number. Built,
+   with 20. `lower` gives each quantifier its position, and so knows whether the variable asks
+   for a witness; the same record says where a variable that is not exact must stand for every
+   value. A fixed plan's `asData` maps the nodes above the ones it names by fields, and
+   `onlyAsData` every other node, but neither where a type repeats. `MappingPlanTest` checks the
+   rules on the plan; no kept result changed, as no variable of the suites' statements is more
+   than 20 Lean variables by fields but a `forAllData` one, which stays `Data` until step 5.
+   Measured for `forAll`, not for a witness: rule 2 keeps a witness by fields on the earlier
+   finding that the solver seldom finds one through a `Data` premise.
+
+   Measured on 2026-11-09 by `MappingMeasurementTest` (scalus-examples, run where
+   `SCALUS_MEASURE_PLANS` names the file of its results), which checks statements of the suites
+   under fixed plans, each with `Budget.Auto` and 8 minutes, in seconds; the budget the search
+   came to is in brackets. A case class by fields and as one `Data`:
+
+   | Statement | The check's Lean variables by fields | By fields | As `Data` |
+   |---|---|---|---|
+   | `vesting.schedule.zero_before_start` | 5 | 23 (with the server's start) [213] | 3 [135] |
+   | `vesting.schedule.returns` | 5 | 2 [261] | 6 [183] |
+   | `vesting.schedule.does_not_decrease` | 6 | 5 [397] | 9 [319] |
+   | `vesting.schedule.does_not_decrease_for_any_amount`, refuted | 6 | 2 [349] | 6 [271] |
+   | `one_shot_mint.mint.seed_mints_the_tokens` | 19 | 59 [2098] | 58 [1681] |
+   | `one_shot_mint.mint.seed_mints_any_quantity`, refuted | 19 | 31 [2098] | 12 [241] |
+   | `one_shot_mint.mint.burns_without_the_seed` | 19 | 73 [2020] | 60 [1603] |
+   | `one_shot_mint.mint.accepted_only_with_the_seed`, refuted | 19 | 29 [1743] | 69 [1843] |
+
+   A `Config` is 4 variables, a `Mint` 19, and the other variables are integers. As `Data` the
+   programs take fewer steps, as the test does not encode the fields, but the solver works
+   through the premise: a `Config` is two to three times faster by fields, a `Mint` about as fast
+   either way.
+
+   A statement over every script context, `forAll[ScriptContext]`, under five plans: the context
+   as one `Data`; its `txInfo` and `scriptInfo` as `Data`, which is what counting after the nodes
+   below are decided gives; its `scriptInfo` as `Data`; only the certificate and the proposal of
+   its `scriptInfo` as `Data`; and every node by fields.
+
+   | Statement | 1 variable | 3 | 25, of 4 tags | 45, of 10 tags | 141, of 43 tags |
+   |---|---|---|---|---|---|
+   | `htlc.context.output_without_a_datum_is_rejected` | 28 [138] | 38 [187] | 232 [761] | over 480, past 963 steps | over 480, past 1953 steps |
+   | `htlc.context.only_spending_is_validated` | 24 [107] | 22 [156] | 248 [730] | over 480 | over 480 |
+   | `vesting.validator.no_datum_is_rejected` | 19 [210] | 32 [259] | 156 [833] | not run | not run |
+
+   The context as one `Data` is the check of the statement as the suites write it, with
+   `forAllData`, to the bytes of its programs, and took as long. Every node of a context that is
+   by fields is a field the test encodes into `Data` before the validator reads it, and a tag a
+   branch of the symbolic run: with its `txInfo` by fields, 25 variables, a check takes 8 to 10
+   times as long as with one `Data`. Hence 20, between a `Mint` and a `txInfo`, and the count from the root down.
 5. `forAllData` as `forAll`, and its parameter annotation with it.
 
 ### Follow-ups

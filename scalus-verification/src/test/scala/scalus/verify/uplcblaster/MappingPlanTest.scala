@@ -5,11 +5,12 @@ import scalus.*
 import scalus.cardano.onchain.plutus.prelude
 import scalus.cardano.onchain.plutus.v1.Value
 import scalus.cardano.onchain.plutus.v2.TxOut
-import scalus.compiler.Compile
+import scalus.cardano.onchain.plutus.v3.ScriptContext
+import scalus.compiler.{Compile, UplcRepr, UplcRepresentation}
 import scalus.uplc.builtin.{FromData, ToData}
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.MappingPlan.{Mapping, Quantifier, Reason}
+import scalus.verify.uplcblaster.MappingPlan.{Mapping, NotAsData, Quantifier, Reason}
 
 /** A class with a function field: it has no `Data` form. */
 case class PlanFunction(f: BigInt => BigInt)
@@ -54,6 +55,75 @@ enum PlanFunctionTree:
 
 @Compile
 object PlanFunctionTree
+
+/** A class of more fields than a node is by fields at most ([[MappingPlan.mostByFields]]): 21 Lean
+  * variables by fields.
+  */
+case class PlanWide(
+    a0: BigInt,
+    a1: BigInt,
+    a2: BigInt,
+    a3: BigInt,
+    a4: BigInt,
+    a5: BigInt,
+    a6: BigInt,
+    a7: BigInt,
+    a8: BigInt,
+    a9: BigInt,
+    a10: BigInt,
+    a11: BigInt,
+    a12: BigInt,
+    a13: BigInt,
+    a14: BigInt,
+    a15: BigInt,
+    a16: BigInt,
+    a17: BigInt,
+    a18: BigInt,
+    a19: BigInt,
+    a20: BigInt
+) derives FromData,
+      ToData
+
+@Compile
+object PlanWide
+
+/** A class that holds a [[PlanWide]]: 22 Lean variables by fields. */
+case class PlanHoldsWide(n: BigInt, wide: PlanWide) derives FromData, ToData
+
+@Compile
+object PlanHoldsWide
+
+/** A class of a string and 20 integers, in the compiler's own constructors: by fields its string is
+  * a Lean `String`, and the value is built without `Data`, so exactly; as `Data`, the UTF-8 of its
+  * string is not checked.
+  */
+@UplcRepr(UplcRepresentation.UplcConstr)
+case class PlanWideNamed(
+    name: String,
+    a1: BigInt,
+    a2: BigInt,
+    a3: BigInt,
+    a4: BigInt,
+    a5: BigInt,
+    a6: BigInt,
+    a7: BigInt,
+    a8: BigInt,
+    a9: BigInt,
+    a10: BigInt,
+    a11: BigInt,
+    a12: BigInt,
+    a13: BigInt,
+    a14: BigInt,
+    a15: BigInt,
+    a16: BigInt,
+    a17: BigInt,
+    a18: BigInt,
+    a19: BigInt,
+    a20: BigInt
+)
+
+@Compile
+object PlanWideNamed
 
 /** The plan of how a statement's variables reach Lean ([[MappingPlan]]): which nodes of a
   * variable's type are decided, how the statement maps them today, and that the plan is what the
@@ -257,12 +327,21 @@ class MappingPlanTest extends AnyFunSuite {
           ),
           out.plan.show
         )
+        // The plan maps the node, and the nodes above it by fields, so that it is reached.
         assert(
-          out.plan.nodes.map(_.reason).distinct ==
-              List(Reason.Quantified(Quantifier.ForAll), Reason.ByFixedPlan)
+          out.plan.nodes.collect {
+              case node if node.reason == Reason.ByFixedPlan =>
+                  PropIdentity.written(node.path) -> node.mapping
+          } == List(
+            "out" -> Mapping.ByFields,
+            "out.address" -> Mapping.ByFields,
+            staking -> Mapping.AsData
+          ),
+          out.plan.show
         )
         assert(
-          out.plan.nodes.find(_.mapping == Mapping.AsData).forall(_.reason == Reason.ByFixedPlan)
+          out.plan.nodes.map(_.reason).distinct ==
+              List(Reason.ByFixedPlan, Reason.Quantified(Quantifier.ForAll))
         )
         // The Data variable is restricted to the encodings of an Option[StakingCredential], and
         // the map of the Value by its own premise, as the doc's p3 and p4.
@@ -430,6 +509,96 @@ class MappingPlanTest extends AnyFunSuite {
                 assert(reason.startsWith("t.Node.left: a "), reason)
                 assert(reason.contains("contains itself"), reason)
                 assert(reason.contains("has no Data form"), reason)
+            case Right(lowered) => fail(s"expected a refusal, got ${lowered.plan.show}")
+    }
+
+    test("rule 3: a node of more Lean variables by fields than the most is one Data variable") {
+        assert(MappingPlan.mostByFields == 20)
+        val wideProp = forAll[PlanWide](w => w.a0 == w.a0)
+        val wide = lowered(wideProp)
+        assert(written(wide.plan) == List("w" -> Mapping.AsData), wide.plan.show)
+        assert(wide.plan.nodes.map(_.reason) == List(Reason.Larger))
+        assert(names(wide) == List("w"))
+        // It is the check of a fixed plan of the same node: the reason is not in its text.
+        val fixed = loweredAsData(wideProp, "w")
+        assert(fixed.binders == wide.binders)
+        assert(fixed.predicates == wide.predicates)
+        assert(fixed.programHashes == wide.programHashes)
+        // A node is decided by all of its size, from the root down: a class that holds a wide
+        // one is one Data variable at its root, and nothing below it is decided.
+        val holds = lowered(forAll[PlanHoldsWide](h => h.n == h.n))
+        assert(written(holds.plan) == List("h" -> Mapping.AsData), holds.plan.show)
+        assert(holds.plan.nodes.map(_.reason) == List(Reason.Larger))
+        // A node of at most the most is by fields: a TxOut is 17 Lean variables.
+        assert(lowered(forAll[TxOut](out => denotes(out))).binders.size == 17)
+        // A script context is one, and the check is that of a forAllData variable of it.
+        val context = lowered(forAll[ScriptContext](ctx => ctx.txInfo.fee >= BigInt(0)))
+        assert(written(context.plan) == List("ctx" -> Mapping.AsData), context.plan.show)
+        assert(context.plan.nodes.map(_.reason) == List(Reason.Larger))
+        val overEncodings = lowered(forAllData[ScriptContext](ctx => ctx.txInfo.fee >= BigInt(0)))
+        assert(names(context) == names(overEncodings))
+        assert(context.predicates == overEncodings.predicates)
+        assert(context.programHashes == overEncodings.programHashes)
+        // A fixed plan reaches a node inside one by mapping the nodes above it by fields; the
+        // others are the tactic's, and a txInfo, 23 Lean variables by fields, is Data.
+        val inside = loweredAsData(
+          forAll[ScriptContext](ctx => ctx.txInfo.fee >= BigInt(0)),
+          "ctx.scriptInfo"
+        )
+        assert(names(inside) == List("ctx.txInfo", "ctx.redeemer", "ctx.scriptInfo"))
+        // One that maps the others by fields gives every variable of the txInfo.
+        val only = UplcBlaster
+            .lower(
+              forAll[ScriptContext](ctx => ctx.txInfo.fee >= BigInt(0)),
+              FunctionTable.empty,
+              MappingPlan.Fixed.onlyAsData("ctx.scriptInfo")
+            )
+            .fold(reason => fail(reason), identity)
+        assert(only.binders.size == 25, names(only))
+    }
+
+    test("rule 2: where the variable asks for a witness, a node too large by fields is by fields") {
+        // The solver finds a witness over typed variables, and seldom through a Data premise.
+        val witnessed = lowered(exists[PlanWide](w => w.a0 == BigInt(1)))
+        assert(written(witnessed.plan) == List("w" -> Mapping.ByFields), witnessed.plan.show)
+        assert(
+          witnessed.plan.nodes.map(_.reason) == List(Reason.LargerByFields(NotAsData.Witness))
+        )
+        assert(witnessed.binders.size == 21)
+        // So does a forAll in a premise, and under <=>.
+        val premise = lowered(forAll[PlanWide](w => w.a0 == w.a0) ==>: Prop(true))
+        assert(written(premise.plan) == List("w" -> Mapping.ByFields), premise.plan.show)
+        val iff = lowered(forAll[PlanWide](w => w.a0 == w.a0) <=> Prop(true))
+        assert(written(iff.plan) == List("w" -> Mapping.ByFields), iff.plan.show)
+        // An exists in a negative position stands for every value.
+        val negated = lowered(!exists[PlanWide](w => w.a0 == BigInt(1)))
+        assert(written(negated.plan) == List("w" -> Mapping.AsData), negated.plan.show)
+    }
+
+    test("rule 2: a node whose Data has more values than its type, and its fields not, is not") {
+        // As Data the string is a byte string whose UTF-8 the premise does not check, so the
+        // variable has more values than its type; by fields it is a Lean String, and the class,
+        // in the compiler's constructors, is built without encodeUtf8.
+        val every = lowered(forAll[PlanWideNamed](n => n.name == n.name))
+        assert(written(every.plan) == List("n" -> Mapping.ByFields), every.plan.show)
+        assert(every.plan.nodes.map(_.reason) == List(Reason.LargerByFields(NotAsData.Inexact)))
+        assert(names(every).head == "n.name")
+        // Where the fields are not exact either, as the maps of a script context whose keys are
+        // not in a checked order, it is Data.
+        assert(!DataEncoding.of[ScriptContext].exact)
+        // In a witness position, the reason is the witness.
+        val witnessed = lowered(exists[PlanWideNamed](n => n.a1 == BigInt(1)))
+        assert(
+          witnessed.plan.nodes.map(_.reason) == List(Reason.LargerByFields(NotAsData.Witness))
+        )
+    }
+
+    test("a fixed plan does not map by fields a node where a type repeats") {
+        // The node above the one it names repeats the tree, and is Data (rule 1): the named node
+        // is inside it, and lowering says so.
+        asData(forAll[BlasterTree](t => denotes(t)), "t.Node.left.Node.left") match
+            case Left(reason) =>
+                assert(reason.contains("inside a node that is one Data variable"), reason)
             case Right(lowered) => fail(s"expected a refusal, got ${lowered.plan.show}")
     }
 

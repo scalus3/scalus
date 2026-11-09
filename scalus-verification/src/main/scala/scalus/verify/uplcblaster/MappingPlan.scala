@@ -15,11 +15,13 @@ import scalus.verify.PropIdentity
   *
   * [[UplcBlaster.lower]] decides each node as it maps the variable, before anything below the node
   * is mapped, and records the decision: so the plan is what the Lean variables are. A decision
-  * reads only the statement and the types. Today it is mostly the one the statement writes: every
-  * node by fields for a `forAll` or an `exists` variable, and the variable as `Data` for a
-  * `forAllData` one; but a type that contains itself is `Data` at the node where it repeats, which
-  * by fields would have no end (rule 1). A plan [[MappingPlan.Fixed]] for a check maps the nodes it
-  * names as it says instead.
+  * reads only the statement and the types. A `forAllData` variable is `Data` at its root. A node of
+  * a `forAll` or an `exists` variable is by fields, but: a type that contains itself is `Data` at
+  * the node where it repeats, which by fields would have no end (rule 1); and a node that would be
+  * more than [[MappingPlan.mostByFields]] Lean variables by fields is `Data` (rule 3), unless the
+  * variable asks for a witness, or its `Data` would have more values than its type where its fields
+  * have not (rule 2), or it has no `Data` form. A plan [[MappingPlan.Fixed]] for a check maps the
+  * nodes it names as it says instead, but cannot map by fields a node where a type repeats.
   *
   * @param nodes
   *   the decided nodes of the statement's variables, in the order the variables are quantified, and
@@ -76,8 +78,8 @@ object MappingPlan {
     /** Why a node is mapped as it is. */
     enum Reason {
 
-        /** The statement quantifies over the variable with `quantifier`, which maps every case
-          * class and enum by fields.
+        /** The statement quantifies over the variable with `quantifier`, which maps a case class or
+          * an enum by fields where it is at most [[MappingPlan.mostByFields]] Lean variables so.
           */
         case Quantified(quantifier: Quantifier)
 
@@ -100,17 +102,71 @@ object MappingPlan {
           */
         case ContainsItself
 
+        /** By fields the node would be more Lean variables than [[MappingPlan.mostByFields]]: it is
+          * one `Data` variable instead (rule 3).
+          */
+        case Larger
+
+        /** By fields the node is more Lean variables than [[MappingPlan.mostByFields]], and yet it
+          * is by fields, as `Data` would lose what its fields have: `why`.
+          */
+        case LargerByFields(why: NotAsData)
+
         /** The reason in words. */
         def describe: String = this match
             case Quantified(quantifier) =>
-                s"${word(quantifier)}, which maps every case class and enum by fields"
+                s"${word(quantifier)}, which maps a case class or an enum of at most " +
+                    s"$mostByFields Lean variables by fields"
             case OverEncodings(quantifier) =>
                 s"${word(quantifier)} over the Data encodings of its type, which maps it as Data"
             case Limited     => "forAllDataLimited, whose guards walk the variable's Data"
             case ByFixedPlan => "fixed by the plan the check was given"
             case ContainsItself =>
                 "its type contains itself and repeats here, so by fields it would have no end"
+            case Larger => s"by fields it would be more than $mostByFields Lean variables"
+            case LargerByFields(why) =>
+                s"by fields it is more than $mostByFields Lean variables, but ${why.describe}"
     }
+
+    /** Why a node that is larger by fields than [[mostByFields]] is not `Data`. */
+    enum NotAsData {
+
+        /** The node's type, or a part of it, has no `Data` form, as a function. */
+        case NoDataForm
+
+        /** The node's encoding as `Data` is not told, as of a type nested too deep. */
+        case NotTold
+
+        /** The variable asks for a witness, which the solver finds over typed variables, and seldom
+          * through the premise of a `Data` (rule 2).
+          */
+        case Witness
+
+        /** As `Data` the node would have more values than its type, as one with a string, and by
+          * fields it has not, as a class the compiler builds in its own constructors (rule 2).
+          */
+        case Inexact
+
+        /** The reason in words. */
+        def describe: String = this match
+            case NoDataForm => "a part of its type has no Data form"
+            case NotTold    => "its encoding as Data is not told"
+            case Witness =>
+                "the variable asks for a witness, which the solver finds over typed variables"
+            case Inexact =>
+                "as Data it would have more values than its type, and by fields it has not"
+    }
+
+    /** The most Lean variables a decided node is by fields: one that would be more is one `Data`
+      * variable (rule 3, docs/design/verification-details/uplc-blaster.md, "The plan"). By fields,
+      * a test builds the value from typed variables, encodes them into the `Data` a function takes,
+      * and branches on every enum's tag; as `Data`, the test decodes it, and the solver works
+      * through the premise of its encoding. Measured on the suites under fixed plans (step 4,
+      * `MappingMeasurementTest`): a class of 4 integer fields was two to three times faster by
+      * fields, one of 19 about as fast either way, and a script context's `txInfo` by fields, 23
+      * variables, made a check 8 to 10 times slower than the context as one `Data`.
+      */
+    val mostByFields: Int = 20
 
     /** Mappings fixed for a check in place of the tactic's own decisions: for the tactic's tests,
       * and for measuring its rules on the suites (docs/design/verification-details/uplc-blaster.md,
@@ -155,12 +211,34 @@ object MappingPlan {
         /** No mapping fixed: every node is the tactic's to decide. */
         val none: Fixed = new Fixed(Set.empty, (_, _, _) => None)
 
-        /** The nodes at `paths`, in any variable, as `Data`, and the others as the tactic decides.
+        /** The nodes at `paths`, in any variable, as `Data`, the nodes above them by fields, so
+          * that they are reached, and the others as the tactic decides: a node above one of them
+          * that the tactic would map as `Data`, as one too large by fields (rule 3), would leave it
+          * inside one `Data` variable. A node where a type repeats is `Data` all the same (rule 1),
+          * and a node below it is not reached, which lowering says.
           */
         def asData(paths: String*): Fixed = {
             require(paths.nonEmpty, "a plan of nodes as Data names at least one")
             val fixed = paths.toSet
-            new Fixed(fixed, (_, path, _) => Option.when(fixed.contains(path))(Mapping.AsData))
+            new Fixed(
+              fixed,
+              (_, path, _) =>
+                  if fixed.contains(path) then Some(Mapping.AsData)
+                  else Option.when(fixed.exists(_.startsWith(s"$path.")))(Mapping.ByFields)
+            )
+        }
+
+        /** The nodes at `paths`, in any variable, as `Data`, and every other node by fields, but
+          * where a type repeats (rule 1): a plan of exactly those nodes, whatever the tactic's
+          * rules would decide, as a measurement compares.
+          */
+        def onlyAsData(paths: String*): Fixed = {
+            val fixed = paths.toSet
+            new Fixed(
+              fixed,
+              (_, path, _) =>
+                  Some(if fixed.contains(path) then Mapping.AsData else Mapping.ByFields)
+            )
         }
     }
 

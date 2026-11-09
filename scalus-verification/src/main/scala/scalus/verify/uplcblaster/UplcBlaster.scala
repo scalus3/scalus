@@ -402,8 +402,9 @@ object UplcBlaster {
           */
         private[uplcblaster] val within: Option[Int] = None,
         /** How the variables reach Lean ([[MappingPlan]]): each case class and enum of a variable
-          * by fields, and the root of a variable over `Data` encodings, whatever its type, as
-          * `Data`, but for the nodes a fixed plan maps otherwise ([[MappingPlan.Fixed]]).
+          * by fields or as `Data`, by the rules of the plan, and the root of a variable over `Data`
+          * encodings, whatever its type, as `Data`, but for the nodes a fixed plan maps otherwise
+          * ([[MappingPlan.Fixed]]).
           */
         plan: MappingPlan = MappingPlan.empty,
         /** The recursive Lean definitions that [[predicates]] use, each once: the walks of the
@@ -653,6 +654,8 @@ object UplcBlaster {
             val restricted = ArrayBuffer.empty[DataEncoding]
             // The binders whose predicate is not exact, which may stand only for every value.
             val inexact = scala.collection.mutable.Set.empty[Int]
+            // The binders whose quantifier asks for a witness, by its position.
+            val asking = scala.collection.mutable.Set.empty[Int]
             val leaves = ArrayBuffer.empty[Program]
             val leafBinders = ArrayBuffer.empty[List[Int]]
             // Leaves that are one program over the same variables share it, as the calls of two
@@ -710,9 +713,10 @@ object UplcBlaster {
             /** The primitive Lean binders for one statement binder that `quantifier` introduces,
               * and a binding that rebuilds a case class from its fields in every leaf in its scope.
               * The binder is one `Data` where the statement quantifies over the `Data` encodings of
-              * its type, and is mapped by fields otherwise, but for the nodes `fixed` maps as
-              * `Data`; its decided nodes are recorded in `planned` as they are mapped
-              * ([[MappingPlan]]).
+              * its type; otherwise each of its nodes is mapped by fields or as `Data` by the rules
+              * of the plan ([[Expansion.decide]]), but for the nodes `fixed` maps. Its decided
+              * nodes are recorded in `planned` as they are mapped ([[MappingPlan]]). `polarity` is
+              * the quantifier's position, which tells whether the variable asks for a witness.
               *
               * A list's or a map's items are any `Data` to Lean: the quantifier restricts them to
               * the type's with a predicate derived from the type. Where the predicate is not exact,
@@ -721,11 +725,17 @@ object UplcBlaster {
               */
             def quantified(
                 ident: PropExpr.Ident[?],
-                quantifier: Quantifier
+                quantifier: Quantifier,
+                polarity: Option[Boolean]
             ): Either[String, (List[Int], List[Binding])] = {
                 val variable = quantifiedSoFar
                 quantifiedSoFar += 1
-                DataEncoding.encoded(ident.tp) match
+                // A variable stands for every value in a forAll in a positive position and in an
+                // exists in a negative one; elsewhere it asks for a witness.
+                val witness = quantifier match
+                    case Quantifier.ForAll => !polarity.contains(true)
+                    case Quantifier.Exists => !polarity.contains(false)
+                val mapped = DataEncoding.encoded(ident.tp) match
                     case Some((valueType, decoder)) =>
                         val limits = DataEncoding.limits(ident.tp)
                         val reason =
@@ -743,7 +753,12 @@ object UplcBlaster {
                         }
                     case None =>
                         val reason = MappingPlan.Reason.Quantified(quantifier)
-                        quantifiedValues(ident, new Expansion(variable, reason, fixed))
+                        quantifiedValues(
+                          ident,
+                          new Expansion(variable, reason, fixed, witness, sized = true, None)
+                        )
+                mapped.foreach((positions, _) => if witness then asking ++= positions)
+                mapped
             }
 
             /** A [[Props.forAllData]] variable: one Lean `Data`, restricted to the encodings of its
@@ -908,20 +923,22 @@ object UplcBlaster {
                 // A binder with limits stands for the values that meet them: its guard, a test of
                 // its own, is the premise of the rest.
                 case Prop.Forall(ident, body) =>
-                    quantified(ident, Quantifier.ForAll).flatMap { (introduced, bindings) =>
-                        loop(body, scope ++ introduced, built ++ bindings, polarity).map { inner =>
-                            val premises = introduced.flatMap(binder =>
-                                guards
-                                    .get(binder)
-                                    .map(guard =>
-                                        LeafFormula.Test(unguardedLeaf(guard, List(binder)))
+                    quantified(ident, Quantifier.ForAll, polarity).flatMap {
+                        (introduced, bindings) =>
+                            loop(body, scope ++ introduced, built ++ bindings, polarity).map {
+                                inner =>
+                                    val premises = introduced.flatMap(binder =>
+                                        guards
+                                            .get(binder)
+                                            .map(guard =>
+                                                LeafFormula.Test(unguardedLeaf(guard, List(binder)))
+                                            )
                                     )
-                            )
-                            LeafFormula.Forall(
-                              introduced,
-                              premises.foldRight(inner)(LeafFormula.Implies(_, _))
-                            )
-                        }
+                                    LeafFormula.Forall(
+                                      introduced,
+                                      premises.foldRight(inner)(LeafFormula.Implies(_, _))
+                                    )
+                            }
                     }
                 // The limits of a binder are the premise of a universal statement, and a
                 // statement that asks for a witness has none.
@@ -931,9 +948,10 @@ object UplcBlaster {
                           "limits of a binder are the premise of a forAll"
                     )
                 case Prop.Exists(ident, None, body) =>
-                    quantified(ident, Quantifier.Exists).flatMap { (introduced, bindings) =>
-                        loop(body, scope ++ introduced, built ++ bindings, polarity)
-                            .map(LeafFormula.Exists(introduced, _))
+                    quantified(ident, Quantifier.Exists, polarity).flatMap {
+                        (introduced, bindings) =>
+                            loop(body, scope ++ introduced, built ++ bindings, polarity)
+                                .map(LeafFormula.Exists(introduced, _))
                     }
                 case Prop.Exists(ident, Some(witness), body) =>
                     loop(instantiate(body, ident, witness), scope, built, polarity)
@@ -1039,12 +1057,7 @@ object UplcBlaster {
             // value: a statement that holds of all of them holds of the type's, but a value that
             // shows a statement of some value can be none of the type's.
             def standsForEvery(formula: LeafFormula): Either[String, LeafFormula] = {
-                val claimed = quantifiers(formula)
-                    .collect { case (introduced, false) =>
-                        introduced.filter(inexact.contains)
-                    }
-                    .flatten
-                    .distinct
+                val claimed = binders.indices.filter(at => inexact(at) && asking(at)).toList
                 if claimed.isEmpty then Right(formula)
                 else
                     Left(
@@ -1348,6 +1361,7 @@ object UplcBlaster {
               s"a ${tp.show} binder is not supported: it has more than $maxParts parts, as a " +
                   "type that contains itself under other arguments each time"
             )
+        else if count.overLimit then Left(s"more than ${count.limit.mkString} Lean variables")
         else expandPart(name, tp, enclosing, count)
     }
 
@@ -1359,6 +1373,7 @@ object UplcBlaster {
         count: Expansion
     ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] = unwrap(tp) match
         case plain if leanVariable(plain) =>
+            count.variables += 1
             Right(List(new PropExpr.Ident[Any](name, 0L, plain)) -> None)
         case product @ SIRType.CaseClass(constructor, typeArguments, None) =>
             // The declaration of a class that is its own only constructor, as the compiler makes
@@ -1385,7 +1400,9 @@ object UplcBlaster {
                           count
                         )
                     }
-                case MappingPlan.Mapping.AsData => asData(name, product, node.reason)
+                case MappingPlan.Mapping.AsData =>
+                    count.variables += 1
+                    asData(name, product, node.reason)
         case sum @ SIRType.SumCaseClass(declaration, _) if declaration.constructors.isEmpty =>
             Left(s"a ${sum.show} binder is not supported: the type has no constructors")
         case sum @ SIRType.SumCaseClass(declaration, typeArguments) =>
@@ -1395,7 +1412,9 @@ object UplcBlaster {
                     nested(name, sum, enclosing).flatMap { inner =>
                         expandSum(name, sum, declaration, typeArguments, inner, count)
                     }
-                case MappingPlan.Mapping.AsData => asData(name, sum, node.reason)
+                case MappingPlan.Mapping.AsData =>
+                    count.variables += 1
+                    asData(name, sum, node.reason)
         case one @ SIRType.CaseClass(_, _, Some(parent)) =>
             Left(
               s"a ${one.show} binder is not supported: it is one constructor of ${parent.show}, " +
@@ -1421,37 +1440,140 @@ object UplcBlaster {
                 function == fromDataName && argument == name
             case _ => false
 
-    /** One statement variable, the `variable`-th the statement quantifies over, as [[expand]]
-      * expands it: the parts expanded so far, its fields and theirs, whether they are Lean
-      * variables or are expanded in turn; and its decided nodes, each as it was decided
-      * ([[MappingPlan]]).
-      */
+        /** One statement variable, the `variable`-th the statement quantifies over, as [[expand]]
+          * expands it: the parts expanded so far, its fields and theirs, whether they are Lean
+          * variables or are expanded in turn; the Lean variables made so far; and its decided
+          * nodes, each as it was decided ([[MappingPlan]]).
+          *
+          * `witness` is whether the variable asks for a witness, which its quantifier's position
+          * tells. Where `sized`, a node is decided by its size by fields as well (rule 3). An
+          * expansion with a `limit` only counts: it stops once it has made more Lean variables than
+          * that.
+          */
     private final class Expansion(
         variable: Int,
         reason: MappingPlan.Reason,
-        fixed: MappingPlan.Fixed
+        fixed: MappingPlan.Fixed,
+        witness: Boolean,
+        sized: Boolean,
+        val limit: Option[Int]
     ) {
         var parts: Int = 0
+        var variables: Int = 0
         val nodes: ArrayBuffer[MappingPlan.Node] = ArrayBuffer.empty
+
+        /** Whether a counting expansion has made more Lean variables than its limit. */
+        def overLimit: Boolean = limit.exists(variables > _)
 
         /** The node at `path`, of type `tp`, a case class or an enum, inside the types `enclosing`,
           * with its mapping and why, recorded (docs/design/verification-details/uplc-blaster.md,
-          * "The plan"): the mapping `fixed` gives; else, where the type contains itself and repeats
-          * here, `Data`, as by fields it would have no end (rule 1); else by fields. As `Data` such
-          * a node's premise is a recursive predicate ([[DataEncoding.Recursive]]), exact where the
-          * type's other parts are.
+          * "The plan"): where the type contains itself and repeats here, `Data`, as by fields it
+          * would have no end (rule 1); else the mapping `fixed` gives; else, where by fields it
+          * would be more Lean variables than [[MappingPlan.mostByFields]], `Data` (rule 3), but
+          * where `Data` would lose what its fields have ([[notAsData]]); else by fields. A fixed
+          * plan may map a repeating node as `Data`, as rule 1 does, but not by fields. As `Data` a
+          * node of a type that contains itself has a recursive premise
+          * ([[DataEncoding.Recursive]]), exact where the type's other parts are.
+          *
+          * The size is that of the node with every node below it by fields, but where a type
+          * repeats: one count, of the whole node, so that the decision depends on the node's type
+          * and the types around it only, and the highest node that is too large is the `Data` one.
           */
         def decide(path: String, tp: SIRType, enclosing: Set[String]): MappingPlan.Node = {
+            val repeats = enclosing.contains(recursionKey(tp))
             val (mapping, why) = fixed.mapping(variable, PropIdentity.written(path), tp) match
-                case Some(chosen) => chosen -> MappingPlan.Reason.ByFixedPlan
-                case None if enclosing.contains(recursionKey(tp)) =>
-                    MappingPlan.Mapping.AsData -> MappingPlan.Reason.ContainsItself
-                case None => MappingPlan.Mapping.ByFields -> reason
+                case Some(chosen) if !(repeats && chosen == MappingPlan.Mapping.ByFields) =>
+                    chosen -> MappingPlan.Reason.ByFixedPlan
+                case _ if repeats => MappingPlan.Mapping.AsData -> MappingPlan.Reason.ContainsItself
+                case _ if sized && largerByFields(path, tp, enclosing) =>
+                    notAsData(path, tp, enclosing) match
+                        case None => MappingPlan.Mapping.AsData -> MappingPlan.Reason.Larger
+                        case Some(cause) =>
+                            MappingPlan.Mapping.ByFields -> MappingPlan.Reason.LargerByFields(cause)
+                case _ => MappingPlan.Mapping.ByFields -> reason
             val node = MappingPlan.Node(variable, path, tp, mapping, why)
             nodes += node
             node
         }
+
+        /** Whether the node at `path` would be more Lean variables than
+          * [[MappingPlan.mostByFields]] with every node below it by fields but where its type
+          * repeats. The count stops past the most. A node whose expansion fails otherwise is not
+          * larger: its own expansion says why it fails.
+          */
+        private def largerByFields(path: String, tp: SIRType, enclosing: Set[String]): Boolean = {
+            val counting = Expansion.counting(variable, Some(MappingPlan.mostByFields))
+            expand(path, tp, enclosing, counting) match
+                case Right((variables, _)) => variables.size > MappingPlan.mostByFields
+                case Left(_)               => counting.overLimit
+        }
+
+        /** Why the node at `path`, of type `tp`, is not to be one `Data` variable, if it is not
+          * ([[MappingPlan.NotAsData]]): it has no `Data` form, or no encoding that is told; the
+          * variable asks for a witness, which the solver finds over typed variables and seldom
+          * through a premise of `Data` (rule 2); or as `Data` it would have more values than its
+          * type, while by fields it has not, as a class of a string that the compiler builds in its
+          * own constructors.
+          */
+        private def notAsData(
+            path: String,
+            tp: SIRType,
+            enclosing: Set[String]
+        ): Option[MappingPlan.NotAsData] = {
+            def exactByFields: Boolean = {
+                val all = Expansion.counting(variable, None)
+                expand(path, tp, enclosing, all).toOption.exists { (variables, _) =>
+                    variables.forall(v =>
+                        variableOf(v.tp)
+                            .filter(_.isLarger)
+                            .forall(kind => variableRestriction(kind, v.tp).exact)
+                    )
+                }
+            }
+            withoutDataMapping(tp)
+                .map(_._1)
+                .orElse(Option.when(witness)(MappingPlan.NotAsData.Witness))
+                .orElse(
+                  Option.when(!DataEncoding.of(tp).exact && exactByFields)(
+                    MappingPlan.NotAsData.Inexact
+                  )
+                )
+        }
     }
+
+    private object Expansion {
+
+        /** An expansion of the `variable`-th variable that only counts its Lean variables, every
+          * node by fields but where a type repeats, and stops once it has made more than `limit`.
+          */
+        def counting(variable: Int, limit: Option[Int]): Expansion =
+            new Expansion(
+              variable,
+              MappingPlan.Reason.ByFixedPlan,
+              MappingPlan.Fixed.none,
+              witness = false,
+              sized = false,
+              limit
+            )
+    }
+
+    /** Why a node of type `tp` cannot be one `Data` variable, with the reason in words, if it
+      * cannot: a part of it has no `Data` form, as a function, so that some of its values are the
+      * decoding of no `Data`; or its encoding is not told, so that its premise would hold of every
+      * `Data`.
+      */
+    private def withoutDataMapping(tp: SIRType): Option[(MappingPlan.NotAsData, String)] =
+        DataLayout.withoutDataForm(tp) match
+            case Some(part) =>
+                Some(
+                  MappingPlan.NotAsData.NoDataForm -> s"its part of type ${part.show} has no Data form"
+                )
+            case None =>
+                val encoding = DataEncoding.of(tp)
+                Option.when(encoding.unknownReason.nonEmpty)(
+                  MappingPlan.NotAsData.NotTold ->
+                      s"its encoding is not told: ${encoding.unknownReason.mkString}"
+                )
 
     /** The node at `path`, of type `tp`, a case class or an enum, as one Lean `Data` variable named
       * `path`, and its value decoded from it. The variable ranges over the encodings of the type's
@@ -1486,11 +1608,9 @@ object UplcBlaster {
               s"${PropIdentity.written(path)}: a ${tp.show} binder is not supported: " +
                   s"${repeating}cannot be mapped as Data: $reason"
             )
-        (DataLayout.withoutDataForm(tp), DataEncoding.of(tp)) match
-            case (Some(part), _) => refused(s"its part of type ${part.show} has no Data form")
-            case (None, encoding) if encoding.unknownReason.nonEmpty =>
-                refused(s"its encoding is not told: ${encoding.unknownReason.mkString}")
-            case _ =>
+        withoutDataMapping(tp) match
+            case Some((_, reason)) => refused(reason)
+            case None              =>
                 // The decoder the variable's type is marked with, and the value: one reading.
                 def decoded(data: AnnotatedSIR): AnnotatedSIR =
                     SIR.Apply(fromDataOf(tp), data, tp, AnnotationsDecl.empty)
@@ -1634,6 +1754,7 @@ object UplcBlaster {
                         case ((constructor, index), otherwise) =>
                             SIR.IfThenElse(chosen(index), constructor, otherwise, sum, annotations)
                     }
+                    count.variables += 1
                     Right((tag :: binders.flatten) -> Some(value))
     }
 

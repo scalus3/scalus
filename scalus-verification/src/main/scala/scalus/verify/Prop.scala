@@ -31,7 +31,7 @@ enum PropExpr[A] {
   *
   * Implication is written `premise ==>: conclusion`. The name ends in `:`, so it is
   * right-associative, as implication is read: `p ==>: q ==>: r` means `p ==>: (q ==>: r)`. The same
-  * holds of `premise ==>?: claim` ([[Rejects]]).
+  * holds of `premise ==>?: claim` ([[Prop.Rejects]]).
   *
   * Precedence: Scala ranks an operator by its first character, so `==>:` binds like `==` and `<=>`
   * like `<`, both tighter than `&&` and `||`, on either side: `p && q ==>: r` means
@@ -86,7 +86,7 @@ enum Prop {
     def &&(q: Prop): Prop = And(this, q)
     def ||(q: Prop): Prop = Or(this, q)
 
-    /** [[Implies]]: `premise ==>: this`. A right-associative operator is a method of its right
+    /** [[Prop.Implies]]: `premise ==>: this`. A right-associative operator is a method of its right
       * operand, so the premise is the argument: `p ==>: q` is `q.==>:(p)`, `Implies(p, q)`.
       *
       * The premise is an inline parameter. Scala evaluates the left operand of a right-associative
@@ -98,8 +98,8 @@ enum Prop {
       */
     inline def ==>:(inline premise: Prop): Prop = Implies(premise, this)
 
-    /** [[Rejects]]: `premise ==>?: this`, where `this` is a test. The premise rejects every value
-      * the test is false of; a value the test fails on says nothing. Right-associative, as
+    /** [[Prop.Rejects]]: `premise ==>?: this`, where `this` is a test. The premise rejects every
+      * value the test is false of; a value the test fails on says nothing. Right-associative, as
       * [[==>:]], so in `p ==>?: q ==>: r` the claim is the implication `q ==>: r`, which is no
       * test, and a tactic rejects it: the other reading is `(p ==>?: q) ==>: r`.
       */
@@ -231,6 +231,12 @@ object Props {
       * test, such as `forAll[BigInt](x => Math.abs(x) >= 0)`. A Boolean body is one test, whatever
       * it contains: `if`, `match` and local `val`s included. In a statement, the parameter may be
       * used in its tests and expressions, not to compute the statement itself.
+      *
+      * A tactic chooses how the variable's value reaches it. `UplcBlaster` passes a case class or
+      * an enum as its fields, and so names a counterexample's values by their fields (`w.a0`), but
+      * one that would be more than 20 Lean variables so, as a `ScriptContext`, as one `Data`: its
+      * counterexample is then one `Data` value, under the variable's name
+      * (docs/design/verification-details/uplc-blaster.md, "Mapping a variable").
       */
     inline def forAll[A: Quantifiable](inline body: A => Prop | Boolean): Prop =
         ${ PropMacro.forAll[A]('body) }
@@ -252,8 +258,10 @@ object Props {
       * `Data` to Lean, restricted to the encodings of the values of `A` ([[DataEncoding.of]]), and
       * `d.to[A]` to the programs, which read the `Data` themselves. A type that contains itself is
       * quantified over so as a whole; [[forAll]] maps it by fields down to where it repeats, and as
-      * `Data` there. Where the restriction is not exact, the variable has more values than `A`, and
-      * is a variable only where it stands for every value, as a list's is.
+      * `Data` there, and maps as `Data` a case class or an enum that would be more than
+      * `MappingPlan.mostByFields` Lean variables by fields, as a `ScriptContext`. Where the
+      * restriction is not exact, the variable has more values than `A`, and is a variable only
+      * where it stands for every value, as a list's is.
       *
       * Its values are the encodings that `toData` gives, as the node gives a script its context:
       * `forAllData[ScriptContext]` stands for every context. They are not all the `Data` that
