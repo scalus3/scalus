@@ -2810,7 +2810,12 @@ object UplcBlaster {
                 steps <- first
                 _ = trace(goal, s"the budget that was kept first, $steps steps")
                 (wait, limit) <- time()
-                result <- probe(steps, wait.map(_ / 2), limit) match
+                half = wait.map(time => FiniteDuration((time / 2).toSeconds max 1, SECONDS))
+                result <- probe(
+                  steps,
+                  half,
+                  half.fold(limit)(time => s"$time, half of $limit")
+                ) match
                     case Probe.Decided(proved: VerificationResult.Proven)   => Some(proved)
                     case Probe.Decided(refuted: VerificationResult.Refuted) => Some(refuted)
                     // The rejecting form decides nothing: the statement as written is checked.
