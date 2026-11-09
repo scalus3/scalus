@@ -11,7 +11,7 @@ import scalus.uplc.Constant
   * For a call `f(a, b)` in the body of `g`, the obligation is, over `g`'s parameters,
   *
   * {{{
-  * denotes(reach) ==> Prop(check)
+  * denotes(reach) ==>: Prop(check)
   * }}}
   *
   * Both tests are cut out of `g`'s SIR along the path to the call: the bindings before it stay, a

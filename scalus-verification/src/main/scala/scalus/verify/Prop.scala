@@ -29,9 +29,18 @@ enum PropExpr[A] {
   * negation; `!` inside a Boolean expression is part of the test. The two differ when the
   * expression can fail.
   *
-  * Precedence: Scala ranks an operator by its first character, so `==>` binds like `==` and `<=>`
-  * like `<`, both tighter than `&&` and `||`. `p && q ==> r` therefore means `p && (q ==> r)`.
-  * Parenthesize, or use the alphanumeric [[implies]] and [[iff]], which bind loosest of all.
+  * Implication is written `premise ==>: conclusion`. The name ends in `:`, so it is
+  * right-associative, as implication is read: `p ==>: q ==>: r` means `p ==>: (q ==>: r)`. The same
+  * holds of `premise ==>?: claim` ([[Rejects]]).
+  *
+  * Precedence: Scala ranks an operator by its first character, so `==>:` binds like `==` and `<=>`
+  * like `<`, both tighter than `&&` and `||`, on either side: `p && q ==>: r` means
+  * `p && (q ==>: r)`, and `p ==>: q && r` means `(p ==>: q) && r`. Parenthesize, or use
+  * [[implies_:]] and [[iff]], whose names begin with a letter and so bind loosest of all:
+  * `p && q implies_: r && s` means `(p && q) implies_: (r && s)`. `implies_:` ends in `:`, so it is
+  * right-associative as `==>:` is. Nor does Scala mix operators of one precedence and of both
+  * associativities: `x == y ==>: p` is a compile error, and is written `(x == y) ==>: p`, or
+  * `x == y implies_: p`.
   */
 enum Prop {
 
@@ -63,7 +72,7 @@ enum Prop {
 
     /** `premise` rejects every value that `claim`, a test, is false of: where the claim returns
       * `false`, the premise does not hold. Where the claim holds, or fails, it says nothing.
-      * Written `premise ==>? claim`. Unlike `premise ==> claim`, a claim that fails is no
+      * Written `premise ==>?: claim`. Unlike `premise ==>: claim`, a claim that fails is no
       * counterexample: where the premise holds of a value the claim cannot be evaluated of, as a
       * validator that accepts a context its claim cannot read, this holds. A tactic checks it in
       * the rejecting form, `if claim then error else premise`, whose failure on every value it is.
@@ -76,17 +85,35 @@ enum Prop {
 
     def &&(q: Prop): Prop = And(this, q)
     def ||(q: Prop): Prop = Or(this, q)
-    def ==>(q: Prop): Prop = Implies(this, q)
 
-    /** [[Rejects]]: `this` rejects every value `q`, a test, is false of; a value `q` fails on says
-      * nothing.
+    /** [[Implies]]: `premise ==>: this`. A right-associative operator is a method of its right
+      * operand, so the premise is the argument: `p ==>: q` is `q.==>:(p)`, `Implies(p, q)`.
+      *
+      * The premise is an inline parameter. Scala evaluates the left operand of a right-associative
+      * call first, binding it to a local value, except where it is given to an inline parameter. A
+      * premise written as a Boolean is converted by [[Props.booleanToProp]], into a test of its
+      * code, before Scala binds it; an inline premise is not bound at all, so it reaches the
+      * conversion as code whatever that order is. The right operand, `this`, is then built first,
+      * which changes nothing: the names of a statement's variables are fixed where it is compiled.
       */
-    def ==>?(q: Prop): Prop = Rejects(this, q)
+    inline def ==>:(inline premise: Prop): Prop = Implies(premise, this)
+
+    /** [[Rejects]]: `premise ==>?: this`, where `this` is a test. The premise rejects every value
+      * the test is false of; a value the test fails on says nothing. Right-associative, as
+      * [[==>:]], so in `p ==>?: q ==>: r` the claim is the implication `q ==>: r`, which is no
+      * test, and a tactic rejects it: the other reading is `(p ==>?: q) ==>: r`.
+      */
+    inline def ==>?:(inline premise: Prop): Prop = Rejects(premise, this)
+
     def <=>(q: Prop): Prop = Iff(this, q)
     def unary_! : Prop = Not(this)
 
-    /** [[==>]] with the lowest precedence: `p && q implies r` means `(p && q) ==> r`. */
-    infix def implies(q: Prop): Prop = Implies(this, q)
+    /** [[==>:]] with the lowest precedence: its name begins with a letter.
+      * `p && q implies_: r && s` means `(p && q) ==>: (r && s)`, and `x == y implies_: p` means
+      * `(x == y) ==>: p`. Its name ends in `:`, so it is right-associative as `==>:` is, and has
+      * its premise inline: `p implies_: q implies_: r` means `p implies_: (q implies_: r)`.
+      */
+    infix inline def implies_:(inline premise: Prop): Prop = Implies(premise, this)
 
     /** [[<=>]] with the lowest precedence. */
     infix def iff(q: Prop): Prop = Iff(this, q)
@@ -95,7 +122,7 @@ enum Prop {
 /** The contract of a function, built by [[Props.contract]] or [[Props.totalContract]], and declared
   * with [[Verifier.contract]].
   *
-  * It says `∀ variables. expects ==> guarantees`: `variables` stand for the function's arguments,
+  * It says `∀ variables. expects ==>: guarantees`: `variables` stand for the function's arguments,
   * `expects` is what every caller must establish, and `guarantees` is what the function then
   * provides, the postcondition last. `returnsWhen` and `failsWhen` on a contract add a guarantee:
   * where a condition holds, the function returns, or fails. A contract is built only by those
@@ -200,7 +227,7 @@ object Props {
     def forAllSIR[A](ident: PropExpr.Ident[A], body: Prop): Prop = Prop.Forall(ident, body)
 
     /** Every value of `A` satisfies the body. The body is a statement about the lambda's parameter,
-      * such as `forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x != BigInt(0)))`, or a Boolean
+      * such as `forAll[BigInt](x => denotes(BigInt(10) / x) ==>: (x != BigInt(0)))`, or a Boolean
       * test, such as `forAll[BigInt](x => Math.abs(x) >= 0)`. A Boolean body is one test, whatever
       * it contains: `if`, `match` and local `val`s included. In a statement, the parameter may be
       * used in its tests and expressions, not to compute the statement itself.
@@ -244,7 +271,7 @@ object Props {
       * derived from, whatever `decode` is.
       *
       * {{{
-      * forAllData[ScriptContext](ctx => succeeds(validator, ctx) ==> ctx.txInfo.signatories.nonEmpty)
+      * forAllData[ScriptContext](ctx => succeeds(validator, ctx) ==>: ctx.txInfo.signatories.nonEmpty)
       * forAll((ctx: ScriptContext @UplcRepr(UplcRepresentation.Data), n: BigInt) => …)
       * }}}
       */
@@ -255,7 +282,7 @@ object Props {
 
     /** [[forAllData]] of the values of `A` that meet the limits `limit` says of the variable: on
       * how many elements its collections have ([[Limits]]). It is the statement
-      * `forAllData[A](x => limit(x) ==> body(x))`, whose limits a tactic may take as the shape of
+      * `forAllData[A](x => limit(x) ==>: body(x))`, whose limits a tactic may take as the shape of
       * the values it checks, and need not run.
       *
       * `limit` is limits joined with `&&`, each of them:
@@ -275,7 +302,7 @@ object Props {
       * {{{
       * forAllDataLimited[ScriptContext](ctx =>
       *     maxCollectionLength(ctx) <= 2 && ctx.txInfo.inputs.nonEmpty
-      * )(ctx => succeeds(validator, ctx.toData) ==> spendsTheSeed(ctx))
+      * )(ctx => succeeds(validator, ctx.toData) ==>: spendsTheSeed(ctx))
       * }}}
       */
     inline def forAllDataLimited[A](inline limit: A => Boolean)(
@@ -381,7 +408,7 @@ object Props {
 
     /** The contract of a function of one parameter: for every argument that satisfies `expects`, a
       * result the function returns satisfies `ensures` (partial correctness, design doc §3.7):
-      * `∀ x. expects(x) ==> whenReturns(fn, x)(r => ensures(x)(r))`. A failing call satisfies it;
+      * `∀ x. expects(x) ==>: whenReturns(fn, x)(r => ensures(x)(r))`. A failing call satisfies it;
       * use [[totalContract]] to claim that the function returns.
       *
       * {{{
@@ -445,8 +472,8 @@ object Props {
       * showing that `e` fails within its budget, which it tells apart from an exhausted one.
       *
       * {{{
-      * forAll[BigInt](x => (x == BigInt(0)) ==> fails(BigInt(10) / x))
-      * forAll[BigInt](x => (x < BigInt(0)) ==> fails { require(x >= BigInt(0)); x * BigInt(2) })
+      * forAll[BigInt](x => (x == BigInt(0)) ==>: fails(BigInt(10) / x))
+      * forAll[BigInt](x => (x < BigInt(0)) ==>: fails { require(x >= BigInt(0)); x * BigInt(2) })
       * }}}
       */
     inline def fails[A](inline e: A): Prop = !denotes(e)
@@ -461,7 +488,7 @@ object Props {
     inline def fails[A, R](fn: FunctionDef[A, R], inline arg: A): Prop = !succeeds(fn, arg)
 
     /** A function of one parameter returns on every argument that satisfies `when`:
-      * `∀ x. when(x) ==> succeeds(fn, x)`.
+      * `∀ x. when(x) ==>: succeeds(fn, x)`.
       */
     inline def returnsWhen[A: Quantifiable, R](fn: FunctionDef[A, R])(
         inline when: A => Prop | Boolean
@@ -479,7 +506,7 @@ object Props {
         ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, false) }
 
     /** A function of one parameter fails on every argument that satisfies `when`:
-      * `∀ x. when(x) ==> fails(fn, x)`. It states what the function must reject, as its runtime
+      * `∀ x. when(x) ==>: fails(fn, x)`. It states what the function must reject, as its runtime
       * `require`s do in its code.
       *
       * {{{
@@ -575,13 +602,11 @@ object Props {
 
     inline def equal[A](inline a: A, inline b: A): Prop = ${ PropMacro.equal('a, 'b) }
 
+    /** A Boolean, as the test of its code. Through it a Boolean on either side of `==>:`, `==>?:`
+      * or a connective of `Prop` is a test: as their argument, or as the operand they are methods
+      * of.
+      */
     implicit inline def booleanToProp(inline b: Boolean): Prop = ${ PropMacro.test('b) }
-
-    extension (inline b: Boolean) {
-        inline def ==>(q: Prop): Prop = Prop.Implies(Prop(b), q)
-        inline def ==>?(q: Prop): Prop = Prop.Rejects(Prop(b), q)
-        infix inline def implies(q: Prop): Prop = Prop.Implies(Prop(b), q)
-    }
 }
 
 object Prop {

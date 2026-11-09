@@ -339,8 +339,8 @@ final class LeanProofs private (
         inconclusive(own, own.statement(statement.name, statement.prop), tactic)
     }
 
-    /** That `statement`, declared in [[verifier]], holds on `values` read with `==>` for each
-      * `==>?` ([[UplcBlaster.holdsAsImplicationOn]]): run on the Scalus CEK, without Lean. Of a
+    /** That `statement`, declared in [[verifier]], holds on `values` read with `==>:` for each
+      * `==>?:` ([[UplcBlaster.holdsAsImplicationOn]]): run on the Scalus CEK, without Lean. Of a
       * sample the function accepts, that its claims return `true` there, and so are not vacuous.
       */
     def holdsAsImplicationOn(statement: Statement, values: Constant*): Boolean =

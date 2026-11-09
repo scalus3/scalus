@@ -87,12 +87,12 @@ final case class StatedGuarantees(
   */
 enum Connective {
 
-    /** `denotes(body) ==> clause` ([[Prop.Implies]]): wherever the function returns, the clause
+    /** `denotes(body) ==>: clause` ([[Prop.Implies]]): wherever the function returns, the clause
       * returns `true`. A clause that fails where the function returns is false there.
       */
     case Implies
 
-    /** `denotes(body) ==>? clause` ([[Prop.Rejects]]): wherever the clause returns `false`, the
+    /** `denotes(body) ==>?: clause` ([[Prop.Rejects]]): wherever the clause returns `false`, the
       * function does not return. Where the clause fails it says nothing, as where it reads a part
       * of the function's input that the function rejects, and a tactic checks it in the rejecting
       * form alone, whose runs end where the clause fails.
@@ -324,7 +324,7 @@ final class Verifier private (results: Option[KeptResults]) {
       * handlers are, once `validate` is compiled: a clause on `spend` says what holds of every
       * spend the script accepts.
       *
-      * The statement is, over the function's parameters, `denotes(body) ==> Prop(check)`: `check`
+      * The statement is, over the function's parameters, `denotes(body) ==>: Prop(check)`: `check`
       * is the body cut along the path to the clause (as for [[obligations]]), with the clause's
       * condition in its place, about the value the clause is applied to.
       *

@@ -35,7 +35,7 @@ Preparation accepts statements built with:
   case classes and enums, at any proposition position;
 - `existsLet(w)(x => p)`, which is lowered as the strict binding `let x = w in p` and introduces
   no SMT quantifier;
-- `&&`, `||`, `!`, `==>` and `<=>` over these leaves:
+- `&&`, `||`, `!`, `==>:` and `<=>` over these leaves:
   - a test, `Prop.Bool`;
   - a total `call` whose continuation is a test or another total call;
   - a partial call, `whenReturns(f, a)(r => p)`, whose continuation is the same;
@@ -172,7 +172,7 @@ none exists requires checking the whole quantified domain, not one concrete CEK 
 is therefore `Inconclusive`.
 
 A quantifier asks for a witness by its position, not by its name: an `exists` in a positive
-position, and a `forAll` in a negative one, under `!` or in the premise of `==>`. Either side of
+position, and a `forAll` in a negative one, under `!` or in the premise of `==>:`. Either side of
 `<=>` is in both. `!forAll(n => n * n != 4)` is true, with the witness 2; at a budget no run
 finishes in, Lean falsifies it, and the body evaluated at whatever value the model leaves for `n`
 would say that it is false. Where no quantifier asks for a witness, every variable ranges over all
@@ -459,7 +459,7 @@ through the types around it.
   refutes nothing, but Lean's variable ranges over it, so its steps on Lean's machine are what a
   budget must cover: the search could count them, as for a spurious counterexample, instead of
   giving up or doubling. It would find the budget of the splitter's spend, which is given by hand.
-- **Liveness under its premise.** `premise ==> succeeds(validator, …)` has Lean run the validator on
+- **Liveness under its premise.** `premise ==>: succeeds(validator, …)` has Lean run the validator on
   every context, the premise pruning none, as the rejecting form does for a guarantee. One program
   `if premise then validator else ()`, which halts on every context exactly where the statement
   holds, would run the validator only where the premise holds, for a premise that returns.
@@ -570,7 +570,7 @@ Through an inline helper, a test cannot read the variable of an outer expansion:
 its caller's lambda is no variable of the statement, and lowering refuses the test. A test whose
 own variables have one name, which an expansion of a helper could give, is a compile error.
 
-A partial call, `whenReturns(f, a)(r => k)`, is rewritten to `denotes(f(a)) ==> call(f, a)(r => k)`
+A partial call, `whenReturns(f, a)(r => k)`, is rewritten to `denotes(f(a)) ==>: call(f, a)(r => k)`
 before it is lowered: if the function returns, the continuation holds of its result. The
 `denotes` leaf returns the function's result rather than a Boolean. Where the call is a
 conclusion, the polarity rule reads that `denotes` weakly, so a run of `f` that exhausts the
@@ -688,7 +688,7 @@ reject `State.Error`, which might be an exhausted budget, so it would be `True`.
 
 ## The rejecting form
 
-A statement that a success implies a claim, `succeeds(validator, ctx) ==> signedBy(ctx)`, is as
+A statement that a success implies a claim, `succeeds(validator, ctx) ==>: signedBy(ctx)`, is as
 written two programs: the validator's, whose run Lean explores on every path to its end, and the
 claim's. The rejecting form is one program, `if claim then error else validator`, which fails on
 every value where the statement holds. Lean's run of it ends where the claim holds, and on every
@@ -707,12 +707,12 @@ budget fixed from a replayed context:
 A limit on what no run that matters reads costs: the guard walks it, and each shape it lets
 through runs the program again. A rejected run reads no output.
 
-`lower` uses the rejecting form for `premise ==> claim` in a positive position, where the premise
+`lower` uses the rejecting form for `premise ==>: claim` in a positive position, where the premise
 is a success, of an expression (`denotes`) or of a call (`succeeds`), the claim is tests (a
 `Bool`, an `Equal` or a conjunction of them, one claim `a && b`), and the statement quantifies over
 values. Elsewhere the rewritten statement, which is stronger, would prove less: under `!`, in a
 premise, inside `<=>`. A test as the premise may guard a conclusion that fails where it is false,
-as `(x != 0) ==> (10 / x > 1)`, and so may a call whose continuation is a test; the expansion of
+as `(x != 0) ==>: (10 / x > 1)`, and so may a call whose continuation is a test; the expansion of
 `whenReturns` calls the function in its conclusion, which need not return; and a closed statement
 has nothing to prune. A check within a budget (`Budget.Within`) is of the statement as written:
 there a run the budget cuts counts for the statement, and where the claim is false the rejecting
@@ -731,7 +731,7 @@ running the premise's program, which Lean does not:
 
 - false as written: a refutation;
 - true as written and false as rewritten: the claim fails where the premise does not hold, as
-  `denotes(unIData(d)) ==> equal(iData(unIData(d)), d)` does where `d` is no integer. The rejecting
+  `denotes(unIData(d)) ==>: equal(iData(unIData(d)), d)` does where `d` is no integer. The rejecting
   form decides nothing.
 
 The rejecting form is an attempt. Where it ends inconclusive, for that reason or another, the
@@ -755,23 +755,23 @@ statement as written first, and the rejecting form in the time left, where the s
 written decides nothing now. What is kept rests on both lowerings: the fingerprint has the text
 and the programs of both. So a claim that returns `false` where it does not hold gets the speed,
 and a statement the statement as written decided is checked as written first.
-`premise ==>? claim` (`Prop.Rejects`) is the rejecting form itself:
+`premise ==>?: claim` (`Prop.Rejects`) is the rejecting form itself:
 it holds where the claim fails ([its semantics](prop-semantics.md#4-connectives)), so its check is
 the rejecting program alone, in any position, with no claim that the claim returns and no fallback.
 A claim of several tests is the one test `a && b`, which fails where `a` fails, and where `a` holds
 and `b` fails. Within a budget its bound is that of its rejecting program. A claim that failed
 wherever the premise holds would be proved of every value: `LeanProofs.holdsAsImplicationOn`
-reads the statement with `==>` on a value, on the Scalus CEK, so that a sample the function
+reads the statement with `==>:` on a value, on the Scalus CEK, so that a sample the function
 accepts shows the claims return `true` there, as the vesting suite's samples do for `spend`'s
 clauses.
 
-The one-shot mint's deployed statement as the script reads its context is stated with `==>?`:
+The one-shot mint's deployed statement as the script reads its context is stated with `==>?:`:
 its claim reads the context with the script's own deserializer, and fails where that cannot read
 it, where the statement of the context's own type says what the script does. Its rejecting program
 runs the deserializer and then the script, so its budget is about twice theirs: 5000 steps, proved
 in 75 s.
 
-A guarantee the Verifier makes of a function's clauses, `denotes(body) ==> clause`, is in the
+A guarantee the Verifier makes of a function's clauses, `denotes(body) ==>: clause`, is in the
 rejecting form too. A clause that fails where the function fails makes the attempt end
 inconclusive, and the first run spends up to half its time on it. The one-shot mint's clauses read
 the policy's own tokens, and failed where the mint names none, as the policy does; `ownTokens`
@@ -783,7 +783,7 @@ to the call, `reach`, and its claim that code with the precondition at the call,
 rejecting form would prune nothing, would run that code once more, and its claim fails wherever
 that code fails, as at a `require` before the call. Follow-up: where the precondition returns on
 every value of its variables, `check` fails exactly where `reach` does, and the obligation is the
-one program `check`, which never returns `false` (`true ==>? check`), so that the caller's code up
+one program `check`, which never returns `false` (`true ==>?: check`), so that the caller's code up
 to the call runs once instead of twice. That the precondition returns would be a statement of its
 own, over the callee's variables.
 
@@ -1019,7 +1019,7 @@ lengthen a list within 100.
 
 ### Limits of a variable's collections
 
-`forAllDataLimited[A](x => limit)(x => body)` is `forAllData[A](x => limit ==> body)`, where `limit`
+`forAllDataLimited[A](x => limit)(x => body)` is `forAllData[A](x => (limit) ==>: body)`, where `limit`
 says how many elements the collections of `x` have. A collection is a list or a map of the type, as
 its `Data` encoding has it: the fields of a case class are none, and neither is a list in a field of
 type `Data`. The macro turns `limit` into `Limits` at compile time, a list of `Limit`s:
@@ -1138,7 +1138,7 @@ is canceled.
   universal position. A type that contains itself and is passed through its constructors is
   quantified over with `forAll` by fields down to where it repeats, and as `Data` there, and with
   `forAllData` as one `Data`: either way with a recursive premise, exact where its other parts
-  are. `forAll[Data](d => denotes(d.to[A]) ==> …)` does not stand for it: `d.to[A]`
+  are. `forAll[Data](d => denotes(d.to[A]) ==>: …)` does not stand for it: `d.to[A]`
   checks nothing itself, and the premise holds of every `d` that the program's conversion to `A`'s
   representation reads without failing, which is part of what makes `d` a value of `A`, and a part
   that depends on the representation. Nor can one constructor of `Data`, such as `Data.I`, be
@@ -1259,7 +1259,7 @@ an `Unfinished` test, which shows what the limits are for.
 | | a non-positive amount is rejected | | | 9 s |
 | | nothing but spending is validated | | | 9 s |
 | a withdrawal | samples: everything after the end is accepted, and rejected unsigned; halfway, what has vested is accepted, and one lovelace more rejected | closed, `native_decide` | 20000 | under 1 s each |
-| | `spend`'s guarantees, stated with `==>?`: the beneficiary signed | every context of at most two inputs and one signatory, the inputs' values of one token, `limitedData` | 3300 | 149 s |
+| | `spend`'s guarantees, stated with `==>?:`: the beneficiary signed | every context of at most two inputs and one signatory, the inputs' values of one token, `limitedData` | 3300 | 149 s |
 | | something is withdrawn | every script context, `unlimitedData` | | 10 s |
 | | at least the unvested amount stays locked | of at most two inputs, as the first | | not finished (`Unfinished`) |
 | | the first and the third | every script context | | not finished (`Unfinished`) |
@@ -1275,7 +1275,7 @@ guarantees at its head; `Verifier.guarantees(spends.ref, fewInputs, Connective.R
 in the code of `spends`, the validator on a typed context, where the inlined handler ends up, over
 the contexts `fewInputs` says ([`Props.limitedData`](../verification-overview.md#37-function-contracts-pre--and-postconditions)). Each
 is proved alone: one rejecting program of all three would run every way one of them is false on
-into the validator. They are stated with `==>?`, as a clause reads the datum, the redeemer and the
+into the validator. They are stated with `==>?:`, as a clause reads the datum, the redeemer and the
 spent input as the validator does, and fails where they cannot be read, where the validator
 rejects too: there it says nothing, and the rejecting program ends at once. A clause written to
 return there, reading a default instead, lets each of the datum's twenty-odd unreadable shapes run
@@ -1380,11 +1380,11 @@ the published script, which `HtlcContract` compiles with other options.
 states properties of the naive and the optimized payment splitters, in the library's Lean
 workspace. Its statements quantify over the payees, a `forAllDataLimited` list of two keys, and
 over real script contexts, as the vesting and HTLC suites' do. A rejection is stated as what an
-accepted context is, `succeeds(validator, …) ==> claim`, which the tactic checks in the rejecting
-form: the validator runs only where the claim is false. Stated as `premise ==> fails(…)`, the
+accepted context is, `succeeds(validator, …) ==>: claim`, which the tactic checks in the rejecting
+form: the validator runs only where the claim is false. Stated as `premise ==>: fails(…)`, the
 validator ran on every context within the limits, and Lean did not finish the first statement in
 ten minutes. A claim that reads the context as the validator does, and fails where it cannot read
-it, is stated with `==>?`; a test on the Scalus CEK shows each claim true on the samples the
+it, is stated with `==>?:`; a test on the Scalus CEK shows each claim true on the samples the
 validators accept, and a JVM test shows that the samples meet the premises of the statements that
 the validators accept.
 
@@ -1423,8 +1423,8 @@ What the suite shows about the tactic:
   the withdrawals': its variable ranges over unsorted maps too, which is sound, as a proof is then
   of more values than the type's. But a counterexample with such a map is no context, and the
   search neither replays it nor counts its steps. In the rejecting form it gave up at 747 steps,
-  where Lean's machine counts 772 on that counterexample; as written, and with `==>?`, it doubles
-  the budget. The spend's statements are stated with `==>?`, so that the search doubles.
+  where Lean's machine counts 772 on that counterexample; as written, and with `==>?:`, it doubles
+  the budget. The spend's statements are stated with `==>?:`, so that the search doubles.
 - **A claim's cost is part of every rejected run.** The rejecting program runs the claim first.
   Stated as "some input of the spent reference has its script withdrawn", the claim searched the
   inputs and looked each one's script up, 1854 steps on two inputs, and the rejecting program
@@ -1528,7 +1528,7 @@ What the suite shows:
 **The script on every context is stated, and not finished.** A test tagged `Unfinished` states of
 the script as the ledger runs it, `deployed` (the optimized deserializer and the policy, with a
 seed and tokens of the test's own), that only the seed mints:
-`forAllData[v1.ScriptContext](ctx => succeeds(deployed, ctx.toData) ==> onlyTheSeedMints(ctx))`.
+`forAllData[v1.ScriptContext](ctx => succeeds(deployed, ctx.toData) ==>: onlyTheSeedMints(ctx))`.
 The context is one `Data`, with no shape. Within 2000 steps (`Budget.Within`) Lean was still in the
 symbolic run of a test after 10 minutes. Within smaller budgets it finishes, and the time grows
 steeply with the budget:
@@ -1664,7 +1664,7 @@ What could change this:
 - **A budget for the runs the statement is about.** Done: `Budget.Auto` finds it from Lean's
   counterexamples ([Finding the budget](blaster-budget-search.md)). It needs a program whose runs of
   interest end before its loop starts.
-- **Prepare a conclusion under its premise.** For `p ==> fails(f(a))`, one program that tests
+- **Prepare a conclusion under its premise.** For `p ==>: fails(f(a))`, one program that tests
   `p` first and runs `f(a)` only then. The runs that `p` excludes disappear only if the symbolic
   run asks the solver whether a path is feasible, which Blaster's does not.
 - **Bound a list in the statement.** Done for a variable's collections, with a guard that every

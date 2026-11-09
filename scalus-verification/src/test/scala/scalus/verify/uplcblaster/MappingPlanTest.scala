@@ -365,7 +365,7 @@ class MappingPlanTest extends AnyFunSuite {
         assert(fixed.programHashes == cut.programHashes)
         // A forAll in a positive position stands for every value, also in a conclusion, and so
         // does an exists in a negative one.
-        assert(UplcBlaster.lower(Prop(true) ==> tree, FunctionTable.empty).isRight)
+        assert(UplcBlaster.lower(Prop(true) ==>: tree, FunctionTable.empty).isRight)
         assert(
           UplcBlaster.lower(!exists[BlasterTree](t => denotes(t)), FunctionTable.empty).isRight
         )
@@ -377,7 +377,7 @@ class MappingPlanTest extends AnyFunSuite {
         val asking = List(
           exists[BlasterTree](t => denotes(t)),
           !tree,
-          tree ==> Prop(true),
+          tree ==>: Prop(true),
           tree <=> Prop(true),
           Prop(true) <=> exists[BlasterTree](t => denotes(t))
         )
