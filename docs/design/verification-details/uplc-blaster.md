@@ -554,9 +554,25 @@ through the types around it.
   budget must cover: the search could count them, as for a spurious counterexample, instead of
   giving up or doubling. It would find the budget of the splitter's spend, which is given by hand.
 - **Liveness under its premise.** `premise ==>: succeeds(validator, …)` has Lean run the validator on
-  every context, the premise pruning none, as the rejecting form does for a guarantee. One program
-  `if premise then validator else ()`, which halts on every context exactly where the statement
-  holds, would run the validator only where the premise holds, for a premise that returns.
+  every context, the premise pruning none. Two accepting forms, which run the validator only where
+  the premise holds, were built and measured on the suites (2026-11-09), and dropped:
+  - One program, `if premise then validator else true`, which returns `true` exactly where the
+    statement holds, for a premise that returns. The suites' premises do not: HTLC's and the
+    splitter's read the redeemer with a decoder that fails on other `Data`. The attempt in that
+    form ended at a context where the premise fails, after 24 to 52 s, and the statement as
+    written was checked after it.
+  - `premise ==>: (if premise then validator else true)`, which states the same on every value,
+    so with no fallback. One program runs the premise and then the validator, so the budget must
+    cover both, and a check has one budget for every program: the premise's own is explored at
+    it too. The three `Unfinished` liveness statements, Vesting's withdrawal after the end and the
+    splitters' honest payouts, did not finish in 20 minutes with `Budget.Auto`: after a spurious
+    counterexample at about 2030 steps, Lean was in the premise's symbolic run at 2280 to 2859.
+    Of the statements that finish, HTLC's refund from the timeout took 50 s at 4000 steps (24 s as
+    written), the mint's two were 10 to 20% faster at budgets 15% higher, and the optimized
+    splitter's spend with its withdrawal was no longer proved at its given 1600 steps.
+
+  A budget of each program, the accepting program's the premise's and the validator's, would
+  keep the premise's at its own; that is a change of the Lean check.
 - **Two walks of one name throw.** `LeanRecursions` fails with an exception where two walks of
   different text have one 64-bit name, inside `lower`, whose other failures are a `Left`. It is
   an invariant, not an error a statement can meet, but it could be told as a reason.
