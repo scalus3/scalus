@@ -402,8 +402,8 @@ object UplcBlaster {
           */
         private[uplcblaster] val within: Option[Int] = None,
         /** How the variables reach Lean ([[MappingPlan]]): each case class and enum of a variable
-          * by fields or as `Data`, by the rules of the plan, and the root of a variable over `Data`
-          * encodings, whatever its type, as `Data`, but for the nodes a fixed plan maps otherwise
+          * by fields or as `Data`, by the rules of the plan, and the root of a variable with
+          * limits, whatever its type, as `Data`, but for the nodes a fixed plan maps otherwise
           * ([[MappingPlan.Fixed]]).
           */
         plan: MappingPlan = MappingPlan.empty,

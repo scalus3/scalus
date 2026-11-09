@@ -1065,6 +1065,14 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         val firstOnly =
             forAllData[BlasterPair](p => p.a + p.b == p.b + p.a)(using BlasterPairReader.firstOnly)
         assert(PropIdentity.of(firstOnly) == PropIdentity.of(plain))
+        // So is a variable marked as over the encodings without limits, as no macro builds one: it
+        // is the statement of its values, as the tactic checks it.
+        plain match
+            case Prop.Forall(variable, body) =>
+                val decoder = SIR.Const(Constant.Unit, SIRType.Unit, AnnotationsDecl.empty)
+                val marked = Prop.Forall(DataEncoding.encodedVariable(variable, decoder), body)
+                assert(PropIdentity.of(marked) == PropIdentity.of(plain))
+            case other => fail(s"expected a forAll, got $other")
         val lowering = lowered(commutes, FunctionTable.empty)
         assert(lowering.binders.size == 2, lowering.binders)
         assert(lowering.programHashes == lowered(plain, FunctionTable.empty).programHashes)
