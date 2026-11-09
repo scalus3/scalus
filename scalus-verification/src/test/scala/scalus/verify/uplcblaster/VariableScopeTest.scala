@@ -2,6 +2,7 @@ package scalus.verify.uplcblaster
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
+import scalus.cardano.onchain.plutus.prelude
 import scalus.compiler.sir.SIR
 import scalus.uplc.{Constant, Term}
 import scalus.uplc.Term.asTerm
@@ -14,9 +15,9 @@ import scalus.verify.Props.*
 /** A statement's variable hides an outer one of its name in its scope, as a Scala lambda's
   * parameter does: a test, an `existsLet`'s witness and a call's argument read the innermost
   * variable of a name. `lower` names the variables of every scope apart before it compiles a test,
-  * so a value that a test builds for a case-class variable, decodes for a variable over `Data`
-  * encodings or binds to a witness is the right variable's, and a witness is not captured by an
-  * inner variable of its name.
+  * so a value that a test builds for a case-class variable, decodes for a variable mapped as `Data`
+  * or binds to a witness is the right variable's, and a witness is not captured by an inner
+  * variable of its name.
   *
   * The macros name a variable after its lambda's parameter and the place of the lambda in its file.
   * So one inline helper nested in itself gives two variables one name, as do two files with a
@@ -73,9 +74,15 @@ class VariableScopeTest extends AnyFunSuite {
         case other => fail(s"not two quantifiers: $other")
 
     /** What the test of `prop` over `arguments.size` variables evaluates to on `arguments`. */
-    private def evaluated(prop: Prop, arguments: Term*): Term = {
+    private def evaluated(prop: Prop, arguments: Term*): Term =
+        evaluated(prop, MappingPlan.Fixed.none, arguments*)
+
+    /** [[evaluated]], with the nodes that `fixed` maps mapped as it says. */
+    private def evaluated(prop: Prop, fixed: MappingPlan.Fixed, arguments: Term*): Term = {
         val lowered =
-            UplcBlaster.lower(prop, FunctionTable.empty).fold(reason => fail(reason), identity)
+            UplcBlaster
+                .lower(prop, FunctionTable.empty, fixed)
+                .fold(reason => fail(reason), identity)
         val leaf = lowered.leafBinders.indexWhere(_.size == arguments.size)
         assert(leaf >= 0, s"${lowered.leafBinders} for ${lowered.binders.map(_.name)}")
         val applied = arguments.foldLeft(lowered.leaves(leaf))(_ $ _)
@@ -105,13 +112,26 @@ class VariableScopeTest extends AnyFunSuite {
         assert(evaluated(prop, (outer :+ BigInt(5).asTerm)*) == isFalse)
     }
 
-    test("a variable hides an outer variable over Data encodings of its name") {
-        val prop = hiding(forAllData[BlasterOwned](o => seven), seven)
+    test("a variable hides an outer variable mapped as Data of its name") {
+        val prop = hiding(forAll[BlasterOwned](o => seven), seven)
         val owned =
             Term.Const(Constant.Data(BlasterOwned(BlasterOwner(ByteString.empty), 7).toData))
         // the outer variable's Data, whose amount is 7, then the inner integer
-        assert(evaluated(prop, owned, BigInt(7).asTerm) == isTrue)
-        assert(evaluated(prop, owned, BigInt(5).asTerm) == isFalse)
+        val asData = MappingPlan.Fixed.asData("x")
+        assert(evaluated(prop, asData, owned, BigInt(7).asTerm) == isTrue)
+        assert(evaluated(prop, asData, owned, BigInt(5).asTerm) == isFalse)
+    }
+
+    test("a variable hides an outer variable with limits of its name") {
+        // The outer one is one Data, decoded by the reader its statement compiled.
+        val prop = hiding(
+          forAllDataLimited[BlasterPairs](ps => ps.entries.length <= 1)(ps => seven),
+          seven
+        )
+        val pairs = Term.Const(Constant.Data(BlasterPairs(prelude.List.Nil).toData))
+        // the outer variable's Data, within its limits, then the inner integer
+        assert(evaluated(prop, pairs, BigInt(7).asTerm) == isTrue)
+        assert(evaluated(prop, pairs, BigInt(5).asTerm) == isFalse)
     }
 
     test("a variable hides the witness of an outer existsLet of its name") {

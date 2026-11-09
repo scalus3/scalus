@@ -227,9 +227,9 @@ private[verify] object PropIdentity {
           * proxy, which is followed once.
           */
         private def tpe(tp: SIRType, seen: Set[SIRType.TypeProxy]): Unit = tp match
-            // A variable over the `Data` encodings of its values is checked as `Data`.
-            // The decoder is code each leaf that reads the variable runs. Its limits, where it
-            // has them, are of the values it stands for.
+            // A variable over the `Data` encodings of its values that meet limits is checked as
+            // `Data`. The decoder is code each leaf that reads the variable runs. Its limits are
+            // of the values it stands for. One without limits is a variable of its values.
             case annotated if DataEncoding.encoded(annotated).isDefined =>
                 node("data") {
                     DataEncoding.encoded(annotated).foreach { (inner, decoder) =>

@@ -380,7 +380,9 @@ final class Verifier private (results: Option[KeptResults]) {
 
     /** The variables of a statement about the function of `body`: its parameters, each a variable
       * of its type, but for a function of one parameter that `parameter` says, which is a
-      * [[Props.forAllDataLimited]] variable ([[Props.limitedData]]).
+      * [[Props.forAllDataLimited]] variable ([[Props.limitedData]]) where it has limits, and one of
+      * its type, as a [[Props.forAllData]] variable is, where it has none
+      * ([[Props.unlimitedData]]).
       */
     private def variablesOf(
         function: FunctionRef[?, ?],
@@ -393,7 +395,11 @@ final class Verifier private (results: Option[KeptResults]) {
                 // By what they show: the parameter's type is the function's SIR's, and `limited`'s
                 // is compiled apart, so their annotations differ.
                 case List(variable) if variable.tp.show == limited.tp.show =>
-                    List(DataEncoding.encodedVariable(variable, limited.decoder, limited.limits))
+                    if limited.limits.all.isEmpty then List(variable)
+                    else
+                        List(
+                          DataEncoding.encodedVariable(variable, limited.decoder, limited.limits)
+                        )
                 case List(variable) =>
                     throw new IllegalArgumentException(
                       s"${function.displayName} takes a ${variable.tp.show}, and the values that " +

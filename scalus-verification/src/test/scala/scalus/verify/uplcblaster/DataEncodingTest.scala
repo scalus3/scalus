@@ -108,6 +108,11 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
     import DataEncodingTest.*
 
+    /** The type of the variable of `prop`, a quantifier over one. */
+    private def typeOf(prop: Prop): SIRType = prop match
+        case Prop.Forall(ident, _) => DataEncoding.valueType(ident.tp)
+        case other                 => fail(s"expected a forAll, got $other")
+
     test("the encoding of a type is the Data that its values are") {
         assert(DataEncoding.of[BigInt] == DataEncoding.Integer)
         assert(DataEncoding.of[ByteString] == DataEncoding.Bytes)
@@ -154,12 +159,7 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("the largest value within limits has a part whose smallest value needs the type around") {
-        val owner = UplcBlaster
-            .lower(forAllData[EncodingOwner](_ => true), FunctionTable.empty)
-            .fold(
-              reason => fail(reason),
-              lowered => DataEncoding.valueType(lowered.binders.head.tp)
-            )
+        val owner = typeOf(forAll[EncodingOwner](_ => true))
         // A part of one part, each owned by nobody: the smallest owner, a constructor without the
         // part again, ends it.
         val smallest = EncodingPart(prelude.List.Nil, EncodingOwner.Nobody)
@@ -181,12 +181,7 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
         val deep = (1 to 100000).foldLeft(Data.Constr(0, prelude.List.Nil): Data) { (rest, n) =>
             Data.Constr(1, prelude.List(Data.Constr(0, prelude.List(Data.I(n), rest))))
         }
-        val tp = UplcBlaster
-            .lower(forAllData[EncodingChain](_ => true), FunctionTable.empty)
-            .fold(
-              reason => fail(reason),
-              lowered => DataEncoding.valueType(lowered.binders.head.tp)
-            )
+        val tp = typeOf(forAll[EncodingChain](_ => true))
         def onSmallStack[A](body: => A): A = {
             var result: Option[Either[Throwable, A]] = None
             val thread = new Thread(
@@ -210,12 +205,7 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
         val rose = (1 to 100000).foldLeft(EncodingRose(0, prelude.List.Nil).toData) { (child, n) =>
             Data.Constr(0, prelude.List(Data.I(n), Data.List(prelude.List(child))))
         }
-        val roseType = UplcBlaster
-            .lower(forAllData[EncodingRose](_ => true), FunctionTable.empty)
-            .fold(
-              reason => fail(reason),
-              lowered => DataEncoding.valueType(lowered.binders.head.tp)
-            )
+        val roseType = typeOf(forAll[EncodingRose](_ => true))
         val started = System.nanoTime()
         assert(
           onSmallStack(Limits.of(Limit.MaxCollectionLength(1)).outside(rose, roseType)).isEmpty
@@ -299,14 +289,8 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
         for name <- List("EncodingTree", "EncodingForest") do
             assert(s"def scalusRec_${name}_".r.findAllIn(bothWays).size == 1, bothWays)
         // A repeat is told by what the type is made of, through proxies, which all show as Proxy.
-        def typeOf(prop: Prop): SIRType = UplcBlaster
-            .lower(prop, FunctionTable.empty)
-            .fold(
-              reason => fail(reason),
-              lowered => DataEncoding.valueType(lowered.binders.head.tp)
-            )
-        val pairs = SIRType.TypeProxy(typeOf(forAllData[BlasterPair](_ => true)))
-        val owners = SIRType.TypeProxy(typeOf(forAllData[BlasterOwner](_ => true)))
+        val pairs = SIRType.TypeProxy(typeOf(forAll[BlasterPair](_ => true)))
+        val owners = SIRType.TypeProxy(typeOf(forAll[BlasterOwner](_ => true)))
         assert(pairs.show == owners.show)
         assert(SirTypes.recursionKey(pairs) != SirTypes.recursionKey(owners))
         // A Lean name has the ASCII letters and digits of the type's name.
@@ -397,7 +381,8 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("forAllData of a script context reads the Data the node gives a script") {
-        // Its decoder comes with the data declarations of the context's types.
+        // One Data, as the context is larger by fields than the most (rule 3), which the tests
+        // decode.
         val fee = forAllData[ScriptContext](ctx => ctx.txInfo.fee == ctx.txInfo.fee)
         UplcBlaster.lower(fee, FunctionTable.empty) match
             case Right(lowered) => assert(lowered.binders.size == 1, lowered.binders)

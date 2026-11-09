@@ -35,8 +35,9 @@ side stays in the backends: Lean 4, Blaster and Z3 today.
   (`Budget.Auto`), or proves them of the inputs whose runs end within a budget
   (`Budget.Within`);
 - quantified variables of `BigInt`, `Boolean`, `ByteString`, `String`, `Data`, lists and maps,
-  and case classes and enums of them; `forAllData`, over a type's `Data` encodings, and
-  `forAllDataLimited`, which bounds the lengths of a variable's collections (§6.2);
+  and case classes and enums of them; `forAllData`, over a type's `Data` encodings, which states
+  and checks what `forAll` does, and `forAllDataLimited`, which bounds the lengths of a variable's
+  collections (§6.2);
 - contracts (§3.7): `contract`, `totalContract`, `returnsWhen` and `failsWhen` beside a function,
   and in its body `Spec.expects`, `Spec.ensures` and `ensuring`, which are in scalus-core's prelude,
   are erased before lowering and are read by `FunctionContract.inSource`. `verifier.guarantees` and
@@ -288,7 +289,7 @@ its fields, and an enum as a constructor's number and the fields of every constr
 generated `structure` or `inductive`
 ([the tactic's fragment](verification-details/uplc-blaster.md#the-fragment)); one that would be
 more than 20 Lean variables so is passed as one `Data`, restricted to its encodings
-([mapping a variable](verification-details/uplc-blaster.md#mapping-a-variable-proposed)). Ledger
+([mapping a variable](verification-details/uplc-blaster.md#mapping-a-variable)). Ledger
 types such as `ScriptContext` are quantified over with `forAll` or `forAllData`, which give one
 check, and `forAllDataLimited`, as values of their type: the ledger's validity predicate is not
 built.

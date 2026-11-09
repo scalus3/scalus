@@ -254,14 +254,14 @@ object Props {
         inline body: (A, B, C) => Prop | Boolean
     ): Prop = ${ PropMacro.forAll3[A, B, C]('body) }
 
-    /** Every value of `A`, as Lean has its `Data` encoding: [[forAll]], with the variable one
-      * `Data` to Lean, restricted to the encodings of the values of `A` ([[DataEncoding.of]]), and
-      * `d.to[A]` to the programs, which read the `Data` themselves. A type that contains itself is
-      * quantified over so as a whole; [[forAll]] maps it by fields down to where it repeats, and as
-      * `Data` there, and maps as `Data` a case class or an enum that would be more than
-      * `MappingPlan.mostByFields` Lean variables by fields, as a `ScriptContext`. Where the
-      * restriction is not exact, the variable has more values than `A`, and is a variable only
-      * where it stands for every value, as a list's is.
+    /** Every value of `A`, as its `Data` encoding: [[forAll]], written over the encodings. The
+      * values of a type and their `toData` encodings correspond one to one, so it states what
+      * [[forAll]] does, and a tactic checks it as it checks [[forAll]]: `UplcBlaster` maps the
+      * variable by fields, or as one `Data` where it would be more than `MappingPlan.mostByFields`
+      * Lean variables by fields, as a `ScriptContext`
+      * (docs/design/verification-details/uplc-blaster.md, "Mapping a variable"). The statement is
+      * the one [[forAll]] builds, and `decode` is not read: it says only that `A` has `Data`
+      * encodings.
       *
       * Its values are the encodings that `toData` gives, as the node gives a script its context:
       * `forAllData[ScriptContext]` stands for every context. They are not all the `Data` that
@@ -274,9 +274,7 @@ object Props {
       * `returnsWhen`, `failsWhen`, and of a quantifier of several variables. Its type is the
       * quantifier's. On a type argument, `forAll[A @UplcRepr(Data)]`, the annotation is not seen:
       * the compiler drops it before the statement is built. A call's result and a contract's
-      * variables take no such annotation. The programs read the variable with `d.to[A]`, which the
-      * compiler compiles to its own reading of the type's representation, the one the premise is
-      * derived from, whatever `decode` is.
+      * variables take no such annotation. Such a parameter needs no `FromData`.
       *
       * {{{
       * forAllData[ScriptContext](ctx => succeeds(validator, ctx) ==>: ctx.txInfo.signatories.nonEmpty)
@@ -286,12 +284,15 @@ object Props {
     inline def forAllData[A](inline body: A => Prop | Boolean)(using
         inline decode: FromData[A]
     ): Prop =
-        ${ PropMacro.forAllData[A]('body, 'decode) }
+        ${ PropMacro.forAllData[A]('body) }
 
     /** [[forAllData]] of the values of `A` that meet the limits `limit` says of the variable: on
       * how many elements its collections have ([[Limits]]). It is the statement
       * `forAllData[A](x => limit(x) ==>: body(x))`, whose limits a tactic may take as the shape of
-      * the values it checks, and need not run.
+      * the values it checks, and need not run. `UplcBlaster` maps its variable as one `Data`,
+      * whatever its size, which the guard of its limits walks; the programs read it with `d.to[A]`,
+      * which the compiler compiles to its own reading of the type's representation, the one the
+      * premise is derived from, whatever `decode` is.
       *
       * `limit` is limits joined with `&&`, each of them:
       *   - `maxCollectionLength(x) <= n`, or `< n`: every list and map of `x` (not the fields of a
@@ -339,9 +340,9 @@ object Props {
     ): LimitedData = ${ PropMacro.limitedData[A]('limit, 'decode) }
 
     /** The parameter of a function, in the statements a verifier makes of it, as a [[forAllData]]
-      * variable: over the `Data` encodings of all the values of `A`, without limits. It is
-      * [[limitedData]]'s counterpart: a statement over every script context, of which Lean does not
-      * finish a validator that walks a list of the context.
+      * variable: over the `Data` encodings of all the values of `A`, without limits, which states
+      * what a variable of `A` does. It is [[limitedData]]'s counterpart: a statement over every
+      * script context, of which Lean does not finish a validator that walks a list of the context.
       */
     inline def unlimitedData[A](using inline decode: FromData[A]): LimitedData =
         ${ PropMacro.unlimitedData[A]('decode) }

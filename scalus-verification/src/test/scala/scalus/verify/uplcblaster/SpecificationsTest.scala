@@ -208,15 +208,19 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
                 assert(DataEncoding.encoded(variable.tp).isDefined, variable.tp.show)
                 assert(DataEncoding.limits(variable.tp).all.nonEmpty, variable.tp.show)
             case other => fail(s"expected a forAll, got $other")
-        // Without limits, a forAllData variable.
+        // Without limits, a forAllData variable, which is one of the lists, as without a
+        // parameter.
         val unlimited = Verifier.empty.tap(_.addFunction(positives))
         unlimited.guarantees(positives.ref, Props.unlimitedData[PList[BigInt]]).statements match
             case List(statement) =>
                 statement.prop match
                     case Prop.Forall(variable, _) =>
-                        assert(DataEncoding.encoded(variable.tp).isDefined, variable.tp.show)
-                        assert(DataEncoding.limits(variable.tp).all.isEmpty, variable.tp.show)
+                        assert(DataEncoding.encoded(variable.tp).isEmpty, variable.tp.show)
                     case other => fail(s"expected a forAll, got $other")
+                val plain = Verifier.empty.tap(_.addFunction(positives))
+                assert(
+                  plain.guarantees(positives.ref).statements.map(_.prop) == List(statement.prop)
+                )
             case other => fail(s"expected one guarantee, got $other")
         // Limits of another type than the parameter's are refused.
         assertThrows[IllegalArgumentException](
