@@ -11,15 +11,17 @@
     "mints_of_distinct_token_names/ensures": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "5ad18d9f36d3a6ae",
+      "statement": "5839592f71e54d67",
       "programs": [
         "05042940663a17f3",
+        "dc60b5edc419394e",
+        "31fff90cea6c400a",
         "4ad4c32829df2318",
-        "a994aa38f9bc0962",
-        "be0c2286e31b1f02"
+        "0024902df9ce39b1",
+        "1ea5b97d92c2b1a6"
       ],
       "notes": {
-        "budget": "5740",
+        "budget": "4010",
         "kind": "Blaster"
       },
       "tests": [
@@ -29,14 +31,16 @@
     "one_shot_mint.deployed.only_the_seed_mints.two_of_each": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "e436a1f95ad77fc5",
+      "statement": "df23c361f5f7fed1",
       "programs": [
-        "ff418a018d567015",
         "9297d02ce7e2bd0c",
-        "c7589d03e6091c00"
+        "f3894016802b60f0",
+        "c7589d03e6091c00",
+        "ff418a018d567015"
       ],
       "notes": {
         "budget": "2500",
+        "form": "as written",
         "kind": "Blaster"
       },
       "tests": [
@@ -46,14 +50,13 @@
     "one_shot_mint.deployed.only_the_seed_mints_as_read.two_of_each": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "e436a1f95ad77fc5",
+      "statement": "2c24e5c2ec18d2c8",
       "programs": [
-        "ff418a018d567015",
-        "278301000bc336aa",
+        "20a89054e5c55b72",
         "c7589d03e6091c00"
       ],
       "notes": {
-        "budget": "2500",
+        "budget": "5000",
         "kind": "Blaster"
       },
       "tests": [
@@ -63,34 +66,35 @@
     "one_shot_mint.mint.accepted_only_with_the_seed": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "f3875e1f4b3990ac",
+      "statement": "5dc1a8eb57ed3c5d",
       "programs": [
-        "3e98557b2aa2392a",
-        "81e6ca808ef80e7e"
+        "81e6ca808ef80e7e",
+        "a5323baaa2ba7cab",
+        "3e98557b2aa2392a"
       ],
       "notes": {
-        "budget": "2848",
+        "budget": "1743",
         "kind": "Blaster"
       },
       "counterexample": {
         "m.amount": 0,
-        "m.firstId": "213421",
-        "m.firstIdx": 1,
+        "m.firstId": "213121",
+        "m.firstIdx": 0,
         "m.firstQuantity": 0,
         "m.firstToken": "",
         "m.name": "",
-        "m.otherPolicy": "41",
+        "m.otherPolicy": "",
         "m.ownSymbol": "41",
         "m.policy": "41",
         "m.quantity": -1,
-        "m.secondId": "213521",
+        "m.secondId": "",
         "m.secondIdx": 1,
         "m.secondQuantity": 0,
         "m.secondToken": "",
-        "m.seedId": "213321",
+        "m.seedId": "213021",
         "m.seedIdx": 0,
         "m.token": "",
-        "m.twoInputs": true,
+        "m.twoInputs": false,
         "m.twoPolicies": false
       },
       "tests": [

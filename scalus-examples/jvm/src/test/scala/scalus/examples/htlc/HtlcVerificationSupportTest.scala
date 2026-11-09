@@ -5,7 +5,7 @@ import scalus.*
 import scalus.cardano.onchain.plutus.prelude
 import scalus.cardano.onchain.plutus.v3.{IntervalBound, IntervalBoundType}
 import scalus.cardano.onchain.plutus.v3.{Interval, ScriptContext, ScriptInfo, TxId, TxInfo, TxOutRef}
-import scalus.examples.vesting.VestingVerificationTest.{noDatum, scriptContext, someDatum, spendingInfo}
+import scalus.examples.ScriptContextData.{noDatum, scriptContext, someDatum, spendingInfo}
 import scalus.uplc.builtin.Builtins.unConstrData
 import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data

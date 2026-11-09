@@ -58,6 +58,8 @@ class VariableScopeTest extends AnyFunSuite {
             case Prop.Or(left, right)  => Prop.Or(named(left, renames), named(right, renames))
             case Prop.Implies(left, right) =>
                 Prop.Implies(named(left, renames), named(right, renames))
+            case Prop.Rejects(left, right) =>
+                Prop.Rejects(named(left, renames), named(right, renames))
             case Prop.Iff(left, right) => Prop.Iff(named(left, renames), named(right, renames))
             case Prop.Not(inner)       => Prop.Not(named(inner, renames))
     }

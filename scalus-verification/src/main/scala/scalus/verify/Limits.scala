@@ -6,6 +6,34 @@ import scalus.uplc.builtin.{ByteString, Data}
 
 import java.nio.charset.StandardCharsets
 
+/** A function's parameter in the statements a verifier makes of the function
+  * ([[Verifier.guarantees]], [[Verifier.obligations]]), over the `Data` encodings of the values of
+  * its type that meet `limits`, as a [[Props.forAllDataLimited]] variable: made with
+  * [[Props.limitedData]]. Without limits, made with [[Props.unlimitedData]], it is a
+  * [[Props.forAllData]] variable.
+  *
+  * @param tp
+  *   the type of the values, which is the parameter's
+  * @param decoder
+  *   the compiled `(d: Data) => d.to[A]`, which reads them
+  */
+final class LimitedData private[verify] (
+    private[verify] val tp: SIRType,
+    private[verify] val decoder: scalus.compiler.sir.SIR,
+    private[verify] val limits: Limits
+)
+
+object LimitedData {
+
+    /** [[Props.limitedData]]'s value: an inline method cannot call the private constructor. */
+    private[verify] def of(
+        tp: SIRType,
+        decoder: scalus.compiler.sir.SIR,
+        limits: Limits
+    ): LimitedData =
+        new LimitedData(tp, decoder, limits)
+}
+
 /** A step from a value to a part of it, in the path of a [[Limit]]. */
 enum Step {
 
