@@ -102,11 +102,13 @@ inputs whose runs end within `n` steps, whose proof is a `ProvenWithin` and no t
 Boolean tests, calls, `denotes` and `equal`, combined with `&&`, `||`, `!`, `==>:` and `<=>`.
 `existsLet` supplies and eliminates an explicit witness, avoiding an SMT quantifier; ordinary
 `exists` is emitted to Blaster as the classically equivalent `¬∀¬`. A variable of a case class, as in
-`forAll[Config, BigInt]((config, time) => …)`, is one variable per field for Lean;
-`forAllData[A](x => …)` makes it one `Data`, restricted to the encodings of `A`'s values, which
-the tests decode with `d.to[A]`, and so does a parameter written
-`(x: A @UplcRepr(UplcRepresentation.Data)) => …` of a quantifier.
-`forAllDataLimited[A](x => limit)(x => body)` is `forAllData` of the values that meet `limit`: limits
+`forAll[Config, BigInt]((config, time) => …)`, is one variable per field for Lean, and one that
+would be more than 20 variables so, as a `ScriptContext`, is one `Data`, restricted to the
+encodings of its type's values, which the tests decode. `forAllData[A](x => …)`, over the `Data`
+encodings of `A`'s values, states the same as `forAll[A]` and is checked as it is, and so is a
+parameter written `(x: A @UplcRepr(UplcRepresentation.Data)) => …` of a quantifier.
+`forAllDataLimited[A](x => limit)(x => body)` is `forAllData` of the values that meet `limit`, one
+`Data` whatever its size: limits
 on how many elements the collections of `x` have, as `maxCollectionLength(x) <= 2`,
 `x.txInfo.inputs.length <= 3`, `isEmpty`, `nonEmpty`, and `forall` over a list or a map's keys or
 values, joined with `&&` (`Limits`). Each test checks them first, with a walk that ends, so a loop

@@ -53,6 +53,7 @@ object BlasterPairs
 @Compile
 object BlasterPairReader {
     val firstOnly: FromData[BlasterPair] = (d: Data) => BlasterPair(Builtins.unIData(d), BigInt(0))
+    val noneOf: FromData[BlasterPairs] = (d: Data) => BlasterPairs(prelude.List.Nil)
 }
 
 /** A variable over the Data encodings of BlasterPair, as an alias. */
@@ -1055,70 +1056,123 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         )
     }
 
-    test("forAllData quantifies over the Data encodings of a type's values") {
-        // One Lean variable, a Data, restricted to the encodings of a BlasterPair: the programs
-        // read it as `d.to[BlasterPair]`.
+    test("forAllData states what forAll does, and is checked as forAll is") {
+        // The statement forAll builds, whatever FromData it is given, which is not read: a
+        // BlasterPair is two integers by fields.
         val commutes = forAllData[BlasterPair](p => p.a + p.b == p.b + p.a)
+        val plain = forAll[BlasterPair](p => p.a + p.b == p.b + p.a)
+        assert(PropIdentity.of(commutes) == PropIdentity.of(plain))
+        val firstOnly =
+            forAllData[BlasterPair](p => p.a + p.b == p.b + p.a)(using BlasterPairReader.firstOnly)
+        assert(PropIdentity.of(firstOnly) == PropIdentity.of(plain))
         val lowering = lowered(commutes, FunctionTable.empty)
-        assert(lowering.binders.size == 1, lowering.binders)
-        assert(lowering.predicates.head.exists(_.contains("Data.Constr")), lowering.predicates)
+        assert(lowering.binders.size == 2, lowering.binders)
+        assert(lowering.programHashes == lowered(plain, FunctionTable.empty).programHashes)
         proven(commutes, 300)
-        // negative control: a counterexample is the encoding of a BlasterPair
+        // negative control: the counterexample is the pair's fields, by their names
         val values = refuted(forAllData[BlasterPair](p => p.a == p.b), 300)
-        values.values.toList match
+        assert(values.keySet.map(PropIdentity.written) == Set("p.a", "p.b"), values)
+    }
+
+    test("a variable as one Data at its root is decoded in each test, under its premise") {
+        // Under a fixed plan, a BlasterPair is one Lean Data, restricted to the encodings of a
+        // BlasterPair, as a large class is (rule 3): the programs decode it.
+        val commutes = forAll[BlasterPair](p => p.a + p.b == p.b + p.a)
+        val asData = UplcBlaster
+            .lower(commutes, FunctionTable.empty, MappingPlan.Fixed.asData("p"))
+            .fold(reason => fail(reason), identity)
+        assert(asData.binders.size == 1, asData.binders)
+        assert(asData.predicates.head.exists(_.contains("Data.Constr")), asData.predicates)
+        // The decoder is the compiler's own reading of the type's representation, the one the
+        // premise is derived from.
+        assert(
+          DataEncoding
+              .encoded(asData.binders.head.tp)
+              .exists(_._2.pretty.render(100).contains("UniversalDataConversion$.fromData")),
+          asData.binders.head.tp.show
+        )
+        checkedAsData(verifier.statement(commutes), Budget.LeanSteps(300), "p") match
+            case VerificationResult.Proven(_) => ()
+            case other                        => fail(s"expected a proof, got $other")
+        // negative control: a counterexample is the encoding of a BlasterPair
+        refutedWith(
+          checkedAsData(
+            verifier.refute(forAll[BlasterPair](p => p.a == p.b)),
+            Budget.LeanSteps(300),
+            "p"
+          )
+        ) match
             case List(Constant.Data(data)) =>
                 assert(DataEncoding.of[BlasterPair].outside(data).isEmpty, data)
             case other => fail(s"expected one Data value, got $other")
         // A variable the statement does not read: whatever value Lean gives, or leaves out, the
         // counterexample is one of the type.
-        refuted(forAllData[BlasterPair](_ => false), 100).values.toList match
+        refutedWith(
+          checkedAsData(
+            verifier.refute(forAll[BlasterPair](p => false)),
+            Budget.LeanSteps(100),
+            "p"
+          )
+        ) match
             case List(Constant.Data(data)) =>
                 assert(DataEncoding.of[BlasterPair].outside(data).isEmpty, data)
             case other => fail(s"expected one Data value, got $other")
         // A type that contains itself, whose premise is a recursive predicate: exact, so the
         // variable is one also where it asks for a witness.
-        proven(
-          forAllData[BlasterTree](tree =>
-              tree match
-                  case BlasterTree.Leaf       => true
-                  case BlasterTree.Node(_, _) => true
-          ),
-          300
+        val isATree = forAll[BlasterTree](tree =>
+            tree match
+                case BlasterTree.Leaf       => true
+                case BlasterTree.Node(_, _) => true
         )
-        assert(UplcBlaster.lower(!forAllData[BlasterTree](_ => true), FunctionTable.empty).isRight)
-        // The decoder is `d.to[A]`, which the compiler compiles to its own reading of the type's
-        // representation, the one the premise is derived from, whatever FromData is given.
-        val decoder = lowered(
-          forAllData[BlasterPair](p => p.a == p.a)(using BlasterPairReader.firstOnly),
+        checkedAsData(verifier.statement(isATree), Budget.LeanSteps(300), "tree") match
+            case VerificationResult.Proven(_) => ()
+            case other                        => fail(s"expected a proof, got $other")
+        assert(
+          UplcBlaster
+              .lower(
+                !forAll[BlasterTree](tree => true),
+                FunctionTable.empty,
+                MappingPlan.Fixed.asData("tree")
+              )
+              .isRight
+        )
+        // A variable with limits is one Data too, read by `d.to[A]`, which the compiler compiles
+        // to its own reading of the type's representation, the one the premise is derived from,
+        // whatever FromData is given.
+        val limited = lowered(
+          forAllDataLimited[BlasterPairs](ps => ps.entries.length <= 1)(ps =>
+              ps.entries.isEmpty || !ps.entries.isEmpty
+          )(using BlasterPairReader.noneOf),
           FunctionTable.empty
-        ).binders.head.tp
+        )
+        assert(limited.binders.size == 1, limited.binders)
         assert(
           DataEncoding
-              .encoded(decoder)
+              .encoded(limited.binders.head.tp)
               .exists(_._2.pretty.render(100).contains("UniversalDataConversion$.fromData")),
-          decoder.show
+          limited.binders.head.tp.show
         )
     }
 
     test("a parameter of a type annotated @UplcRepr(Data) is a variable of forAllData") {
-        // In a forAll of several variables, the annotated one is the Data, and the other as before.
+        // In a forAll of several variables, the annotated one is mapped as forAll maps it, by
+        // fields here, and the other as before.
         val annotated = forAll((p: BlasterPair @UplcRepr(UplcRepresentation.Data), n: BigInt) =>
             p.a + n == n + p.a
         )
         val lowering = lowered(annotated, FunctionTable.empty)
-        val plain = lowered(forAllData[BlasterPair](p => p.a == p.a), FunctionTable.empty)
-        assert(lowering.binders.size == 2, lowering.binders)
-        assert(lowering.predicates == plain.predicates :+ None, lowering.predicates)
+        val plain = lowered(
+          forAll[BlasterPair, BigInt]((p, n) => p.a + n == n + p.a),
+          FunctionTable.empty
+        )
+        assert(lowering.binders.size == 3, lowering.binders)
+        assert(lowering.predicates == plain.predicates, lowering.predicates)
+        assert(lowering.programHashes == plain.programHashes)
         proven(annotated, 300)
-        // In an exists: the predicate of a BlasterPair is exact, so a value Lean finds is one. Z3
-        // does not find one through the predicate (it answers unknown); existsLet gives it.
-        assert(
-          UplcBlaster
-              .lower(
-                exists((p: BlasterPair @UplcRepr(UplcRepresentation.Data)) => p.a == BigInt(1)),
-                FunctionTable.empty
-              )
-              .isRight
+        // In an exists, by fields too: Lean finds the witness over its integers.
+        proven(
+          exists((p: BlasterPair @UplcRepr(UplcRepresentation.Data)) => p.a == BigInt(1)),
+          300
         )
         proven(
           existsLet(BlasterPair(1, 2))((p: BlasterPair @UplcRepr(UplcRepresentation.Data)) =>
@@ -1126,17 +1180,21 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           ),
           300
         )
-        // A type whose encoding is not exact, as one with a string, is a variable only where it
-        // stands for every value.
-        UplcBlaster.lower(
-          exists((_: PlanNamed @UplcRepr(UplcRepresentation.Data)) => true),
+        // A type whose encoding is not exact, as one with a string, is by fields where they are
+        // exact: so it is a variable also where it asks for a witness, which as Data it could not
+        // be.
+        val named = lowered(
+          exists((n: PlanNamed @UplcRepr(UplcRepresentation.Data)) => true),
           FunctionTable.empty
-        ) match
-            case Left(reason) => assert(reason.contains("forAllData variable"), reason)
-            case Right(_)     => fail("expected the statement to be refused")
+        )
+        assert(named.plan.nodes.map(_.mapping) == List(MappingPlan.Mapping.ByFields))
+        assert(named.binders.map(_.tp) == List(SIRType.String, SIRType.Integer), named.binders)
         // Through an alias, as written.
         val aliased = lowered(forAll((p: BlasterPairData) => p.a == p.a), FunctionTable.empty)
-        assert(aliased.predicates == plain.predicates, aliased.predicates)
+        assert(
+          aliased.programHashes ==
+              lowered(forAll[BlasterPair](p => p.a == p.a), FunctionTable.empty).programHashes
+        )
         // In returnsWhen of several parameters, whose call passes them as a tuple.
         proven(
           returnsWhen(shift)((p: BlasterPair @UplcRepr(UplcRepresentation.Data), n: BigInt) =>

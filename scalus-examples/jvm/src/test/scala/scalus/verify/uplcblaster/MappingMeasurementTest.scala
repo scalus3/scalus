@@ -25,8 +25,9 @@ import scala.concurrent.duration.*
   * proves nothing a suite does not. Each check is given `SCALUS_MEASURE_MINUTES` (8) minutes, and
   * finds its budget. Each line of the file `SCALUS_MEASURE_PLANS` names, tab-separated: the
   * statement, the plan, the check's Lean variables, how many of them are an enum's tag, the size of
-  * its programs in bytes, whether it is the check of the statement as the suite writes it, the
-  * result, the budget the tactic came to, the seconds it took, and why it is inconclusive.
+  * its programs in bytes, whether it is the check of the tactic's own plan, which the suites'
+  * statements have, the result, the budget the tactic came to, the seconds it took, and why it is
+  * inconclusive.
   *
   * {{{
   * SCALUS_MEASURE_PLANS=/tmp/plans.tsv sbt "scalusExamplesJVM/testOnly *MappingMeasurementTest"
@@ -86,7 +87,7 @@ class MappingMeasurementTest extends AnyFunSuite with LeanProofsSuite {
               "vars",
               "tags",
               "leafBytes",
-              "sameAsWritten",
+              "sameAsOwn",
               "result",
               "budget",
               "s",
@@ -120,30 +121,27 @@ class MappingMeasurementTest extends AnyFunSuite with LeanProofsSuite {
         case artifact: UplcBlaster.Artifact => artifact.budget.toString
         case _                              => ""
 
-    /** `prop` under each of `plans`, and under `baseline`, the statement as the suite writes it. */
+    /** `prop` under each of `plans`. */
     private def measure(
         name: String,
         prop: Prop,
         functions: List[FunctionDef[?, ?]],
         expected: ExpectedOutcome,
-        plans: List[Plan],
-        baseline: Option[Prop] = None
+        plans: List[Plan]
     ): Unit = {
         val table = FunctionTable(functions*)
-        val runs = baseline.map(p => ("as-written", p, MappingPlan.Fixed.none)).toList ++
-            plans.map(plan => (plan.name, prop, plan.fixed))
         // What a check is made of: its variables, their premises and its programs.
         def content(l: UplcBlaster.Lowered) = (
           l.binders.map(b => PropIdentity.written(b.name) -> b.tp.show),
           l.predicates,
           l.leaves.map(leaf => scalus.utils.Hex.bytesToHex(leaf.cborEncoded))
         )
-        val asWritten = baseline.flatMap(p => UplcBlaster.lower(p, table).toOption.map(content))
-        runs.foreach { (planName, p, fixed) =>
-            val lowered = UplcBlaster.lower(p, table, fixed)
-            val same = (asWritten, lowered) match
-                case (Some(written), Right(l)) => (content(l) == written).toString
-                case _                         => "-"
+        val own = UplcBlaster.lower(prop, table).toOption.map(content)
+        plans.foreach { case Plan(planName, fixed) =>
+            val lowered = UplcBlaster.lower(prop, table, fixed)
+            val same = (own, lowered) match
+                case (Some(ownContent), Right(l)) => (content(l) == ownContent).toString
+                case _                            => "-"
             val (vars, tags, leafBytes) = lowered match
                 case Right(l) =>
                     (
@@ -155,8 +153,8 @@ class MappingMeasurementTest extends AnyFunSuite with LeanProofsSuite {
             val verifier = Verifier.empty
             functions.foreach(verifier.addFunction)
             val statement = expected match
-                case ExpectedOutcome.Valid     => verifier.statement(name, p)
-                case ExpectedOutcome.Falsified => verifier.refute(name, p)
+                case ExpectedOutcome.Valid     => verifier.statement(name, prop)
+                case ExpectedOutcome.Falsified => verifier.refute(name, prop)
             val tactic = UplcBlaster(Budget.Auto, lean, limit).withFixedPlan(fixed)
             val started = System.nanoTime
             val result = verifier.verify(statement, tactic)
@@ -188,48 +186,28 @@ class MappingMeasurementTest extends AnyFunSuite with LeanProofsSuite {
           forAll[ScriptContext](ctx => Htlc.spendsWithoutDatum(ctx) ==>: fails(htlc, ctx.toData)),
           List(htlc),
           ExpectedOutcome.Valid,
-          contextPlans,
-          Some(
-            forAllData[ScriptContext](ctx =>
-                Htlc.spendsWithoutDatum(ctx) ==>: fails(htlc, ctx.toData)
-            )
-          )
+          contextPlans
         )
         measure(
           "htlc.context.only_spending_is_validated",
           forAll[ScriptContext](ctx => !Prop(Htlc.isSpending(ctx)) ==>: fails(htlc, ctx.toData)),
           List(htlc),
           ExpectedOutcome.Valid,
-          contextPlans,
-          Some(
-            forAllData[ScriptContext](ctx =>
-                !Prop(Htlc.isSpending(ctx)) ==>: fails(htlc, ctx.toData)
-            )
-          )
+          contextPlans
         )
         measure(
           "vesting.validator.no_datum_is_rejected",
           forAll[ScriptContext](ctx => V.spendsWithoutDatum(ctx) ==>: fails(vesting, ctx.toData)),
           List(vesting),
           ExpectedOutcome.Valid,
-          contextPlans,
-          Some(
-            forAllData[ScriptContext](ctx =>
-                V.spendsWithoutDatum(ctx) ==>: fails(vesting, ctx.toData)
-            )
-          )
+          contextPlans
         )
         measure(
           "vesting.validator.only_spending",
           forAll[ScriptContext](ctx => !Prop(V.isSpending(ctx)) ==>: fails(vesting, ctx.toData)),
           List(vesting),
           ExpectedOutcome.Valid,
-          contextPlans,
-          Some(
-            forAllData[ScriptContext](ctx =>
-                !Prop(V.isSpending(ctx)) ==>: fails(vesting, ctx.toData)
-            )
-          )
+          contextPlans
         )
     }
 

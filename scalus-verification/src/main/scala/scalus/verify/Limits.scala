@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets
   * ([[Verifier.guarantees]], [[Verifier.obligations]]), over the `Data` encodings of the values of
   * its type that meet `limits`, as a [[Props.forAllDataLimited]] variable: made with
   * [[Props.limitedData]]. Without limits, made with [[Props.unlimitedData]], it is a
-  * [[Props.forAllData]] variable.
+  * [[Props.forAllData]] variable, which a tactic checks as a [[Props.forAll]] one.
   *
   * @param tp
   *   the type of the values, which is the parameter's

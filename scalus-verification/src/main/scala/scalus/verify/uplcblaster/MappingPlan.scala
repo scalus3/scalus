@@ -10,18 +10,20 @@ import scalus.verify.PropIdentity
   * A node is a part of a variable's value, named by its path of fields and constructors from the
   * variable, as the Lean variables are named: `out.address.credential`. A node is decided where it
   * is a case class or an enum that is not inside a list or a map. A leaf, a list and a map are one
-  * Lean variable each, and are not decided. The root of a variable mapped as `Data` is a node
-  * whatever its type, as that of a `forAllData` variable of a list.
+  * Lean variable each, and are not decided. The root of a variable with limits, which is `Data`, is
+  * a node whatever its type, as that of a `forAllDataLimited` variable of a list.
   *
   * [[UplcBlaster.lower]] decides each node as it maps the variable, before anything below the node
   * is mapped, and records the decision: so the plan is what the Lean variables are. A decision
-  * reads only the statement and the types. A `forAllData` variable is `Data` at its root. A node of
-  * a `forAll` or an `exists` variable is by fields, but: a type that contains itself is `Data` at
-  * the node where it repeats, which by fields would have no end (rule 1); and a node that would be
-  * more than [[MappingPlan.mostByFields]] Lean variables by fields is `Data` (rule 3), unless the
-  * variable asks for a witness, or its `Data` would have more values than its type where its fields
-  * have not (rule 2), or it has no `Data` form. A plan [[MappingPlan.Fixed]] for a check maps the
-  * nodes it names as it says instead, but cannot map by fields a node where a type repeats.
+  * reads only the statement and the types. A variable with limits (`forAllDataLimited`) is `Data`
+  * at its root, which its guards walk. A node of another variable is by fields, but: a type that
+  * contains itself is `Data` at the node where it repeats, which by fields would have no end (rule
+  * 1); and a node that would be more than [[MappingPlan.mostByFields]] Lean variables by fields is
+  * `Data` (rule 3), unless the variable asks for a witness, or its `Data` would have more values
+  * than its type where its fields have not (rule 2), or it has no `Data` form. A `forAllData`
+  * variable, and a parameter written `A @UplcRepr(UplcRepresentation.Data)`, is one of `forAll` to
+  * the plan: both state the same. A plan [[MappingPlan.Fixed]] for a check maps the nodes it names
+  * as it says instead, but cannot map by fields a node where a type repeats.
   *
   * @param nodes
   *   the decided nodes of the statement's variables, in the order the variables are quantified, and
@@ -79,18 +81,15 @@ object MappingPlan {
     enum Reason {
 
         /** The statement quantifies over the variable with `quantifier`, which maps a case class or
-          * an enum by fields where it is at most [[MappingPlan.mostByFields]] Lean variables so.
+          * an enum by fields where it is at most [[MappingPlan.mostByFields]] Lean variables so. A
+          * statement that quantifies over the `Data` encodings of the variable's type, with
+          * `forAllData` or the parameter `A @UplcRepr(UplcRepresentation.Data)`, quantifies so too.
           */
         case Quantified(quantifier: Quantifier)
 
-        /** The statement quantifies over the `Data` encodings of the variable's type with
-          * `quantifier`: it writes `forAllData`, or the parameter
-          * `A @UplcRepr(UplcRepresentation.Data)`.
-          */
-        case OverEncodings(quantifier: Quantifier)
-
-        /** As [[OverEncodings]], with limits on the lengths of its collections
-          * (`forAllDataLimited`), whose guards walk the variable's `Data`.
+        /** The statement quantifies over the `Data` encodings of the variable's type with limits on
+          * the lengths of its collections (`forAllDataLimited`), whose guards walk the variable's
+          * `Data`.
           */
         case Limited
 
@@ -117,8 +116,6 @@ object MappingPlan {
             case Quantified(quantifier) =>
                 s"${word(quantifier)}, which maps a case class or an enum of at most " +
                     s"$mostByFields Lean variables by fields"
-            case OverEncodings(quantifier) =>
-                s"${word(quantifier)} over the Data encodings of its type, which maps it as Data"
             case Limited     => "forAllDataLimited, whose guards walk the variable's Data"
             case ByFixedPlan => "fixed by the plan the check was given"
             case ContainsItself =>
@@ -173,9 +170,9 @@ object MappingPlan {
       * "Mapping a variable", step 4). A statement has no way to choose a mapping, and a user none
       * to fix one.
       *
-      * It is asked about each decided node of a `forAll` or an `exists` variable, from the root
-      * down, before the node is expanded: a node it maps as `Data` is not expanded, and nothing
-      * below it is asked about. A variable over `Data` encodings is mapped before it is expanded,
+      * It is asked about each decided node of a `forAll` or an `exists` variable, of `forAllData`
+      * too, from the root down, before the node is expanded: a node it maps as `Data` is not
+      * expanded, and nothing below it is asked about. A variable with limits is `Data` at its root,
       * and is not asked about.
       *
       * A check under a fixed plan, any but [[Fixed.none]], keeps no result

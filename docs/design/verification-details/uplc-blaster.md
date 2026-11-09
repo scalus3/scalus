@@ -53,7 +53,7 @@ ranges over the values of its constructor
 variable per field, named `variable.field` in `Lowered.binders` and in a counterexample, and a
 field that is a case class is expanded in turn. A class or an enum that would be more than 20
 Lean variables so, as a `ScriptContext`, is one `Data` variable instead
-([Mapping a variable](#mapping-a-variable-proposed), rule 3). Each test that uses the variable
+([Mapping a variable](#mapping-a-variable), rule 3). Each test that uses the variable
 starts with `let variable = Constructor(fields…)`, which the compiler lowers to the class's own
 representation, as it does for a constructor written in the test. `Quantifiable` has an instance
 for every case class whose fields have one. The exception is a function registered without SIR,
@@ -71,7 +71,7 @@ names the constructor by that integer. A constructor passes its type parameters 
 enum's, so `Option[BigInt]` is the integer and the `BigInt` of `Some`. A type that contains
 itself and is passed through its constructors has values of every size, which no set of
 variables stands for: where it repeats, its node is one `Data` variable
-([Mapping a variable](#mapping-a-variable-proposed), rule 1), whose premise is a recursive
+([Mapping a variable](#mapping-a-variable), rule 1), whose premise is a recursive
 predicate ([Premises of a type that contains itself](#premises-of-a-type-that-contains-itself)),
 exact where the type's other parts are.
 `Quantifiable` has an instance for every type of several constructors; the tactic checks their
@@ -128,16 +128,21 @@ predicate: an `exists` over a list comes back undetermined, and `existsLet` with
 it. Its length is any length, so a program that walks the list meets [the loops Lean does not
 finish](#statements-that-do-not-finish).
 
-**A variable over the `Data` encodings of a type**, `forAllData[A](x => …)`, is one Lean `Data`
-variable, not built from constructors. It ranges over the values of `A` as `forAll[A]` does, each
-given as its encoding: each test that uses it starts with `let x = d.to[A]`, the decoder the macro
-compiles, so the programs read the `Data` themselves. The quantifier restricts `d` with the
+**A variable over the `Data` encodings of a type**, `forAllData[A](x => …)`, ranges over the
+values of `A` as `forAll[A]` does, each given as its encoding, and states the same: the macro
+builds the statement `forAll[A]` builds, and the tactic maps its variable as any
+([Mapping a variable](#mapping-a-variable)), by fields, or as one `Data` where it would be more
+than 20 Lean variables so, as a `ScriptContext`. A variable as one
+`Data` is one Lean `Data` variable, not built from constructors: each test that uses it starts with
+`let x = d.to[A]`, so the programs read the `Data` themselves. The quantifier restricts `d` with the
 predicate of `A`'s encoding, `DataEncoding.of[A]`, derived as for the items of a list, and the same
 rule applies: where it is exact, as for a case class of integers or a tree of them, `x` can be
 anywhere; where it is not, as for a type with a string field, it is a variable only where it stands
-for every value, and a counterexample outside the type is inconclusive. `forAll[A]` and `forAllData[A]` state the same of an `A` whose predicate is exact;
-they differ in what Lean searches: many typed variables, or one `Data` behind a premise.
-`forAllData` takes a `FromData[A]`, which `d.to[A]` needs. Its values are the encodings of `A`'s
+for every value, and a counterexample outside the type is inconclusive. A variable with limits,
+`forAllDataLimited`, is one `Data` whatever its size, as its guards walk its `Data`
+([Limits of a variable's collections](#limits-of-a-variables-collections)).
+`forAllData` takes a `FromData[A]`, which says that `A` has encodings, and which it does not read;
+`forAllDataLimited` reads its variable with `d.to[A]`, which needs it. Its values are the encodings of `A`'s
 values, the `Data` that `toData` gives: a map's keys in order, a constructor's tag and number of
 fields as declared. That is the `Data` the node gives a script as its context, which it builds
 itself, so `forAllData[ScriptContext]` stands for every context a script can get. It is not every
@@ -155,9 +160,11 @@ the compiler has dropped it by the time the statement is built. The parameter's 
 quantifier's, which it ranges over, and not a wider one. A call's result and a contract's variables
 are given, not quantified over, and take no such annotation: it is a compile error there, and on the
 variable of `forAllData`, which is one already. Another representation is the compiler's, as it was.
-The decoder is `d.to[A]`, which the compiler compiles to its own reading of the type's `Data`
-representation, the one the premise is derived from, whatever `FromData` is given; the tactic checks
-that it is.
+Such a parameter is a variable of its type, as a `forAllData` one is, and needs no `FromData`.
+The decoder of a variable with limits is `d.to[A]`, which the compiler compiles to its own reading of
+the type's `Data` representation, the one the premise is derived from, whatever `FromData` is given;
+the tactic checks that it is. Another variable as one `Data` is decoded by the tactic's own
+`UniversalDataConversion.fromData`.
 
 `<=>` becomes two implications, because each of its operands occurs in both polarities. Each leaf
 program takes only the binders in scope at that leaf. Anything else produces a
@@ -182,18 +189,19 @@ its values, and the replayed assignment refutes the statement. That includes `!e
 which is `∀ x, ¬ p x`: a value with `p` refutes it. `Refuted` is also available for `existsLet`,
 because its witness has already been fixed and eliminated.
 
-## Mapping a variable (proposed)
+## Mapping a variable
 
-Today the statement chooses how a variable of a case class or an enum reaches Lean: `forAll` maps
-it by its fields, and `forAllData` as one `Data`. This section proposes that the tactic choose,
-part by part of the variable's type, from the statement and the types alone.
+The tactic chooses how a variable of a case class or an enum reaches Lean, by its fields or as one
+`Data`, part by part of the variable's type, from the statement and the types alone. Before, the
+statement chose: `forAll` mapped it by its fields, and `forAllData` as one `Data`.
 
-Status: steps 1 to 4 of [the steps](#steps) are built. `lower` records the plan as it maps each
+Status: built, the five steps of [the steps](#steps). `lower` records the plan as it maps each
 variable, and `Lowered.plan`, a `MappingPlan`, carries it; a node below the root can be `Data`; a
 type that contains itself is `Data` where it repeats (rule 1); a node that would be more than 20
 Lean variables by fields is `Data` (rule 3), unless the variable asks for a witness, or its `Data`
-has more values than its type where its fields have not (rule 2). A `forAllData` variable is
-still `Data` at its root, whatever its size: making it another way to write `forAll` is step 5.
+has more values than its type where its fields have not (rule 2). A `forAllData` variable, and a
+parameter written `A @UplcRepr(UplcRepresentation.Data)`, is mapped as a `forAll` one (step 5); a
+`forAllDataLimited` variable is `Data` at its root, which its guards walk.
 
 ### The mapping does not change what a statement means
 
@@ -256,8 +264,8 @@ A node is decided where it is a case class or an enum, and is not inside a list 
 - A list or a map is one Lean variable, and nothing below it is decided: a list of any length
   cannot be split into fields, and its items are restricted by the list's predicate. `Value` is
   one, a map.
-- The root of a variable mapped as `Data` is a node whatever its type, as that of a `forAllData`
-  variable of a list.
+- The root of a variable mapped as `Data` is a node whatever its type, as that of a
+  `forAllDataLimited` variable of a list.
 
 A decided node is mapped one of two ways.
 
@@ -265,12 +273,12 @@ A decided node is mapped one of two ways.
   its fields. An enum is an integer that chooses the constructor, and the fields of every
   constructor ([The fragment](#the-fragment)).
 - **As `Data`.** The node and all below it are one Lean `Data` variable, restricted by the premise
-  of the node's encoding, as a `forAllData` variable is. The test decodes it with
+  of the node's encoding, as a `forAllDataLimited` variable is. The test decodes it with
   `UniversalDataConversion.fromData`, the form the compiler gives `d.to[A]`, which the tactic writes
   itself. Nothing below the node is decided.
 
-`forAll` today is the plan with every node by fields, and `forAllData` the one with the root as
-`Data`. By fields, `out` is 17 Lean variables, of which `stakingCredential` is 8: the case of the
+Before the rules, `forAll` was the plan with every node by fields, and `forAllData` the one with
+the root as `Data`. By fields, `out` is 17 Lean variables, of which `stakingCredential` is 8: the case of the
 `Option`, that of the `StakingCredential`, the case of its `Credential` and two hashes, and the
 three integers of a pointer. As `Data` at the root, it is one. A plan between them maps `address`
 by fields and `address.stakingCredential` as `Data`, in 10 variables:
@@ -347,8 +355,9 @@ limits, and whether the variable asks for a witness, which the quantifier's posi
    it by fields, but where a type repeats, which is one variable (rule 1), and stops past 20. So
    the node that is `Data` is the highest one that is too large, and nothing below it is decided
    or in the plan: a `ScriptContext`, 141 variables by fields, is one `Data` variable, and its
-   check is the one `forAllData` gives, to the bytes of its programs. The number was measured in
-   step 4 (below).
+   check is the one `forAllData` gave before step 5, to the bytes of its programs, so the results
+   the suites keep of their statements over contexts stand. The number was measured in step 4
+   (below).
 
    By fields, a test builds its value from typed variables, with no run that fails, and the
    solver reasons over integers and byte strings. But a function takes a case class in its `Data`
@@ -367,7 +376,7 @@ limits, and whether the variable asks for a witness, which the quantifier's posi
 The plan depends only on the statement and the types, never on a time or an earlier run, so a
 statement has the same plan, and the same check, in every run. Nothing chooses another mapping:
 `forAllData` and a parameter written `A @UplcRepr(UplcRepresentation.Data)` state what `forAll`
-states, and become another way to write it.
+states, and are another way to write it (step 5).
 
 ### What is reported
 
@@ -475,7 +484,19 @@ counterexample are named by their nodes' paths, as now
    by fields is a field the test encodes into `Data` before the validator reads it, and a tag a
    branch of the symbolic run: with its `txInfo` by fields, 25 variables, a check takes 8 to 10
    times as long as with one `Data`. Hence 20, between a `Mint` and a `txInfo`, and the count from the root down.
-5. `forAllData` as `forAll`, and its parameter annotation with it.
+5. `forAllData` as `forAll`, and its parameter annotation with it. Built. The macros build a
+   variable over the `Data` encodings of its type, without limits, as one of its values: the
+   statement of `forAllData[A]`, of a parameter `A @UplcRepr(Data)` and of `unlimitedData[A]` is
+   that of `forAll[A]`, with its identity, the rules decide its nodes, and no decoder is compiled
+   for it. The `FromData` `forAllData` takes is not read, and the annotation needs none.
+   `Reason.OverEncodings` is gone; a variable with limits stays `Data` at its root
+   (`Reason.Limited`), as its guards walk its `Data`. The suites' `forAllData` variables are script contexts, one `Data` by rule 3 with the
+   check as before, to the bytes: no kept result changed, and a run without Lean took every one of
+   them as kept. The tactic's tests of a variable as one `Data` at its root, over small types, are
+   under a fixed plan (`Fixed.asData("p")`) now. A `forAllData` variable of a small type is by
+   fields: an `exists` over a `BlasterPair @UplcRepr(Data)` is proved, where through the premise of
+   its `Data` Z3 answered unknown, and one over a class with a string field, which as `Data` was
+   refused where it asks for a witness, is a variable by fields (2026-11-09).
 
 ### Follow-ups
 
@@ -1209,9 +1230,9 @@ is canceled.
   a list or a map, or a case class or an enum of them. A list or a map is restricted to its type's
   values by a predicate derived from the type; where that cannot be exact it is a variable only in a
   universal position. A type that contains itself and is passed through its constructors is
-  quantified over with `forAll` by fields down to where it repeats, and as `Data` there, and with
-  `forAllData` as one `Data`: either way with a recursive premise, exact where its other parts
-  are. `forAll[Data](d => denotes(d.to[A]) ==>: …)` does not stand for it: `d.to[A]`
+  quantified over with `forAll` or `forAllData` by fields down to where it repeats, and as `Data`
+  there, and with `forAllDataLimited` as one `Data`: either way with a recursive premise, exact
+  where its other parts are. `forAll[Data](d => denotes(d.to[A]) ==>: …)` does not stand for it: `d.to[A]`
   checks nothing itself, and the premise holds of every `d` that the program's conversion to `A`'s
   representation reads without failing, which is part of what makes `d` a value of `A`, and a part
   that depends on the representation. Nor can one constructor of `Data`, such as `Data.I`, be

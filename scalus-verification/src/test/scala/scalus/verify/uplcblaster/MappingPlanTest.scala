@@ -180,17 +180,30 @@ class MappingPlanTest extends AnyFunSuite {
         assert(pair.plan.nodes.map(_.reason) == List(Reason.Quantified(Quantifier.Exists)))
     }
 
-    test("a variable over Data encodings is one Data node, whatever its type") {
+    test("a variable over Data encodings is mapped as a forAll variable is") {
+        // forAllData states what forAll does, and is the same check: a BlasterOwned by fields.
         val owned = lowered(forAllData[BlasterOwned](o => o.amount == o.amount))
-        assert(written(owned.plan) == List("o" -> Mapping.AsData))
-        assert(owned.binders.size == 1, owned.binders)
-        assert(owned.plan.nodes.map(_.reason) == List(Reason.OverEncodings(Quantifier.ForAll)))
-        // A parameter written with @UplcRepr(UplcRepresentation.Data) is one too.
+        val plain = lowered(forAll[BlasterOwned](o => o.amount == o.amount))
         assert(
-          written(lowered(forAll((p: BlasterPairData) => p.a == p.a)).plan) ==
-              List("p" -> Mapping.AsData)
+          written(owned.plan) == List("o" -> Mapping.ByFields, "o.owner" -> Mapping.ByFields),
+          owned.plan.show
         )
-        // And a variable with limits, of a list, which is no case class: the limits are why.
+        assert(owned.plan.nodes.map(_.reason) == plain.plan.nodes.map(_.reason))
+        assert(names(owned) == names(plain))
+        assert(owned.predicates == plain.predicates)
+        assert(owned.programHashes == plain.programHashes)
+        // So is a parameter written with @UplcRepr(UplcRepresentation.Data).
+        val annotated = lowered(forAll((p: BlasterPairData) => p.a == p.a))
+        assert(written(annotated.plan) == List("p" -> Mapping.ByFields))
+        assert(
+          annotated.programHashes == lowered(forAll[BlasterPair](p => p.a == p.a)).programHashes
+        )
+        // And a class larger by fields than the most is one Data by rule 3, as of forAll.
+        val wide = lowered(forAll((w: PlanWide @UplcRepr(UplcRepresentation.Data)) => w.a0 == w.a0))
+        assert(written(wide.plan) == List("w" -> Mapping.AsData), wide.plan.show)
+        assert(wide.plan.nodes.map(_.reason) == List(Reason.Larger))
+        // A variable with limits is Data at its root, of a list too, which is no case class: the
+        // limits are why.
         val limited = lowered(
           forAllDataLimited[prelude.List[BigInt]](xs => xs.length <= 2)(xs =>
               xs.length >= BigInt(0)
@@ -202,15 +215,15 @@ class MappingPlanTest extends AnyFunSuite {
     }
 
     test("two variables of one name are mapped each as its own quantifier says") {
-        // One inline helper used twice can give two variables one name. Here one is over the Data
-        // encodings of BlasterOwned, the other by its fields, under the same name.
+        // One inline helper used twice can give two variables one name. Here one is a
+        // BlasterOwned by its fields, the other a PlanWide, one Data by rule 3, under the same name.
         val byFields = forAll[BlasterOwned](x => true)
-        forAllData[BlasterOwned](x => true) match
-            case Prop.Forall(encoded, body) =>
+        forAll[PlanWide](x => true) match
+            case Prop.Forall(wide, body) =>
                 val plain = byFields match
                     case Prop.Forall(ident, _) => ident
                     case other                 => fail(s"no quantifier: $other")
-                val renamed = forAllSIR(encoded.copy(name = plain.name), body)
+                val renamed = forAllSIR(wide.copy(name = plain.name), body)
                 val both = lowered(Prop.And(byFields, renamed))
                 assert(
                   written(both.plan) == List(
@@ -531,14 +544,12 @@ class MappingPlanTest extends AnyFunSuite {
         assert(holds.plan.nodes.map(_.reason) == List(Reason.Larger))
         // A node of at most the most is by fields: a TxOut is 17 Lean variables.
         assert(lowered(forAll[TxOut](out => denotes(out))).binders.size == 17)
-        // A script context is one, and the check is that of a forAllData variable of it.
+        // A script context is one. Its check is the one a forAllData variable of it had before
+        // forAllData was forAll, to the bytes: the suites' kept results of their statements over
+        // contexts hold to it, and a run without Lean tells one whose check has changed.
         val context = lowered(forAll[ScriptContext](ctx => ctx.txInfo.fee >= BigInt(0)))
         assert(written(context.plan) == List("ctx" -> Mapping.AsData), context.plan.show)
         assert(context.plan.nodes.map(_.reason) == List(Reason.Larger))
-        val overEncodings = lowered(forAllData[ScriptContext](ctx => ctx.txInfo.fee >= BigInt(0)))
-        assert(names(context) == names(overEncodings))
-        assert(context.predicates == overEncodings.predicates)
-        assert(context.programHashes == overEncodings.programHashes)
         // A fixed plan reaches a node inside one by mapping the nodes above it by fields; the
         // others are the tactic's, and a txInfo, 23 Lean variables by fields, is Data.
         val inside = loweredAsData(

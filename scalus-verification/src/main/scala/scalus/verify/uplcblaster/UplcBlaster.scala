@@ -601,7 +601,7 @@ object UplcBlaster {
     /** [[lower]], with the nodes that `fixed` maps mapped as it says, in place of the tactic's own
       * decisions ([[MappingPlan.Fixed]]). A node of a case class or an enum mapped as `Data` is one
       * Lean `Data` variable, named by its path, restricted to the encodings of its type's values as
-      * a [[Props.forAllData]] variable is, and decoded in the value each test builds.
+      * a [[Props.forAllDataLimited]] variable is, and decoded in the value each test builds.
       */
     private[verify] def lower(
         prop: Prop,
@@ -712,11 +712,13 @@ object UplcBlaster {
 
             /** The primitive Lean binders for one statement binder that `quantifier` introduces,
               * and a binding that rebuilds a case class from its fields in every leaf in its scope.
-              * The binder is one `Data` where the statement quantifies over the `Data` encodings of
-              * its type; otherwise each of its nodes is mapped by fields or as `Data` by the rules
-              * of the plan ([[Expansion.decide]]), but for the nodes `fixed` maps. Its decided
-              * nodes are recorded in `planned` as they are mapped ([[MappingPlan]]). `polarity` is
-              * the quantifier's position, which tells whether the variable asks for a witness.
+              * The binder is one `Data` where it has limits ([[Props.forAllDataLimited]]);
+              * otherwise each of its nodes is mapped by fields or as `Data` by the rules of the
+              * plan ([[Expansion.decide]]), but for the nodes `fixed` maps, whether the statement
+              * quantifies over the values of its type or over their `Data` encodings, which is the
+              * same. Its decided nodes are recorded in `planned` as they are mapped
+              * ([[MappingPlan]]). `polarity` is the quantifier's position, which tells whether the
+              * variable asks for a witness.
               *
               * A list's or a map's items are any `Data` to Lean: the quantifier restricts them to
               * the type's with a predicate derived from the type. Where the predicate is not exact,
@@ -735,35 +737,44 @@ object UplcBlaster {
                 val witness = quantifier match
                     case Quantifier.ForAll => !polarity.contains(true)
                     case Quantifier.Exists => !polarity.contains(false)
+                val limits = DataEncoding.limits(ident.tp)
                 val mapped = DataEncoding.encoded(ident.tp) match
-                    case Some((valueType, decoder)) =>
-                        val limits = DataEncoding.limits(ident.tp)
-                        val reason =
-                            if limits.all.nonEmpty then MappingPlan.Reason.Limited
-                            else MappingPlan.Reason.OverEncodings(quantifier)
+                    case Some((valueType, decoder)) if limits.all.nonEmpty =>
                         quantifiedData(ident, valueType, decoder, limits).map { mapped =>
                             planned += MappingPlan.Node(
                               variable,
                               ident.name,
                               valueType,
                               MappingPlan.Mapping.AsData,
-                              reason
+                              MappingPlan.Reason.Limited
                             )
                             mapped
                         }
-                    case None =>
+                    // A variable over the Data encodings of its type's values without limits,
+                    // which the macros make one of its values, states what one over the values
+                    // does, and is mapped as one: its decoder is not read.
+                    case encoded =>
+                        val values =
+                            if encoded.isEmpty then ident
+                            else
+                                new PropExpr.Ident[Any](
+                                  ident.name,
+                                  ident.id,
+                                  DataEncoding.valueType(ident.tp)
+                                )
                         val reason = MappingPlan.Reason.Quantified(quantifier)
                         quantifiedValues(
-                          ident,
+                          values,
                           new Expansion(variable, reason, fixed, witness, sized = true, None)
                         )
                 mapped.foreach((positions, _) => if witness then asking ++= positions)
                 mapped
             }
 
-            /** A [[Props.forAllData]] variable: one Lean `Data`, restricted to the encodings of its
-              * type's values, and the binding that decodes it in every leaf in its scope. The
-              * decoder's data declarations go around the leaf with the leaf's own ([[withBuilt]]).
+            /** A [[Props.forAllDataLimited]] variable, whose limits `limits` are: one Lean `Data`,
+              * restricted to the encodings of its type's values, and the binding that decodes it in
+              * every leaf in its scope. The decoder's data declarations go around the leaf with the
+              * leaf's own ([[withBuilt]]).
               */
             def quantifiedData(
                 ident: PropExpr.Ident[?],
@@ -773,34 +784,34 @@ object UplcBlaster {
             ): Either[String, (List[Int], List[Binding])] =
                 val decoded = Props.openVariables(decoder, List(ident.name))
                 val withoutForm = DataLayout.withoutDataForm(valueType)
-                val unfit = Option.when(limits.all.nonEmpty)(limits.unfit(valueType)).flatten
+                val unfit = limits.unfit(valueType)
                 lazy val guard = LimitGuards.guard(DataLayout.of(valueType), limits)
                 DataEncoding.of(valueType) match
                     case _ if unfit.isDefined =>
                         Left(
                           s"the limits of a binder of ${valueType.show} do not fit it: ${unfit.get}"
                         )
-                    case _ if limits.all.nonEmpty && guard.isLeft =>
+                    case _ if guard.isLeft =>
                         Left(
                           s"the limits of a binder of ${valueType.show} are not checked: " +
                               guard.left.toOption.mkString
                         )
                     case encoding if encoding.unknownReason.nonEmpty =>
                         Left(
-                          s"a forAllData binder of ${valueType.show} is not supported: " +
+                          s"a forAllDataLimited binder of ${valueType.show} is not supported: " +
                               encoding.unknownReason.mkString
                         )
                     // As of a node mapped as Data: such a value is the decoding of no Data.
                     case _ if withoutForm.nonEmpty =>
                         Left(
-                          s"a forAllData binder of ${valueType.show} is not supported: its part " +
-                              s"of type ${withoutForm.map(_.show).mkString} has no Data form"
+                          s"a forAllDataLimited binder of ${valueType.show} is not supported: its " +
+                              s"part of type ${withoutForm.map(_.show).mkString} has no Data form"
                         )
                     // `d.to[A]` compiles to the compiler's own reading, whatever FromData is
                     // given. A decoder that is not would read other Data than the premise admits.
                     case _ if !decodesByRepresentation(decoded, ident.name) =>
                         Left(
-                          s"a forAllData binder of ${valueType.show} is read otherwise than by " +
+                          s"a forAllDataLimited binder of ${valueType.show} is read otherwise than by " +
                               "the compiler's Data representation of the type, which its premise " +
                               "is derived from: a Data the premise admits could fail to decode, " +
                               "and count as a value of the type"
@@ -814,11 +825,10 @@ object UplcBlaster {
                         if !restriction.exact then inexact += position
                         // A guard that checks less than the limits say leaves the variable more
                         // values than they allow, as a predicate that is not exact does.
-                        if limits.all.nonEmpty then
-                            guard.foreach { checked =>
-                                guards(position) = checked.program
-                                if !checked.exact then inexact += position
-                            }
+                        guard.foreach { checked =>
+                            guards(position) = checked.program
+                            if !checked.exact then inexact += position
+                        }
                         Right(List(position) -> List(Binding(ident.name, valueType, decoded)))
 
             def quantifiedValues(
@@ -1062,9 +1072,9 @@ object UplcBlaster {
                 else
                     Left(
                       s"${claimed.map(binders(_).name).mkString(", ")}: a list, a map, a " +
-                          "forAllData variable or a case class or enum mapped as Data, whose type " +
-                          "cannot be told from Data exactly, as one with a string, or one that " +
-                          "nests too deep, or a forAllDataLimited variable whose guard " +
+                          "case class or enum mapped as Data, or a forAllDataLimited variable, " +
+                          "whose type cannot be told from Data exactly, as one with a string, or " +
+                          "one that nests too deep, or a forAllDataLimited variable whose guard " +
                           "checks less than its limits say, as of the elements of a list that has " +
                           "no most, has more values as a variable than its type or its limits " +
                           "allow. A statement that holds of all of them holds of the type's, but a " +
@@ -1286,10 +1296,10 @@ object UplcBlaster {
     private enum Variable(val leanType: String) {
 
         /** Whether the variable has values its type does not have: the items of a list or a map are
-          * any `Data`, and so is a variable over the encodings of a type, of [[Props.forAllData]]
-          * or a node mapped as `Data`, but for its premise. A statement about all its values holds
-          * of the type's, and one that claims some value can be shown by a value the type does not
-          * have.
+          * any `Data`, and so is a variable over the encodings of a type, of
+          * [[Props.forAllDataLimited]] or a node mapped as `Data`, but for its premise. A statement
+          * about all its values holds of the type's, and one that claims some value can be shown by
+          * a value the type does not have.
           */
         def isLarger: Boolean = this match
             case DataList | PairList | DataMap | EncodedData => true
@@ -1309,8 +1319,8 @@ object UplcBlaster {
         /** The entries of one `Data.Map`. */
         case DataMap extends Variable("List (Data × Data)")
 
-        /** The `Data` encoding of a value of its type: of a [[Props.forAllData]] variable, or of a
-          * node mapped as `Data` ([[asData]]).
+        /** The `Data` encoding of a value of its type: of a [[Props.forAllDataLimited]] variable,
+          * or of a node mapped as `Data` ([[asData]]).
           */
         case EncodedData extends Variable("Data")
 
@@ -1427,10 +1437,10 @@ object UplcBlaster {
                   "String, Data, lists and maps, and case classes and enums of them"
             )
 
-    /** Whether `decoded`, the decoder of a [[Props.forAllData]] variable `name` applied to it, is
-      * the compiler's own: `UniversalDataConversion.fromData`, which reads the `Data` as the type's
-      * `Data` representation, the one its premise is derived from. Definitions the compiler put
-      * around it do not change what it reads.
+    /** Whether `decoded`, the decoder of a [[Props.forAllDataLimited]] variable `name` applied to
+      * it, is the compiler's own: `UniversalDataConversion.fromData`, which reads the `Data` as the
+      * type's `Data` representation, the one its premise is derived from. Definitions the compiler
+      * put around it do not change what it reads.
       */
     private def decodesByRepresentation(decoded: SIR, name: String): Boolean =
         Wrappers.of(decoded)._2 match
@@ -1577,7 +1587,7 @@ object UplcBlaster {
 
     /** The node at `path`, of type `tp`, a case class or an enum, as one Lean `Data` variable named
       * `path`, and its value decoded from it. The variable ranges over the encodings of the type's
-      * values, as that of a [[Props.forAllData]] is: its type is marked so
+      * values, as that of a [[Props.forAllDataLimited]] is: its type is marked so
       * ([[DataEncoding.encodedVariable]]) with its decoder, and the quantifier restricts it with
       * the premise of its type's encoding. The decoder is `UniversalDataConversion.fromData`, the
       * compiler's own reading of the type's `Data` representation, which the premise is derived
@@ -3439,14 +3449,15 @@ object UplcBlaster {
 
     /** The encoding of a variable of type `tp` that has more values than its type
       * ([[Variable.isLarger]]): a builtin list of items, a builtin list of pairs or a `Data.Map`,
-      * which is the type's `Data` encoding, or the `Data` of a value of a [[Props.forAllData]]
-      * variable.
+      * which is the type's `Data` encoding, or the `Data` of a value of a node mapped as `Data` or
+      * of a [[Props.forAllDataLimited]] variable.
       */
     private def variableEncoding(tp: SIRType): DataEncoding =
         DataEncoding.of(DataEncoding.valueType(tp))
 
     /** The restriction of a variable of `kind` and type `tp` to its type's values: of the items of
-      * a list or a map, or of the `Data` of a [[Props.forAllData]] variable.
+      * a list or a map, or of the `Data` of a node mapped as `Data` or of a
+      * [[Props.forAllDataLimited]] variable.
       */
     private def variableRestriction(kind: Variable, tp: SIRType): Restriction = {
         val fresh = Iterator.from(0)
@@ -3474,10 +3485,10 @@ object UplcBlaster {
     }
 
     /** Why `value`, Lean's value for a variable of type `tp`, is no value of the type, or `None`
-      * where it is one. Only a list, a map, a [[Props.forAllData]] variable or a node mapped as
-      * `Data` has values its type does not have ([[Variable.isLarger]]): its items, or itself, are
-      * any `Data`, unless the quantifier's predicate is exact. A value that cannot be checked here
-      * counts as none of the type's, so that a refutation never rests on it.
+      * where it is one. Only a list, a map, a [[Props.forAllDataLimited]] variable or a node mapped
+      * as `Data` has values its type does not have ([[Variable.isLarger]]): its items, or itself,
+      * are any `Data`, unless the quantifier's predicate is exact. A value that cannot be checked
+      * here counts as none of the type's, so that a refutation never rests on it.
       */
     private[uplcblaster] def outsideType(value: Constant, tp: SIRType): Option[String] =
         outsideEncoding(value, tp).orElse(outsideLimits(value, tp))
