@@ -43,7 +43,7 @@ error anywhere makes the whole test fail.
 - **`call(f, a)(r => p)` holds iff `f(a)` returns a value `r` and `p` holds of it** (total
   correctness).
 - **`whenReturns(f, a)(r => p)` holds iff, when `f(a)` returns a value `r`, `p` holds of it**
-  (partial correctness). It equals `denotes(f(a)) ==> call(f, a)(r => p)`.
+  (partial correctness). It equals `denotes(f(a)) ==>: call(f, a)(r => p)`.
 
 A call runs the function's own compiled program, not a copy compiled with the test; how values
 cross that boundary is in [the tactic's calling convention](uplc-blaster.md#linking).
@@ -55,8 +55,8 @@ forms quantify over a function's arguments. All are syntax, with no node of thei
 |---|---|
 | `succeeds(f, a)` | `call(f, a)(_ => true)`: the call returns |
 | `fails(f, a)` | `!succeeds(f, a)`: the call does not return |
-| `returnsWhen(f)(args => c)` | `∀ args. c ==> succeeds(f, args)` |
-| `failsWhen(f)(args => c)` | `∀ args. c ==> fails(f, args)` |
+| `returnsWhen(f)(args => c)` | `∀ args. c ==>: succeeds(f, args)` |
+| `failsWhen(f)(args => c)` | `∀ args. c ==>: fails(f, args)` |
 
 The function forms exist because a function registered under a synthetic name has no Scala
 symbol to write in an expression; for an `@Compile` method, `fails(Math.sqrt(x))` and a call form
@@ -69,7 +69,9 @@ also holds when the test `t` returns `false`.
 
 ## 4. Connectives
 
-Connectives between statements are classical: `&&`, `||`, `!`, `==>`, `<=>` as in Lean and SMT.
+Connectives between statements are classical: `&&`, `||`, `!`, `==>:`, `<=>` as in Lean and SMT.
+`==>:` and `==>?:` are right-associative, as implication is read: `p ==>: q ==>: r` is
+`p ==>: (q ==>: r)`.
 A test's truth is two-valued (it holds or not), so a failing test is simply false at the
 statement level.
 
@@ -85,26 +87,26 @@ The difference from Boolean operators inside a test shows only when an operand f
 `&&` agrees in both readings. Capture keeps exactly the reading the user wrote: a Boolean
 expression is one test, and a statement-level connective is written over statements.
 
-`premise ==>? claim` (`Prop.Rejects`) says less than `premise ==> claim`: where the claim returns
+`premise ==>?: claim` (`Prop.Rejects`) says less than `premise ==>: claim`: where the claim returns
 `false`, the premise does not hold, and where the claim fails, it says nothing. The two differ only
 where the claim fails:
 
-| Premise | Claim | `premise ==> claim` | `premise ==>? claim` |
+| Premise | Claim | `premise ==>: claim` | `premise ==>?: claim` |
 |---|---|---|---|
 | holds | `true` | true | true |
 | holds | `false` | false | false |
 | holds | fails | false | **true** |
 | does not hold | anything | true | true |
 
-So `succeeds(validator, ctx) ==>? signedBy(ctx)` holds of a validator that accepts a context the
-claim cannot read, as one without a datum where the claim decodes the datum, and `==>` is refuted
+So `succeeds(validator, ctx) ==>?: signedBy(ctx)` holds of a validator that accepts a context the
+claim cannot read, as one without a datum where the claim decodes the datum, and `==>:` is refuted
 there. It is for a claim that fails only where the premise fails too, which its author vouches
-for. Its gain is the tactic's: `==>?` is exactly what the rejecting form checks
+for. Its gain is the tactic's: `==>?:` is exactly what the rejecting form checks
 ([the rejecting form](uplc-blaster.md#the-rejecting-form)), in any position.
 
 Its claim is one program. A claim of several tests, `Prop(a) && Prop(b)`, is the one test
 `a && b`, which reads `b` only where `a` holds: it fails where `a` fails, and where `a` holds and
-`b` fails. So with `a` true and `b` failing, `==>?` holds, where the statement-level reading,
+`b` fails. So with `a` true and `b` failing, `==>?:` holds, where the statement-level reading,
 with a failing test false, would make the claim false.
 
 ## 5. Bounded tactics

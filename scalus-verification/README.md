@@ -53,14 +53,15 @@ validator actually runs on chain.
   script contexts and withdrawals. The JVM tests of `scalus-examples` depend on
   `scalus-verification-scalatest`, as a project outside these sources does.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala` -
-  properties of the hashed timelock contract, for every datum and whatever else the transaction
-  has: who refunds and who reveals, when, and of what, and that there is no time at which both
-  can.
+  properties of the hashed timelock contract, over real script contexts (`forAllData`, or
+  `forAllDataLimited` of at most two signatures): who refunds and who reveals, when, and of what,
+  and that there is no time at which both can.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala`
-  - properties of the two payment splitters, for two payees and whatever else the transaction
-  has: who submits a payout and who is paid, that every payee is paid exactly the split, that only
-  ADA is split, that an honest payout is accepted, and for the optimized one, that a spend needs
-  its stake validator, which checks the same split, and that its stake is never delegated.
+  - properties of the two payment splitters, for two payees, over real script contexts of a few
+  inputs and outputs: for the optimized one, that a spend's redeemer names its input, that a spend
+  with its withdrawal is accepted, and that its stake is never delegated. Who submits a payout, who is paid, the split, that only ADA is split,
+  that an honest payout is accepted and that a spend needs its stake validator's withdrawal, Lean
+  does not finish there: those tests are tagged `Unfinished`.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/oneshotmint/MintingPolicyVerificationTest.scala`
   - properties of the one-shot minting policy, on minting contexts of the shape the ledger gives a
   script of version 1: the two guarantees that `MintingPolicy.mint` states with `Spec.ensures`,
@@ -80,7 +81,7 @@ verifier.addFunction(clamp)
 val inRange = verifier.statement(
   "clamp_in_range",
   forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-      (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+      (lo <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
   )
 )
 
@@ -98,7 +99,7 @@ inputs whose runs end within `n` steps, whose proof is a `ProvenWithin` and no t
 
 `UplcBlaster` proves statements with universal and existential quantifiers over `BigInt`,
 `Boolean`, `ByteString`, `String`, `Data`, lists and maps, and case classes and enums of them:
-Boolean tests, calls, `denotes` and `equal`, combined with `&&`, `||`, `!`, `==>` and `<=>`.
+Boolean tests, calls, `denotes` and `equal`, combined with `&&`, `||`, `!`, `==>:` and `<=>`.
 `existsLet` supplies and eliminates an explicit witness, avoiding an SMT quantifier; ordinary
 `exists` is emitted to Blaster as the classically equivalent `¬∀¬`. A variable of a case class, as in
 `forAll[Config, BigInt]((config, time) => …)`, is one variable per field for Lean;
@@ -185,7 +186,7 @@ of Blaster and Z3. This also works for programs Blaster cannot reduce, such as t
 A call of a function registered in the verifier is linked to that function's compiled program, so
 the proof is about those exact bytes. A `call` is total: it claims that the function returns.
 `whenReturns(f, a)(r => p)` is partial: it claims `p` only where the function returns, and is
-proved as `denotes(f(a)) ==> call(f, a)(r => p)`. The proof still needs `f` to return or fail
+proved as `denotes(f(a)) ==>: call(f, a)(r => p)`. The proof still needs `f` to return or fail
 within the budget on every input: a run that exhausts the budget counts as one that may return,
 so `p` must then hold, and a partial function that loops on some inputs cannot be proved. Other
 `@Compile` definitions a test uses are compiled with the test. A function of several parameters is
@@ -195,11 +196,11 @@ included: the compiler passes them. A `FunctionDef` records how its program take
 and the tactic rejects a function compiled with options that pass them differently.
 
 A binder's body is a statement or a Boolean. Statements nest quantifiers, calls and connectives:
-`forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x != BigInt(0)))`. A Boolean body is one test,
+`forAll[BigInt](x => denotes(BigInt(10) / x) ==>: (x != BigInt(0)))`. A Boolean body is one test,
 `if`, `match` and local `val`s included: `forAll[Boolean, BigInt]((c, x) => if c then x > 0 else x < 0)`.
 A Boolean operand of a connective is one test too. Each test or expression is compiled as a closed
 lambda over the variables it uses. In a statement body, a variable may only be used inside them:
-an `if` that chooses between statements is a compile error; state the cases with `==>`.
+an `if` that chooses between statements is a compile error; state the cases with `==>:`.
 `Prop(...)` is needed only to make a Boolean a separate test on purpose: `!Prop(t)` holds when
 `t` fails, while `!t` is one test that fails with it.
 
@@ -220,7 +221,7 @@ val inRange = verifier.contract(
 verifier.verify(inRange, UplcBlaster(Budget.LeanSteps(120), lean)) // Proven
 ```
 
-`contract` is partial: `∀ args. expects(args) ==> whenReturns(f, args)(r => ensures(args)(r))`,
+`contract` is partial: `∀ args. expects(args) ==>: whenReturns(f, args)(r => ensures(args)(r))`,
 so a call that fails satisfies it. `totalContract` also claims that the function returns where
 `expects` holds. `verifier.contract` registers the statement as the function's contract, and
 `verifier.contracts(clamp.ref)` lists them. The function's parameters must be quantifiable:
@@ -242,8 +243,8 @@ left open. `totalContract` is the contract with `.returnsWhen(_ => true)`.
 The same two exist as statements of their own:
 
 ```scala
-returnsWhen(div10)(x => x != BigInt(0))   // ∀ x. x ≠ 0 ==> succeeds(div10, x)
-failsWhen(div10)(x => x == BigInt(0))     // ∀ x. x = 0 ==> fails(div10, x)
+returnsWhen(div10)(x => x != BigInt(0))   // ∀ x. x ≠ 0 ==>: succeeds(div10, x)
+failsWhen(div10)(x => x == BigInt(0))     // ∀ x. x = 0 ==>: fails(div10, x)
 ```
 
 `succeeds(f, a)` is the total call `call(f, a)(_ => true)`, and `fails(f, a)` is its negation.
@@ -332,7 +333,7 @@ precondition.
 cd scalus-verification/src/main/lean && lake build && cd -   # once, and after a Lean change
 sbt scalusVerification/test                                                        # about 1 min of tests
 sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 2 min
-sbt "scalusExamplesJVM/testOnly scalus.examples.htlc.HtlcVerificationTest"         # about 3 min
+sbt "scalusExamplesJVM/testOnly scalus.examples.htlc.HtlcVerificationTest"         # about 8 min
 sbt "scalusExamplesJVM/testOnly scalus.examples.paymentsplitter.PaymentSplitterVerificationTest"
 sbt "scalusExamplesJVM/testOnly scalus.examples.oneshotmint.MintingPolicyVerificationTest"   # about 3 min
 sbt "scalusVerification/testOnly *UplcBlasterLimitsTest"   # the statements Lean does not finish

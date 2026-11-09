@@ -150,21 +150,31 @@ object Prop {
 // members of Prop
 def &&(q: Prop): Prop
 def ||(q: Prop): Prop
-def ==>(q: Prop): Prop
-def ==>?(q: Prop): Prop             // where q, a test, is false, this does not hold; where q fails, nothing
+inline def ==>:(inline premise: Prop): Prop   // premise ==>: this, right-associative
+inline def ==>?:(inline premise: Prop): Prop  // premise ==>?: this, a test: where it is false, premise does not hold; where it fails, nothing
 def <=>(q: Prop): Prop
 def unary_! : Prop
-def implies(q: Prop): Prop          // ==> with the lowest precedence
+inline def implies_:(inline premise: Prop): Prop  // ==>: with the lowest precedence
 def iff(q: Prop): Prop              // <=> with the lowest precedence
 ```
 
 Implemented in `scalus-verification/.../scalus/verify/Prop.scala`. There `Prop` is an `enum`
 holding the statement's explicit logical form at runtime. The Scala lambdas in the declarations
 above are syntax sugar; compilation turns them into binder and body nodes. The verifier does not
-execute a Scala callback to establish the claim. Scala ranks an operator by
-its first character, so `==>` binds like `==` and `<=>` like `<`, both tighter than `&&` and `||`:
-`p && q ==> r` means `p && (q ==> r)`. The alphanumeric aliases `implies` and `iff` bind loosest.
-`==>?` binds as `==>` does. It differs from `==>` only where the claim fails, which it counts as
+execute a Scala callback to establish the claim.
+
+An operator whose name ends in `:` is right-associative in Scala, as implication is read:
+`p ==>: q ==>: r` means `p ==>: (q ==>: r)`. Such an operator is a method of its right operand, so
+the premise is its parameter, an inline one: Scala evaluates the left operand of such a call first,
+into a local value, except for an inline parameter, so a Boolean premise reaches its conversion as
+code. A Boolean on either side is a test. Scala ranks an operator by its
+first character, so `==>:` binds like `==` and `<=>` like `<`, both tighter than `&&` and `||`, on
+either side: `p && q ==>: r` means `p && (q ==>: r)`, and `p ==>: q && r` means `(p ==>: q) && r`.
+`implies_:` and `iff`, whose names begin with a letter, bind loosest: `p && q implies_: r && s`
+means `(p && q) implies_: (r && s)`, and `implies_:` is right-associative, as its name ends in
+`:`. Nor does Scala mix operators of one precedence and of both associativities: `x == y ==>: p` is
+a compile error, written `(x == y) ==>: p` or `x == y implies_: p`. `==>?:`
+binds as `==>:` does. It differs from `==>:` only where the claim fails, which it counts as
 holding, and is checked in the rejecting form
 ([statement semantics, §4](verification-details/prop-semantics.md#4-connectives)).
 
@@ -172,7 +182,7 @@ The nested syntax for `∀z ∀x. x ≠ 0 ⇒ ∃y. x·y > z` is:
 
 ```scala
 forAll[BigInt](z => forAll[BigInt](x =>
-    (x !== BigInt(0)) ==> exists[BigInt](y => x * y > z)
+    (x !== BigInt(0)) ==>: exists[BigInt](y => x * y > z)
 ))
 ```
 
@@ -195,7 +205,7 @@ instead of asking the backend to search for one. For example:
 
 ```scala
 forAll[BigInt](x =>
-    (x > 0) ==> existsLet(x + 1)(y => y > x)
+    (x > 0) ==>: existsLet(x + 1)(y => y > x)
 )
 ```
 
@@ -217,12 +227,12 @@ The quantifier stays in `Prop`; the computation in each leaf is SIR.
 A binder's body is either a statement or a Boolean. A Boolean body is one test, whatever it
 contains, so `forAll[Boolean, BigInt]((flag, x) => if flag then x > 0 else x < 0)` is a single
 test, and so is a body with a `match` or local `val`s. A Boolean operand of a connective also
-becomes one test, through an implicit conversion: in `(lo <= hi) ==> call(...)`, `lo <= hi` is a
+becomes one test, through an implicit conversion: in `(lo <= hi) ==>: call(...)`, `lo <= hi` is a
 test.
 
 In a statement body, a binder variable used outside a leaf would make the shape of the statement
 depend on its value, so it is a compile error. For example, an `if` or `match` that chooses
-between statements is outside the subset of §4.1; state the cases with `==>` instead.
+between statements is outside the subset of §4.1; state the cases with `==>:` instead.
 
 The explicit representation gives the verifier stable scoping, serialization and backend access.
 How the macros build it is described in
@@ -434,7 +444,7 @@ Both forms elaborate to the same statement, with `f` bound to the target:
   `guarantees` or `obligations`, makes the function's parameter a `forAllDataLimited` variable:
   the statements are of every context within the limits, as a hand-written statement over
   `forAllDataLimited` is. `guarantees(f, parameter, Connective.Rejects)` states each clause with
-  `==>?`: a clause that reads the datum as the validator does fails where the validator cannot
+  `==>?:`: a clause that reads the datum as the validator does fails where the validator cannot
   read it, which rejects the spend too, and says nothing there.
 
 ### 3.8 Calls and the function table
@@ -483,7 +493,7 @@ table to analyze the named method.
 ```
 prop  ::= forAll[T](x => prop) | exists[T](x => prop) | existsLet[T](term)(x => prop)
         | call(function, term)(result => prop) | whenReturns(function, term)(result => prop)
-        | prop && prop | prop || prop | prop ==> prop | prop <=> prop | !prop
+        | prop && prop | prop || prop | prop ==>: prop | prop <=> prop | !prop
         | denotes(term) | equal(term, term) | { val v = term; prop } | bool
 bool  ::= a Boolean expression in the @Compile subset
 term  ::= an expression in the @Compile subset
@@ -501,7 +511,7 @@ is one test and is accepted.
 These are rejected with a compile error:
 
 - a quantifier inside a test, for example inside `xs.forall(...)`;
-- `if` or `match` that produces a `Prop` (write `==>`; case analysis is a v2 item);
+- `if` or `match` that produces a `Prop` (write `==>:`; case analysis is a v2 item);
 - recursion at the `Prop` level (use lemmas and induction tactics instead).
 
 ### 4.2 Algorithm
@@ -723,7 +733,7 @@ and case classes and enums of them.
 
 - Each leaf of the body (a Boolean test, a total call, `denotes`, `equal`) is compiled to its own
   UPLC predicate over the quantified values. A partial call, `whenReturns`, is
-  `denotes(f(a)) ==> call(f, a)(…)`, the form of §3.7.
+  `denotes(f(a)) ==>: call(f, a)(…)`, the form of §3.7.
 - The connectives become a Lean proposition that reads each leaf by the polarity rule of §6.2.
 - The tactic replays a counterexample on the Scalus CEK before it reports `Refuted` (§5.2).
 - A closed statement, one without quantified variables, is decided by evaluation in Lean instead
@@ -735,7 +745,7 @@ accepts one, two or three binders, and its body is any statement of the fragment
 ```scala
 val clamp = FunctionDef(Math.clamp)
 forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-    (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+    (lo <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
 )
 ```
 
@@ -766,7 +776,7 @@ object MathProofs {                        // plain Scala; each statement is com
 
     val mulUnbounded = verifier.statement("mul_unbounded") {
         forAll[BigInt](z => forAll[BigInt](x =>
-            (x !== BigInt(0)) ==> existsLet(x * (Math.abs(z) + 1))(y => x * y > z)
+            (x !== BigInt(0)) ==>: existsLet(x * (Math.abs(z) + 1))(y => x * y > z)
         ))
     }
 }
@@ -848,7 +858,7 @@ final class Verifier {
     // over the values of the one parameter that `parameter` says, a forAllDataLimited variable
     def guarantees(function: FunctionRef[?, ?], parameter: LimitedData): StatedGuarantees
     def guarantees(function: FunctionRef[?, ?], parameter: LimitedData,
-                   connective: Connective): StatedGuarantees // Implies (==>) or Rejects (==>?)
+                   connective: Connective): StatedGuarantees // Implies (==>:) or Rejects (==>?:)
     def obligations(caller: FunctionRef[?, ?]): CallObligations
     def obligations(caller: FunctionRef[?, ?], parameter: LimitedData): CallObligations
     def addTheorem(theorem: Theorem): Unit
@@ -1197,7 +1207,7 @@ without a step limit (§5.2).
   domain.
 - A program whose step count grows with its input, such as `gcd`, does not prove over an unbounded
   domain. The user must write the restriction into the statement, for example
-  `(Math.abs(x) < 65536) ==> …`. It then shows up in the report instead of hiding in a budget
+  `(Math.abs(x) < 65536) ==>: …`. It then shows up in the report instead of hiding in a budget
   number.
 
 **Budgets.** A request gives the budget, `Budget.LeanSteps(n)`, or lets the tactic find it,
@@ -1441,7 +1451,7 @@ ledger's validity predicates as premises, is phase 3 (§9).
 | **0** | `scalus.verify` surface (`Prop`, `forAll`, connectives, `Quantifiable` for `BigInt`/`Boolean`/`ByteString`); verifier-owned `statement` / `refute` methods; generated verifier descriptors; statement capture by macros (§4.3); `Prop` with flat serialization; `@Compile` function and script targets; `blaster-uplc` for ∀-prefix statements with the polarity rule; `sbt verify` generating a Lean workspace and parsing verdicts | the `Math.lean` theorems and controls, restated in Scala over `Math.*` targets, give the same verdicts; generated files replace the hand-written ones | Built, in part by other means: the surface (`Quantifiable` also for `String`, `Data`, lists, maps, case classes and enums), capture by macros, `@Compile` function targets, `blaster-uplc` with the polarity rule. The `Math.lean` theorems are restated in `PreludeProofsTest`, and the hand-written files are gone (§8.1). Proofs run as ScalaTest suites, not through `sbt verify`. Not built: verifier descriptors, script targets, a serialized `Prop`. |
 | **1** | `exists` / `existsLet`, `denotes`, `equal`; `refute` with replay; `scalacheck`; external contracts (`verifier.contract(f)`); `Theorem`, report, cache; PR-time freshness check and nightly run | a suite without a negative control fails; a planted spurious counterexample is reported as spurious; `Math.clamp`'s contract proved about its compiled code | Built: `exists` / `existsLet`, `denotes`, `equal`; replayed refutations, and spurious counterexamples reported as such; external contracts, proved about compiled code; `Theorem`; the kept results, with ci-jvm passing on them and the Lean-Proofs workflow nightly and on a push; and `refute`, `ExpectedOutcome` and `VerificationRequest`, run by `LeanProofs.check`; statements without a name named by their content hash (§4.4), and kept results pruned. Beyond the plan: budgets the tactic finds (`Budget.Auto`), and checks within a budget (`Budget.Within`, `ProvenWithin`). Not built: `scalacheck`, a report, and failing a suite without a negative control. |
 | **2** | in-body `spec` capture in the plugin; `lean-direct` for integers, `Bool`, `ByteString`, `List`, `Option` and case classes; declared Lean mappings, proved by `blaster-uplc`; `using`, `split`, `cases`; contract VCG for modular proofs | adding clauses leaves the script hash unchanged; a list lemma proved with `induction xs <;> blaster`; a Mathlib `Int.gcd` theorem transferred to the compiled `Math.gcd` through a proved mapping; a caller's obligation discharged with its callee's contract | Built: in-body `Spec` capture, with the script's bytes unchanged (`SpecTest`), and the caller's side of contracts (`obligations`). Not built: `lean-direct`, mappings, `using` / `split` / `cases`, the VCG. |
-| **3** | validators: `ScriptContext` targets with the CardanoLedgerApiBlaster validity predicates; bring the first prototype's Vesting annotations forward (§8.2) | one real contract (Vesting) with authorisation and conservation properties proved about its script hash | In part: Vesting, HTLC and the payment splitters have properties proved about their validators, over script contexts written as `Data`, and Vesting's annotations are back (§8.2). The one-shot minting policy states its guarantees in its code and has them proved, and its script, with its deserializer, is proved on every context of at most two inputs, two policies and two tokens of each (`forAllDataLimited`). IOG's statements of the USDCx policy hold of the script Scalus compiles, in a Lean workspace outside `scalus.verify` (§8.4). Not built: the validity predicates as premises of a `Prop`, and proofs about the published script hash, which wait for Value and array builtins in PlutusCoreBlaster: the proved programs are compiled with the tactic's options. |
+| **3** | validators: `ScriptContext` targets with the CardanoLedgerApiBlaster validity predicates; bring the first prototype's Vesting annotations forward (§8.2) | one real contract (Vesting) with authorisation and conservation properties proved about its script hash | In part: Vesting, HTLC and the payment splitters have properties proved about their validators, over real script contexts (`forAllData[ScriptContext]`, or `forAllDataLimited` of a few inputs, outputs or signatures), with some statements Lean does not finish tagged `Unfinished`, and Vesting's annotations are back (§8.2). The one-shot minting policy states its guarantees in its code and has them proved, and its script, with its deserializer, is proved on every context of at most two inputs, two policies and two tokens of each (`forAllDataLimited`). IOG's statements of the USDCx policy hold of the script Scalus compiles, in a Lean workspace outside `scalus.verify` (§8.4). Not built: the validity predicates as premises of a `Prop`, and proofs about the published script hash, which wait for Value and array builtins in PlutusCoreBlaster: the proved programs are compiled with the tactic's options. |
 | **4** | a Scala kernel only if a lemma backlog demands it | representative lemmas elaborate and discharge through `Prop` | Not started. |
 
 ---
