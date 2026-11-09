@@ -53,14 +53,15 @@ validator actually runs on chain.
   script contexts and withdrawals. The JVM tests of `scalus-examples` depend on
   `scalus-verification-scalatest`, as a project outside these sources does.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala` -
-  properties of the hashed timelock contract, for every datum and whatever else the transaction
-  has: who refunds and who reveals, when, and of what, and that there is no time at which both
-  can.
+  properties of the hashed timelock contract, over real script contexts (`forAllData`, or
+  `forAllDataLimited` of at most two signatures): who refunds and who reveals, when, and of what,
+  and that there is no time at which both can.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala`
-  - properties of the two payment splitters, for two payees and whatever else the transaction
-  has: who submits a payout and who is paid, that every payee is paid exactly the split, that only
-  ADA is split, that an honest payout is accepted, and for the optimized one, that a spend needs
-  its stake validator, which checks the same split, and that its stake is never delegated.
+  - properties of the two payment splitters, for two payees, over real script contexts of a few
+  inputs and outputs: for the optimized one, that a spend's redeemer names its input, that a spend
+  with its withdrawal is accepted, and that its stake is never delegated. Who submits a payout, who is paid, the split, that only ADA is split,
+  that an honest payout is accepted and that a spend needs its stake validator's withdrawal, Lean
+  does not finish there: those tests are tagged `Unfinished`.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/oneshotmint/MintingPolicyVerificationTest.scala`
   - properties of the one-shot minting policy, on minting contexts of the shape the ledger gives a
   script of version 1: the two guarantees that `MintingPolicy.mint` states with `Spec.ensures`,
@@ -332,7 +333,7 @@ precondition.
 cd scalus-verification/src/main/lean && lake build && cd -   # once, and after a Lean change
 sbt scalusVerification/test                                                        # about 1 min of tests
 sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 2 min
-sbt "scalusExamplesJVM/testOnly scalus.examples.htlc.HtlcVerificationTest"         # about 3 min
+sbt "scalusExamplesJVM/testOnly scalus.examples.htlc.HtlcVerificationTest"         # about 8 min
 sbt "scalusExamplesJVM/testOnly scalus.examples.paymentsplitter.PaymentSplitterVerificationTest"
 sbt "scalusExamplesJVM/testOnly scalus.examples.oneshotmint.MintingPolicyVerificationTest"   # about 3 min
 sbt "scalusVerification/testOnly *UplcBlasterLimitsTest"   # the statements Lean does not finish
