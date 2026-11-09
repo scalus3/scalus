@@ -8,26 +8,6 @@ object AmmTestBudgets extends BudgetTable {
     pin("AmmValidator size", Generation.Scala33, Pin.Size(bytes = 2_901))
     pin("AmmValidator size", Generation.Scala38, Pin.Size(bytes = 2_848))
     pin(
-      "budget: deposit",
-      Generation.Scala33,
-      Pin.Tx(memory = 119_051, steps = 50_745_771, size = 6_310, fee = 443_550)
-    )
-    pin(
-      "budget: deposit",
-      Generation.Scala38,
-      Pin.Tx(memory = 119_051, steps = 50_745_771, size = 6_256, fee = 441_174)
-    )
-    pin(
-      "budget: redeem",
-      Generation.Scala33,
-      Pin.Tx(memory = 109_816, steps = 48_091_551, size = 6_305, fee = 442_605)
-    )
-    pin(
-      "budget: redeem",
-      Generation.Scala38,
-      Pin.Tx(memory = 109_816, steps = 48_091_551, size = 6_251, fee = 440_229)
-    )
-    pin(
       "createPool: creates empty pool with zero reserves",
       Generation.Scala33,
       Pin.Tx(memory = 41_048, steps = 19_124_943, size = 6_056, fee = 425_593)

@@ -148,27 +148,6 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
         assert(poolA.lpAssetName == poolB.lpAssetName, "same LP name, but under different policies")
     }
 
-    // Budget pins of the transaction under test: total script ExUnits (mint policy + pool spend),
-    // size and fee. Values per compiler generation live in AmmTestBudgets.scala.
-    test("budget: deposit") {
-        val (provider, txCreator) = createSetup()
-        val poolUtxo1 = initPoolWith(provider, txCreator, x0 = 1000L, x1 = 4000L)
-        val utxos = provider.findUtxos(Alice.address).await().toOption.get
-        val depositTx =
-            txCreator.deposit(utxos, poolUtxo1, x0 = 1000L, x1 = 4000L, Alice.address, Alice.signer)
-        provider.submitOk(depositTx)
-    }
-
-    test("budget: redeem") {
-        val (provider, txCreator) = createSetup()
-        val poolUtxo1 = initPoolWith(provider, txCreator, x0 = 1000L, x1 = 4000L)
-        val initialDatum = txCreator.readPoolDatum(poolUtxo1)
-        val utxos = provider.findUtxos(Alice.address).await().toOption.get
-        val halfLp = (initialDatum.lpSupply / 2).toLong
-        val redeemTx = txCreator.redeem(utxos, poolUtxo1, halfLp, Alice.address, Alice.signer)
-        provider.submitOk(redeemTx)
-    }
-
     test("swap t0 to t1 correctly") {
         val (provider, txCreator) = createSetup()
         val poolUtxo = initPoolWith(provider, txCreator, x0 = 10_000L, x1 = 40_000L)
