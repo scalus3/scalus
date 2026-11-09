@@ -56,20 +56,26 @@ private[verify] object PropMacro {
     /** [[Props.limitedData]]: the type of `A`, its decoder, and the limits `limit` says. */
     def limitedData[A: Type](limit: Expr[A => Boolean], decode: Expr[FromData[A]])(using
         Quotes
-    ): Expr[LimitedData] = encodedParameter[A](limitsOf(limit), decode)
-
-    /** [[Props.unlimitedData]]: the type of `A` and its decoder, without limits. */
-    def unlimitedData[A: Type](decode: Expr[FromData[A]])(using Quotes): Expr[LimitedData] =
-        encodedParameter[A]('{ Limits.none }, decode)
-
-    private def encodedParameter[A: Type](limits: Expr[Limits], decode: Expr[FromData[A]])(using
-        Quotes
-    ): Expr[LimitedData] =
+    ): Expr[LimitedData] = {
+        val limits = limitsOf(limit)
         '{
             LimitedData.of(
               Props.variableType(scalus.compiler.compile((value: A) => value)),
-              scalus.compiler.compile((data: Data) => data.to[A](using $decode)),
+              Some(scalus.compiler.compile((data: Data) => data.to[A](using $decode))),
               $limits
+            )
+        }
+    }
+
+    /** [[Props.unlimitedData]]: the type of `A`, without limits, of which the parameter is a
+      * variable of its values, read by no decoder.
+      */
+    def unlimitedData[A: Type](using Quotes): Expr[LimitedData] =
+        '{
+            LimitedData.of(
+              Props.variableType(scalus.compiler.compile((value: A) => value)),
+              None,
+              Limits.none
             )
         }
 

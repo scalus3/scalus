@@ -19,7 +19,10 @@ import java.nio.charset.StandardCharsets
   */
 final class LimitedData private[verify] (
     private[verify] val tp: SIRType,
-    private[verify] val decoder: scalus.compiler.sir.SIR,
+    /** The compiled `(d: Data) => d.to[A]` that reads the values, where there are limits: none
+      * without them, where the parameter is a variable of its values.
+      */
+    private[verify] val decoder: Option[scalus.compiler.sir.SIR],
     private[verify] val limits: Limits
 )
 
@@ -28,7 +31,7 @@ object LimitedData {
     /** [[Props.limitedData]]'s value: an inline method cannot call the private constructor. */
     private[verify] def of(
         tp: SIRType,
-        decoder: scalus.compiler.sir.SIR,
+        decoder: Option[scalus.compiler.sir.SIR],
         limits: Limits
     ): LimitedData =
         new LimitedData(tp, decoder, limits)
