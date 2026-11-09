@@ -286,9 +286,12 @@ Built for `blaster-uplc`: v1; case classes and enums of quantifiable types, `Opt
 and lists and maps (`List`, `SortedMap`, `AssocMap`, `Value`). A case class is passed to Lean as
 its fields, and an enum as a constructor's number and the fields of every constructor, not as a
 generated `structure` or `inductive`
-([the tactic's fragment](verification-details/uplc-blaster.md#the-fragment)). Ledger types such as
-`ScriptContext` are quantified over with `forAllData` and `forAllDataLimited`, as values of their
-type: the ledger's validity predicate is not built.
+([the tactic's fragment](verification-details/uplc-blaster.md#the-fragment)); one that would be
+more than 20 Lean variables so is passed as one `Data`, restricted to its encodings
+([mapping a variable](verification-details/uplc-blaster.md#mapping-a-variable-proposed)). Ledger
+types such as `ScriptContext` are quantified over with `forAll` or `forAllData`, which give one
+check, and `forAllDataLimited`, as values of their type: the ledger's validity predicate is not
+built.
 
 Type parameters and function-typed binders are out of scope for quantifiers. Function types appear
 only as targets (§3.6).

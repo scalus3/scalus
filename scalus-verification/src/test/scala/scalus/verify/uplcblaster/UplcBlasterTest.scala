@@ -1257,6 +1257,20 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             case other => fail(s"expected the owner's Data and an integer, got $other")
     }
 
+    test("rule 3: a variable of more Lean variables by fields than the most is one Data") {
+        // A PlanWide is 21 integers by fields, more than the most: the tactic's own plan maps it
+        // as one Data variable, under the premise of its encoding, which the test decodes.
+        val commutes = forAll[PlanWide](w => w.a0 + w.a20 == w.a20 + w.a0)
+        assert(lowered(commutes, FunctionTable.empty).binders.size == 1)
+        provenAt(commutes)
+        // negative control: the counterexample is the encoding of a PlanWide, replayed on the
+        // Scalus CEK.
+        refuted(forAll[PlanWide](w => w.a0 <= w.a20), Budget.Auto).values.toList match
+            case List(Constant.Data(wide)) =>
+                assert(DataEncoding.of[PlanWide].outside(wide).isEmpty, wide)
+            case other => fail(s"expected the Data of a PlanWide, got $other")
+    }
+
     test("a type that contains itself is a forAll variable, Data where it repeats") {
         // The root by fields, an integer for its constructor, and the subtrees of a Node as Data
         // (rule 1). The test decodes the left one and matches on it, which fails on a Data that
