@@ -1,6 +1,7 @@
 # Emulator ledger rules at PV11: inventory, gaps and phases – design
 
-Status: proposed, not implemented. Date: 2026-11-02. Branch: `claude/ledger-rules-gap-25d42d`.
+Status: implemented, phases 0 to 6, merged to master on 2026-11-04 (14 commits, 3ff06695e to
+967100881). Not ported: `nonMyopic` pool ranking (D103). Date: 2026-11-02.
 
 ## 1. Purpose and scope
 

@@ -1,7 +1,8 @@
 # UPLC Source View – Design
 
 Date: 2026-07-31
-Status: Approved design, pending implementation plan
+Status: Implemented. Producer merged to master in 4107694f0 (PR #338, 2026-08-21). Consumer
+released as scalus-vscode-extension 0.3.0 (2026-08-21).
 Repos: `scalus` (producer), `scalus-vscode-extension` (consumer)
 
 ## Goal

@@ -1,6 +1,8 @@
 # Simpler on-chain imports – design
 
-Status: option A implemented on branch `worktree-onchain-reexports`. Not merged.
+Status: option A implemented, merged to master on 2026-10-29 (2c9a9dde4, 9d7f5e926, 1aba6f19d).
+Open: Plan step 1 (`v2` exports) and Plan step 2 (g8 templates and the get-started snippet; the
+templates pin 1.5.0, which has the exports).
 
 ## Goal
 

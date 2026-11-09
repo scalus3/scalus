@@ -4,7 +4,9 @@ Design for `CODEGEN_IMPROVEMENT_PLAN.md` task **T5** ("Let-chain regrouping into
 case-constr headers"), plus the measurement that reorders T5 and **T18**
 ("Let-sinking of multi-use top-level bindings").
 
-Status: design approved in chat 2026-08-31, not yet implemented.
+Status: implemented flag-gated in b1940152d, with fix e29b37215 (both on master 2026-09-05).
+`Options.letChainRegroup` still defaults to false. T18 is designed in
+`2026-09-08-t18-let-sinking-design.md` and not implemented.
 
 ## 1. Decision
 

@@ -1,7 +1,8 @@
 # Treasury Donation Support in TxBuilder
 
 **Date:** 2026-07-03
-**Status:** Draft — awaiting review
+**Status:** Implemented in 8bd3ff789 (2026-07-03): the `Donate` and `SetCurrentTreasuryValue`
+steps, and `donateToTreasury` and `setCurrentTreasuryValue` on `TxBuilder`.
 
 ## Problem
 

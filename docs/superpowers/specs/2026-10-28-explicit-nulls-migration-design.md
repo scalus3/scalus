@@ -1,7 +1,7 @@
 # Explicit nulls migration
 
-Status: step 1 (scalus-plugin) done on branch `worktree-explicit-nulls`. Run the next module
-from this file.
+Status: step 1 (scalus-plugin) merged to master on 2026-10-28 (3 commits, 6681a50bd to
+5989f042a). Step 2 (scalus-core) not started. Run the next module from this file.
 
 ## Goal
 

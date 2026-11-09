@@ -1,7 +1,9 @@
 # T1: Static-Argument Transformation for recursive functions
 
 Date: 2026-08-05
-Status: approved design, pending implementation
+Status: implemented in 5d8125e19 (2026-08-13); runs when `Options.optimizeUplc` is set. Moved to
+`scalus.compiler.sir.transform` in ba2b9bd0d (2026-09-02). The "Known limitation" order is
+resolved: since e62b1a3c0 (2026-08-16) the pass runs after `MutualRecursionElimination`.
 Task: `docs/internal/CODEGEN_IMPROVEMENT_PLAN.md` T1
 
 ## Problem
