@@ -103,11 +103,9 @@ class UtxoFlowEmulatorSpec extends AnyFunSuite {
       flowDispatch = ParameterizedFlowValidator.flowDispatch(sellerParams.toData)
     )
 
-    private def paramFlowEmulator(): Emulator = Emulator(
-      initialUtxos = Map(
-        Input(genesisHash, 0) -> Output(Alice.address, Value.ada(1000)),
-        Input(genesisHash, 1) -> Output(Bob.address, Value.ada(1000))
-      )
+    private def paramFlowEmulator(): Emulator = Emulator.withOutputs(
+      Output(Alice.address, Value.ada(1000)),
+      Output(Bob.address, Value.ada(1000))
     )
 
     /** Bob creates the cell with `initialDatum`. The builder does not run the script, so a bad

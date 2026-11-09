@@ -4,12 +4,11 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.ByteString.utf8
 import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.Alice
 import scalus.testing.kit.ScalusTest
-import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
+import scalus.testing.kit.TestUtil.testEnvironment
 import scalus.utils.await
 
 class AnonymousDataTest extends AnyFunSuite with ScalusTest with BudgetPinsSuite {
@@ -23,14 +22,11 @@ class AnonymousDataTest extends AnyFunSuite with ScalusTest with BudgetPinsSuite
     private val nonce = utf8"f3c1a9e07b2d48569a01ffbe2c7d3a64"
 
     private def createProvider(): Emulator =
-        Emulator(
-          initialUtxos = Map(
-            Input(genesisHash, 0) -> TransactionOutput
-                .Babbage(Alice.address, Value.ada(5000)),
-            Input(genesisHash, 1) -> TransactionOutput
-                .Babbage(Alice.address, Value.ada(5000))
-          ),
-          initialContext = Context.testMainnet()
+        Emulator.withOutputs(
+          TransactionOutput
+              .Babbage(Alice.address, Value.ada(5000)),
+          TransactionOutput
+              .Babbage(Alice.address, Value.ada(5000))
         )
 
     private def storedUtxo(tx: Transaction, hash: DataHash): Utxo =

@@ -16,14 +16,11 @@ class SimpleWalletTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
     private val wallet = SimpleWalletTransactions(env)
 
     private def aliceProvider(): Emulator =
-        Emulator(
-          initialUtxos = Map(
-            Input(genesisHash, 0) -> TransactionOutput
-                .Babbage(Alice.address, Value.ada(10)),
-            Input(genesisHash, 1) -> TransactionOutput
-                .Babbage(Alice.address, Value.ada(10))
-          ),
-          initialContext = Context.testMainnet()
+        Emulator.withOutputs(
+          TransactionOutput
+              .Babbage(Alice.address, Value.ada(10)),
+          TransactionOutput
+              .Babbage(Alice.address, Value.ada(10))
         )
 
     test("transfer pays the recipient and returns change to the owner") {

@@ -113,12 +113,10 @@ class RecursiveAuctionSpec extends AnyFunSuite {
     private val bobPkh = PubKeyHash(Bob.addrKeyHash)
     private val charlesPkh = PubKeyHash(Charles.addrKeyHash)
 
-    private def createEmulator(): Emulator = Emulator(
-      initialUtxos = Map(
-        Input(genesisHash, 0) -> Output(Alice.address, LedgerValue.ada(1000)),
-        Input(genesisHash, 1) -> Output(Bob.address, LedgerValue.ada(1000)),
-        Input(genesisHash, 2) -> Output(Charles.address, LedgerValue.ada(1000))
-      )
+    private def createEmulator(): Emulator = Emulator.withOutputs(
+      Output(Alice.address, LedgerValue.ada(1000)),
+      Output(Bob.address, LedgerValue.ada(1000)),
+      Output(Charles.address, LedgerValue.ada(1000))
     )
 
     test("RecursiveAuctionFlow compiles to UPLC") {

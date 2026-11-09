@@ -109,11 +109,9 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("Performance: minting transaction") {
         val assets = Map(AssetName.fromString("token") -> 100L)
 
-        val provider = Emulator(
-          Map(
-            input(0) -> Output(Alice.address, ada(100)),
-            input(1) -> Output(Alice.address, ada(50))
-          )
+        val provider = Emulator.withOutputs(
+          Output(Alice.address, ada(100)),
+          Output(Alice.address, ada(50))
         )
 
         // Warmup
@@ -305,11 +303,9 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     /** Baseline comparison: simple ADA transfer without scripts */
     test("Baseline: simple ADA transfer performance") {
-        val provider = Emulator(
-          Map(
-            input(0) -> Output(Alice.address, ada(100)),
-            input(1) -> Output(Alice.address, ada(50))
-          )
+        val provider = Emulator.withOutputs(
+          Output(Alice.address, ada(100)),
+          Output(Alice.address, ada(50))
         )
 
         // Warmup

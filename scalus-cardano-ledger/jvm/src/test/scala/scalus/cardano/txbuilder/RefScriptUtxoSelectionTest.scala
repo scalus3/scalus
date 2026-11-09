@@ -38,11 +38,9 @@ class RefScriptUtxoSelectionTest extends AnyFunSuite {
     )
 
     test("complete does not spend a reference script UTxO when plain funds suffice") {
-        val provider = Emulator(
-          Map(
-            input(0) -> Output(Alice.address, Value.ada(100)),
-            input(1) -> refScriptUtxo
-          )
+        val provider = Emulator.withOutputs(
+          Output(Alice.address, Value.ada(100)),
+          refScriptUtxo
         )
 
         val tx = TxBuilder(testEnv)
@@ -103,11 +101,9 @@ class RefScriptUtxoSelectionTest extends AnyFunSuite {
     }
 
     test("complete uses reference script UTxOs when plain funds only partially cover") {
-        val provider = Emulator(
-          Map(
-            input(0) -> Output(Alice.address, Value.ada(8)),
-            input(1) -> refScriptUtxo
-          )
+        val provider = Emulator.withOutputs(
+          Output(Alice.address, Value.ada(8)),
+          refScriptUtxo
         )
 
         val tx = TxBuilder(testEnv)

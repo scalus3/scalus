@@ -2,12 +2,11 @@ package scalus.examples.atomictransactions
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.ScalusTest
-import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
+import scalus.testing.kit.TestUtil.testEnvironment
 import scalus.utils.await
 
 class AtomicTransactionsTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
@@ -17,14 +16,11 @@ class AtomicTransactionsTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
     private val txs = AtomicTransactions(env)
 
     private def provider(): Emulator =
-        Emulator(
-          initialUtxos = Map(
-            Input(genesisHash, 0) -> TransactionOutput
-                .Babbage(Alice.address, Value.ada(10)),
-            Input(genesisHash, 1) -> TransactionOutput
-                .Babbage(Alice.address, Value.ada(10))
-          ),
-          initialContext = Context.testMainnet()
+        Emulator.withOutputs(
+          TransactionOutput
+              .Babbage(Alice.address, Value.ada(10)),
+          TransactionOutput
+              .Babbage(Alice.address, Value.ada(10))
         )
 
     test("batchPay spends every sender UTxO in one atomic transaction") {

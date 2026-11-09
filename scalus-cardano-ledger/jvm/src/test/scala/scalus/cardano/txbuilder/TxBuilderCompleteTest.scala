@@ -69,11 +69,9 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should automatically add inputs for simple ADA payment") {
-        val provider = Emulator(
-          Map(
-            input(0) -> adaOutput(Alice.address, 100),
-            input(1) -> adaOutput(Alice.address, 50)
-          )
+        val provider = Emulator.withOutputs(
+          adaOutput(Alice.address, 100),
+          adaOutput(Alice.address, 50)
         )
 
         val tx = TxBuilder(testEnv)
@@ -92,9 +90,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete inputs should be signable with sign()") {
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 100))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 100))
 
         val signedTx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
@@ -110,11 +106,9 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete followed by sign() should produce a valid transaction") {
-        val provider = Emulator(
-          Map(
-            input(0) -> adaOutput(Alice.address, 50),
-            input(1) -> adaOutput(Alice.address, 50)
-          )
+        val provider = Emulator.withOutputs(
+          adaOutput(Alice.address, 50),
+          adaOutput(Alice.address, 50)
         )
 
         val signedTx = TxBuilder(testEnv)
@@ -137,11 +131,9 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should handle multi-asset transactions") {
-        val provider = Emulator(
-          Map(
-            input(0) -> tokenOutput(Alice.address, 100, policyId -> Map(co2 -> 200L)),
-            input(1) -> adaOutput(Alice.address, 50)
-          )
+        val provider = Emulator.withOutputs(
+          tokenOutput(Alice.address, 100, policyId -> Map(co2 -> 200L)),
+          adaOutput(Alice.address, 50)
         )
 
         val tx = TxBuilder(testEnv)
@@ -162,12 +154,10 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should handle multiple different tokens from separate UTXOs") {
-        val provider = Emulator(
-          Map(
-            input(0) -> tokenOutput(Alice.address, 50, policyId -> Map(co2 -> 100L)),
-            input(1) -> tokenOutput(Alice.address, 50, policyId2 -> Map(h2so4 -> 200L)),
-            input(2) -> adaOutput(Alice.address, 10)
-          )
+        val provider = Emulator.withOutputs(
+          tokenOutput(Alice.address, 50, policyId -> Map(co2 -> 100L)),
+          tokenOutput(Alice.address, 50, policyId2 -> Map(h2so4 -> 200L)),
+          adaOutput(Alice.address, 10)
         )
 
         val paymentValue = Value.assets(
@@ -193,11 +183,9 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should add ADA-only UTXO when token UTXO has insufficient ADA for fees") {
-        val provider = Emulator(
-          Map(
-            input(0) -> tokenOutput(Alice.address, 1, policyId -> Map(co2 -> 100L)),
-            input(1) -> adaOutput(Alice.address, 50)
-          )
+        val provider = Emulator.withOutputs(
+          tokenOutput(Alice.address, 1, policyId -> Map(co2 -> 100L)),
+          adaOutput(Alice.address, 50)
         )
 
         val tx = TxBuilder(testEnv)
@@ -222,15 +210,13 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should handle multiple token types in single UTXO efficiently") {
-        val provider = Emulator(
-          Map(
-            input(0) -> tokenOutput(
-              Alice.address,
-              100,
-              policyId -> Map(co2 -> 100L, h2so4 -> 200L, c11h15no2 -> 50L)
-            ),
-            input(1) -> adaOutput(Alice.address, 10)
-          )
+        val provider = Emulator.withOutputs(
+          tokenOutput(
+            Alice.address,
+            100,
+            policyId -> Map(co2 -> 100L, h2so4 -> 200L, c11h15no2 -> 50L)
+          ),
+          adaOutput(Alice.address, 10)
         )
 
         val tx = TxBuilder(testEnv)
@@ -316,11 +302,9 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete should auto-detect and add collateral for minting") {
         val assets = Map(co2 -> 100L)
 
-        val provider = Emulator(
-          Map(
-            input(0) -> adaOutput(Alice.address, 100),
-            input(1) -> adaOutput(Alice.address, 10)
-          )
+        val provider = Emulator.withOutputs(
+          adaOutput(Alice.address, 100),
+          adaOutput(Alice.address, 10)
         )
 
         val tx = TxBuilder(testEnv)
@@ -338,9 +322,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should not add collateral for pubkey-only transactions") {
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 100))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 100))
 
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
@@ -552,11 +534,9 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should select inputs for fees when only minting (no explicit inputs)") {
-        val provider = Emulator(
-          Map(
-            input(0) -> adaOutput(Alice.address, 100),
-            input(1) -> adaOutput(Alice.address, 50)
-          )
+        val provider = Emulator.withOutputs(
+          adaOutput(Alice.address, 100),
+          adaOutput(Alice.address, 50)
         )
 
         val tx = TxBuilder(testEnv)
@@ -626,11 +606,9 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should handle sending all tokens from a UTXO") {
-        val provider = Emulator(
-          Map(
-            input(0) -> tokenOutput(Alice.address, 50, policyId -> Map(co2 -> 100L)),
-            input(1) -> adaOutput(Alice.address, 50)
-          )
+        val provider = Emulator.withOutputs(
+          tokenOutput(Alice.address, 50, policyId -> Map(co2 -> 100L)),
+          adaOutput(Alice.address, 50)
         )
 
         val tx = TxBuilder(testEnv)
@@ -652,9 +630,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     test("complete should fail when required tokens are not available") {
         val nonexistent = AssetName.fromString("nonexistent")
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 100))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 100))
 
         val exception = intercept[TxBuilderException.InsufficientTokensException] {
             TxBuilder(testEnv)
@@ -677,14 +653,12 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should handle tokens from same UTXO under different policies") {
-        val provider = Emulator(
-          Map(
-            input(0) -> tokenOutput(
-              Alice.address,
-              100,
-              policyId -> Map(token -> 100L),
-              policyId3 -> Map(token -> 200L)
-            )
+        val provider = Emulator.withOutputs(
+          tokenOutput(
+            Alice.address,
+            100,
+            policyId -> Map(token -> 100L),
+            policyId3 -> Map(token -> 200L)
           )
         )
 
@@ -715,11 +689,9 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete should not merge change with existing sponsor output") {
         // When payTo(sponsor, amount) is used, change should go to a SEPARATE output,
         // not merge with the payment output. Users expect explicitly stated amounts.
-        val provider = Emulator(
-          Map(
-            input(0) -> adaOutput(Alice.address, 100),
-            input(1) -> adaOutput(Alice.address, 50)
-          )
+        val provider = Emulator.withOutputs(
+          adaOutput(Alice.address, 100),
+          adaOutput(Alice.address, 50)
         )
 
         val tx = TxBuilder(testEnv)
@@ -743,9 +715,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("changeTo should create output with at least minimum specified value") {
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 100))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 100))
 
         val minChangeValue = Value.ada(5)
         val tx = TxBuilder(testEnv)
@@ -773,11 +743,9 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("changeTo should add tokens to change output") {
-        val provider = Emulator(
-          Map(
-            input(0) -> tokenOutput(Alice.address, 100, policyId -> Map(co2 -> 200L)),
-            input(1) -> adaOutput(Alice.address, 50)
-          )
+        val provider = Emulator.withOutputs(
+          tokenOutput(Alice.address, 100, policyId -> Map(co2 -> 200L)),
+          adaOutput(Alice.address, 50)
         )
 
         // Specify change output with minimum 5 ADA and 50 tokens
@@ -816,9 +784,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     test("changeTo should work with different address than sponsor") {
         val coldWallet = Bob // Using Bob as "cold wallet" for this test
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 100))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 100))
 
         val tx = TxBuilder(testEnv)
             .payTo(Alice.address, Value.ada(10))
@@ -845,9 +811,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should ensure change output meets minimum ADA") {
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 100))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 100))
 
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(98))
@@ -864,9 +828,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should correctly place change output at sponsor address") {
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 100))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 100))
 
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
@@ -883,9 +845,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("changeTo should work with script address and inline datum") {
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 100))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 100))
 
         val changeDatum = Data.I(12345)
         val changeOutput = Output(scriptAddress, Value.ada(5), changeDatum)
@@ -910,9 +870,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("changeTo should select correct output by index when multiple outputs have same address") {
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 100))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 100))
 
         // Create two outputs to Bob: first is a payment, second is the change output
         val tx = TxBuilder(testEnv)
@@ -948,9 +906,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should preserve validity interval settings") {
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 100))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 100))
 
         val tx = TxBuilder(testEnv)
             .validFrom(Instant.ofEpochSecond(1000))
@@ -969,9 +925,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should fail with insufficient funds") {
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 5))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 5))
 
         val exception = intercept[TxBuilderException.InsufficientAdaException] {
             TxBuilder(testEnv)
@@ -1003,9 +957,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should fail when outputs exceed possible input value") {
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 10))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 10))
 
         val exception = intercept[TxBuilderException.InsufficientAdaException] {
             TxBuilder(testEnv)
@@ -1025,11 +977,9 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should produce deterministic results") {
-        val provider = Emulator(
-          Map(
-            input(0) -> adaOutput(Alice.address, 100),
-            input(1) -> adaOutput(Alice.address, 50)
-          )
+        val provider = Emulator.withOutputs(
+          adaOutput(Alice.address, 100),
+          adaOutput(Alice.address, 50)
         )
 
         val tx1 = TxBuilder(testEnv)
@@ -1059,9 +1009,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         // before balancing. This means the fee is calculated without accounting for the
         // size of signatures that will be added when signing.
 
-        val provider = Emulator(
-          Map(input(0) -> adaOutput(Alice.address, 100))
-        )
+        val provider = Emulator.withOutputs(adaOutput(Alice.address, 100))
 
         val completedBuilder = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
@@ -1116,12 +1064,10 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         // Alice has ADA for fees - this will be selected by complete
-        val provider = Emulator(
-          Map(
-            input(0) -> scriptUtxo.output,
-            input(1) -> adaOutput(Alice.address, 100),
-            input(2) -> adaOutput(Alice.address, 50) // Extra UTXO for collateral
-          )
+        val provider = Emulator.withOutputs(
+          scriptUtxo.output,
+          adaOutput(Alice.address, 100),
+          adaOutput(Alice.address, 50) // Extra UTXO for collateral
         )
 
         // RedeemerBuilder that captures input count at build time

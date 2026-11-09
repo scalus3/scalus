@@ -33,12 +33,10 @@ class TxBuilderDemo extends AnyFunSuite {
 
     val alwaysOkScript: Script.PlutusV3 = PlutusV3.alwaysOk.script
 
-    val emulator = Emulator(
-      Map(
-        input(0) -> adaOutput(Alice.address, 100),
-        input(1) -> adaOutput(Alice.address, 50),
-        input(2) -> adaOutput(Alice.address, 50)
-      )
+    val emulator = Emulator.withOutputs(
+      adaOutput(Alice.address, 100),
+      adaOutput(Alice.address, 50),
+      adaOutput(Alice.address, 50)
     )
 
     test("Building a simple transaction with `complete()`") {
