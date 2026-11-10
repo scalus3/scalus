@@ -2,7 +2,7 @@
   "environment": {
     "uplc-blaster": {
       "Blaster": "6c27ff9faa66",
-      "LinearVesting": "16efb7847e54d046",
+      "LinearVesting": "cfdfdce352d08b72",
       "PlutusCore": "2919b66445cd",
       "ScalusProofs": "99dc026d39db0160",
       "toolchain": "leanprover/lean4:v4.24.0"

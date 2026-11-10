@@ -1,6 +1,7 @@
 package scalus.verify.ual
 
 import scalus.utils.{Hex, Utils}
+import scalus.verify.uplcblaster.UplcBlaster
 import scalus.verify.uplcblaster.UplcBlaster.{UalFunction, UalStatement}
 
 import java.nio.charset.StandardCharsets
@@ -188,8 +189,7 @@ object UalExport {
             .map(function =>
                 function.id -> Json.Obj(
                   (List(
-                    "compiledCode" -> Json
-                        .Str(Hex.bytesToHex(function.program.cborEncoded).toLowerCase),
+                    "compiledCode" -> Json.Str(UplcBlaster.programHex(function.program)),
                     "hash" -> digest(function.hash)
                   ) ::: interface(function))*
                 )

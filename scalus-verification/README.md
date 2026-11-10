@@ -509,9 +509,13 @@ contracts/src/test/lean/Htlc/   a workspace: lakefile.lean, lean-toolchain, Htlc
   `.git`, or without one, beside the workspace. Every workspace of the project requires
   `ScalusProofs` from it and uses the library's `packagesDir`, so Blaster and PlutusCore are
   cloned and built once for the project.
-- Its library has every module under `<Name>/`, so `lake build` checks a proof written by hand
-  there without it being imported. Lake does not build without that directory, and a checkout
-  does not have it while it is empty: `init` makes it.
+- Its default library is its root module, `<Name>.lean`, which is all a check needs: `lake build`
+  builds it in seconds. A second library, `<Name>Proofs`, has the statements Scalus writes under
+  `<Name>/Generated` (`leanExport`) and the proofs written by hand under `<Name>/Proofs`:
+  `lake build <Name>Proofs`, or `sbt leanProve`, builds them, so a proof is checked without being
+  imported. A statement runs its programs symbolically where it is built, which takes minutes, so
+  it is not of the default target. Lake does not build a library without its directories, and a
+  checkout does not have them while they are empty: `init` makes them.
 - It is created where the directory has no lakefile, and is the project's from then on: nothing
   in it is written again. Every call says where its `lean-toolchain` or the revisions its
   manifest pins are not the library's.
@@ -544,6 +548,7 @@ Two tasks of the plugin do the work:
 ```
 sbt leanInit     # make the workspace ready, as a suite does
 sbt leanBuild    # leanInit, then `lake build` in the workspace
+sbt leanProve    # leanInit, then `lake build <Name>Proofs`: the statements, and the proofs by hand
 ```
 
 - The first `leanBuild` clones and builds Blaster and PlutusCore, which takes minutes. Until

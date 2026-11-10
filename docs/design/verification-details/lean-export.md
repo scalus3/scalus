@@ -48,8 +48,11 @@ def statement : Prop :=
 `LeanProofs.writeStatement(statement, result)` writes a statement that `result` proved into the
 workspace of the proofs, as `<Package>.Generated.<name>`: the statement's name, with `_` for every
 character a Lean name cannot have. It runs no Lean: a statement whose result is kept is written as
-well as one that was proved now. A file is written where its text differs, so a module of code that
-has not changed is not built again. The modules are committed, as the types are
+well as one that was proved now. It is lowered by the tactic that proved it, with that tactic's
+plan and limit of Lean's work. A file is written where its text differs, so a module of code that
+has not changed is not built again. Two statements whose names are one Lean name, as `a.b` and
+`a_b`, are an error, as is a statement whose module would be that of the types: neither takes the
+other's module. So are two statements of one property id in the export to the language. The modules are committed, as the types are
 ([Lean types for Scala types](lean-types.md)). A suite does not call it: `leanExport` has every
 named statement that is proved written so ("The sbt tasks").
 
@@ -73,9 +76,12 @@ theorem zero_before_start : vesting_schedule_zero_before_start.statement := by
   blaster
 ```
 
-`lake build` in the workspace checks it against the programs of the code as it is. Where the code
-changes, the generated proposition changes with it, and a proof that no longer holds no longer
-builds. The two proofs there are closed by `blaster`, as the checks are, which admits the goal it
+`lake build LinearVestingProofs` in the workspace, or `sbt leanProve`, checks it against the
+programs of the code as it is. The statements and the proofs are a library of their own,
+`<Package>Proofs`, and not of the default target, which is the root module that the checks need: a
+statement runs its programs symbolically where it is built, and a proof may not hold yet, so neither
+is to stand in the way of a check. Where the code changes, the generated proposition changes with
+it, and a proof that no longer holds no longer builds. The two proofs there are closed by `blaster`, as the checks are, which admits the goal it
 finds valid: they show the mechanism, and are no kernel proof. A proof by other means, an
 induction over a list of any length, is what the statements tagged `Unfinished` want.
 
@@ -86,7 +92,7 @@ Two costs of the modules, measured on the vesting workspace (2026-11-10):
 
 - **A module runs its programs symbolically when it is built.** `#prep_uplc_run` prepares each
   program's run at the statement's budget, so building the module of a statement about the
-  validator at 3300 steps takes about three minutes, and `lake build` of the workspace with all
+  validator at 3300 steps takes about three minutes, and `lake build LinearVestingProofs` with all
   of them about as long. Lake builds a module again only where its text changed.
 - **A proof by hand is to be under `<Package>/Proofs`.** `LeanWorkspace.environment` hashes the
   sources of the workspace's package, which a kept result rests on, and leaves out

@@ -112,9 +112,16 @@ final class LeanProofs private (
     private val ualProperties =
         new java.util.concurrent.ConcurrentLinkedQueue[scalus.verify.ual.UalExport.Property]()
 
-    /** Exports `statement`, proved by `result` in `verifier`, where these proofs export: as a Lean
-      * module, and as a property that says what runs, the test's name. A statement without a name
-      * is not exported: a module and a property are referred to by it. One that has no form in the
+    /** The statements the properties exported are of, by the properties' ids: two statements of one
+      * id are an error, and not one property in place of the other.
+      */
+    private val ualStatementsById =
+        new java.util.concurrent.ConcurrentHashMap[String, String]()
+
+    /** Exports `statement`, proved by `result` in `verifier` with `tactic`, where these proofs
+      * export: as a Lean module, and as a property that says what runs, the test's name. Each is
+      * made by `tactic`, as it lowered the statement for its proof. A statement without a name is
+      * not exported: a module and a property are referred to by it. One that has no form in the
       * language, as a proof within a budget, is passed over.
       *
       * Where the modules are not written, a module of the statement that the workspace has is held
@@ -125,18 +132,26 @@ final class LeanProofs private (
     private def exportProved(
         verifier: Verifier,
         statement: Statement,
-        result: VerificationResult
-    ): Unit =
+        result: VerificationResult,
+        tactic: UplcBlaster
+    ): Unit = {
         if !statement.name.startsWith("#") then
             if leanExport then
-                val _ = writtenStatement(verifier, statement, result)
+                val _ = writtenStatement(verifier, statement, result, tactic)
             else heldToTheCode(statement, artifactOf(result))
             if ualExportDirectory.isDefined then
                 val text = Option(currentLabel).filter(_.nonEmpty).getOrElse(statement.name)
-                propertyOf(verifier, statement, result, text).foreach { property =>
+                propertyOf(verifier, statement, result, text, tactic).foreach { property =>
+                    val before = ualStatementsById.putIfAbsent(property.id, statement.name)
+                    if before != null && before != statement.name then
+                        failed(
+                          s"${statement.name} and $before are both the property ${property.id} " +
+                              "of the Universal Annotation Language: rename one"
+                        )
                     ualProperties.removeIf(_.id == property.id)
                     ualProperties.add(property)
                 }
+    }
 
     /** Fails where the workspace has a module of `statement` ([[writeStatement]]) that is not of
       * the programs and the budget of `artifact`, the statement's proof.
@@ -145,8 +160,17 @@ final class LeanProofs private (
         val (module, file) =
             LeanWorkspace.generated(workspace, LeanProofs.moduleName(statement.name))
         if Files.isRegularFile(file) then
-            val written =
-                UplcBlaster.statementModuleOf(Files.readString(file, StandardCharsets.UTF_8))
+            val text = Files.readString(file, StandardCharsets.UTF_8)
+            UplcBlaster
+                .statementModuleName(text)
+                .filter(_ != statement.name)
+                .foreach(other =>
+                    failed(
+                      s"${statement.name}: its module $module is the module of $other, whose " +
+                          "name is the same as a Lean name: rename one"
+                    )
+                )
+            val written = UplcBlaster.statementModuleOf(text)
             if !written.contains(artifact.budget -> artifact.programHashes) then
                 failed(
                   s"${statement.name}: the Lean module $module is not of the code: it is of " +
@@ -163,7 +187,7 @@ final class LeanProofs private (
       * where the environment variable `SCALUS_UAL_ENVIRONMENT` names the manifest of the consumer's
       * environment.
       */
-    private def writeUalExport(): Unit =
+    private def writeUalExport(): Unit = {
         ualExportDirectory.filter(_ => !ualProperties.isEmpty).foreach { directory =>
             import scalus.verify.ual.UalExport
             val environment =
@@ -189,6 +213,7 @@ final class LeanProofs private (
                 manifest.bytes.foreach(Files.write(directory.resolve(manifest.uri), _))
             )
         }
+    }
 
     /** The tests that ran to their end ([[finished]]): [[close]] prunes the kept results they no
       * longer state.
@@ -374,7 +399,10 @@ final class LeanProofs private (
                 proof.artifact match
                     case artifact: UplcBlaster.Artifact =>
                         checkedProof(artifact)
-                        exportProved(verifier, statement, result)
+                        request.tactic match
+                            case blaster: UplcBlaster =>
+                                exportProved(verifier, statement, result, blaster)
+                            case _ =>
                     case _ =>
                 if !isTheorem then failed(s"$name: proved, and not among the verifier's theorems")
             // A check within a budget is asked for, and proves the statement within it, which is
@@ -470,14 +498,26 @@ final class LeanProofs private (
       * is written where it is not the text already, so a module of code that has not changed is not
       * built again.
       */
-    def writeStatement(statement: Statement, result: VerificationResult): String =
-        writtenStatement(verifier, statement, result)
+    def writeStatement(statement: Statement, result: VerificationResult): String = {
+        val artifact = artifactOf(result)
+        writtenStatement(
+          verifier,
+          statement,
+          result,
+          UplcBlaster(Budget.LeanSteps(artifact.budget), lean)
+        )
+    }
 
-    /** [[writeStatement]] of a statement declared in `verifier`. */
+    /** [[writeStatement]] of a statement declared in `verifier`, lowered by `tactic`, the tactic
+      * that proved it. A module of another statement under the same name, as one whose name differs
+      * only where a Lean name cannot have its characters, or the module of the Lean types, is an
+      * error, and not overwritten.
+      */
     private def writtenStatement(
         verifier: Verifier,
         statement: Statement,
-        result: VerificationResult
+        result: VerificationResult,
+        tactic: UplcBlaster
     ): String = {
         val artifact = result match
             case VerificationResult.Proven(_) => artifactOf(result)
@@ -487,9 +527,22 @@ final class LeanProofs private (
                       s"got ${LeanProofs.describe(other)}"
                 )
         val id = LeanProofs.moduleName(statement.name)
+        if id.equalsIgnoreCase(LeanProofs.typesModule) then
+            failed(
+              s"${statement.name}: its module would be $id, the module of the Lean types: rename it"
+            )
         val (module, file) = LeanWorkspace.generated(workspace, id)
+        if Files.isRegularFile(file) then
+            UplcBlaster
+                .statementModuleName(Files.readString(file, StandardCharsets.UTF_8))
+                .filter(_ != statement.name)
+                .foreach(other =>
+                    failed(
+                      s"${statement.name}: its module $module is the module of $other, whose " +
+                          "name is the same as a Lean name: rename one"
+                    )
+                )
         val directory = workspace.relativize(file.getParent.resolve(id)).toString
-        val tactic = UplcBlaster(Budget.LeanSteps(artifact.budget), lean)
         tactic.statementModule(verifier.goalOf(statement), artifact, module, directory) match
             case Left(reason)   => failed(reason)
             case Right(written) =>
@@ -523,10 +576,15 @@ final class LeanProofs private (
         result: VerificationResult,
         text: String
     ): scalus.verify.ual.UalExport.Property =
-        propertyOf(verifier, statement, result, text)
-            .getOrElse(
-              failed(s"${statement.name} has no form in the Universal Annotation Language")
-            )
+        propertyOf(
+          verifier,
+          statement,
+          result,
+          text,
+          UplcBlaster(Budget.LeanSteps(artifactOf(result).budget), lean)
+        ).getOrElse(
+          failed(s"${statement.name} has no form in the Universal Annotation Language")
+        )
 
     /** [[ualProperty]] of a statement declared in `verifier`: none where it has no form in the
       * language.
@@ -535,7 +593,8 @@ final class LeanProofs private (
         verifier: Verifier,
         statement: Statement,
         result: VerificationResult,
-        text: String
+        text: String,
+        tactic: UplcBlaster
     ): Option[scalus.verify.ual.UalExport.Property] = {
         val artifact = result match
             case VerificationResult.Proven(_) => artifactOf(result)
@@ -545,7 +604,6 @@ final class LeanProofs private (
                       s"got ${LeanProofs.describe(other)}"
                 )
         val id = scalus.verify.ual.UalExport.propertyId(statement.name)
-        val tactic = UplcBlaster(Budget.LeanSteps(artifact.budget), lean)
         tactic
             .ualStatement(verifier.goalOf(statement), artifact, id)
             .toOption
@@ -887,12 +945,23 @@ object LeanProofs {
     /** What the environment variable `variable` says, or else the resource `resource` on the class
       * path of these proofs, as a path: none where neither says anything.
       */
+    /** The class loader the resources of a build are read with: that of the tests that run, as for
+      * the workspace ([[projectWorkspace]]), where there is one.
+      */
+    private def resources: ClassLoader =
+        Option(Thread.currentThread.getContextClassLoader).getOrElse(getClass.getClassLoader)
+
+    /** The name of the module of the Lean types ([[scalus.verify.lean.LeanTypes]]), which no
+      * statement's module may have.
+      */
+    private[uplcblaster] val typesModule = "Types"
+
     private def exportRoot(variable: String, resource: String): Option[Path] =
         sys.env
             .get(variable)
             .filter(_.nonEmpty)
             .orElse(
-              Option(getClass.getClassLoader.getResourceAsStream(resource)).map(stream =>
+              Option(resources.getResourceAsStream(resource)).map(stream =>
                   new String(Using.resource(stream)(_.readAllBytes()), StandardCharsets.UTF_8).trim
               )
             )

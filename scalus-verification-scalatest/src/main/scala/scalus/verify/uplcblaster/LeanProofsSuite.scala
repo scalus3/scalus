@@ -90,7 +90,7 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
       */
     @volatile private var running = ""
 
-    /** The tests that passed. */
+    /** The tests that passed, and those that are pending, which check nothing and fail nothing. */
     private val passed = java.util.concurrent.ConcurrentHashMap.newKeySet[String]()
 
     /** The proofs, once a test has asked for them. A suite whose tests ask for none has no
@@ -124,6 +124,7 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
         if outcome.isSucceeded then
             passed.add(test.name)
             made.foreach(_.finished(test.name))
+        else if outcome.isPending then passed.add(test.name)
         outcome
     }
 
@@ -133,12 +134,21 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
     override protected def afterAll(): Unit = {
         try
             super.afterAll()
-            made.filter(_ => checksSpecifications && everyTestPassed).foreach { proofs =>
-                val open = proofs.checkSpecifications()
-                if open.nonEmpty then
+            made.filter(_ => checksSpecifications).foreach { proofs =>
+                val notRun = testsThatDidNotPass
+                if notRun.isEmpty then
+                    val open = proofs.checkSpecifications()
+                    if open.nonEmpty then
+                        println(
+                          (s"${getClass.getSimpleName}: clauses that are open:" ::
+                              open.map(specification => s"  ${specification.describe}"))
+                              .mkString("\n")
+                        )
+                else if proofs.verifier.statesClauses then
                     println(
-                      (s"${getClass.getSimpleName}: clauses that are open:" ::
-                          open.map(specification => s"  ${specification.describe}")).mkString("\n")
+                      s"${getClass.getSimpleName}: the specifications of its functions are not " +
+                          s"checked, as ${notRun.size} of its tests did not run or pass, as " +
+                          s"${notRun.head}"
                     )
             }
         finally
@@ -148,12 +158,16 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
             }
     }
 
-    /** Whether every test of the suite but those tagged [[Unfinished]] ran and passed: a run of
+    /** The tests of the suite that did not run and pass, but those tagged [[Unfinished]], which a
+      * test run leaves out, and those that are ignored or pending, which check nothing: a run of
       * some of them, or one with a test that failed or was canceled, does not hold the
-      * specifications to what it checked.
+      * specifications to what it checked. An ignored test's statements are not proved, so the
+      * clauses they would check are unchecked, and say so.
       */
-    private def everyTestPassed: Boolean =
-        testNames.forall(name =>
-            tags.get(name).exists(_.contains(Unfinished.name)) || passed.contains(name)
-        )
+    private def testsThatDidNotPass: List[String] =
+        testNames.toList.filterNot { name =>
+            val tagged = tags.getOrElse(name, Set.empty)
+            tagged.contains(Unfinished.name) || tagged.contains("org.scalatest.Ignore") ||
+            passed.contains(name)
+        }
 }

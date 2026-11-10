@@ -50,6 +50,9 @@ import sbtcompat.PluginCompat.*
   * takes minutes and the network. A project without `scalus-verification` is passed over by
   * both tasks.
   *
+  * `leanProve` builds the library of proofs of the workspace, `<Package>Proofs`: the statements
+  * `leanExport` writes, and the proofs written by hand of them.
+  *
   * Two tasks export what the proofs prove, by running the project's tests with the export on: all
   * of them, or those named, as `testOnly` takes them (`leanExport *VestingVerificationTest`).
   * `leanExport` writes every named statement into the workspace as a Lean module, under
@@ -91,6 +94,10 @@ object ScalusSbtPlugin extends AutoPlugin {
         val leanBuild =
             taskKey[Unit](
               "Run `lake build` in the Lean workspace, which the checks of the proofs need"
+            )
+        val leanProve =
+            taskKey[Unit](
+              "Run `lake build <Package>Proofs` in the Lean workspace: the statements leanExport wrote, and the proofs written by hand of them"
             )
         val leanExport =
             inputKey[Unit](
@@ -417,30 +424,55 @@ object ScalusSbtPlugin extends AutoPlugin {
       */
     lazy val leanBuildTask: Def.Initialize[Task[Unit]] = Def.task {
         val log = streams.value.log
-        leanReady.value match {
-            case None => ()
-            case Some((workspace, notes)) =>
-                if (notes.nonEmpty)
-                    sys.error(
-                      (s"leanBuild: the Lean workspace $workspace does not agree with Scalus's Lean library" +: notes)
-                          .mkString("\n  ")
-                    )
-                log.info(s"Running `lake build` in $workspace")
-                val output =
-                    scala.sys.process.ProcessLogger(line => log.info(line), line => log.info(line))
-                val exit =
-                    try {
-                        scala.sys.process.Process(Seq("lake", "build"), workspace).!(output)
-                    } catch {
-                        case e: java.io.IOException =>
-                            sys.error(
-                              s"leanBuild could not run `lake`: ${e.getMessage}. " +
-                                  "Install Lean with elan, and have `lake` on the PATH of sbt."
-                            )
-                    }
-                if (exit != 0) sys.error(s"`lake build` failed in $workspace, with exit code $exit")
+        leanReady.value.foreach { case (workspace, notes) =>
+            lakeBuild("leanBuild", workspace, notes, Nil, log)
         }
     }.tag(LeanTag)
+
+    /** Runs `lake build <Package>Proofs` in the workspace: the statements Scalus wrote under
+      * `<Package>/Generated` (`leanExport`), and the proofs written by hand under `<Package>/Proofs`,
+      * which are theorems of them. A proof that does not hold fails it.
+      */
+    lazy val leanProveTask: Def.Initialize[Task[Unit]] = Def.task {
+        val log = streams.value.log
+        leanReady.value.foreach { case (workspace, notes) =>
+            lakeBuild("leanProve", workspace, notes, Seq(s"${workspace.getName}Proofs"), log)
+        }
+    }.tag(LeanTag)
+
+    /** Runs `lake build` of `targets`, or of the default target, in `workspace`, for the task
+      * `task`. A workspace that does not agree with Scalus's Lean library, as `notes` say, is not
+      * built: its proofs would be checked with another Lean, or other packages, than the library
+      * is for.
+      */
+    private def lakeBuild(
+        task: String,
+        workspace: java.io.File,
+        notes: Seq[String],
+        targets: Seq[String],
+        log: sbt.util.Logger
+    ): Unit = {
+        if (notes.nonEmpty)
+            sys.error(
+              (s"$task: the Lean workspace $workspace does not agree with Scalus's Lean library" +: notes)
+                  .mkString("\n  ")
+            )
+        val command = Seq("lake", "build") ++ targets
+        log.info(s"Running `${command.mkString(" ")}` in $workspace")
+        val output = scala.sys.process.ProcessLogger(line => log.info(line), line => log.info(line))
+        val exit =
+            try {
+                scala.sys.process.Process(command, workspace).!(output)
+            } catch {
+                case e: java.io.IOException =>
+                    sys.error(
+                      s"$task could not run `lake`: ${e.getMessage}. " +
+                          "Install Lean with elan, and have `lake` on the PATH of sbt."
+                    )
+            }
+        if (exit != 0)
+            sys.error(s"`${command.mkString(" ")}` failed in $workspace, with exit code $exit")
+    }
 
     /** Where the export tasks leave word for the resource generator below, while they run the
       * tests: a file for each export that is on, with what its resource is to say.
@@ -544,6 +576,7 @@ object ScalusSbtPlugin extends AutoPlugin {
       leanReady := Def.uncached(leanReadyTask.value),
       leanInit := Def.uncached(leanInitTask.value),
       leanBuild := Def.uncached(leanBuildTask.value),
+      leanProve := Def.uncached(leanProveTask.value),
       exportFlags := target.value / "scalus-export",
       exportResources := Def.uncached(exportResourcesTask.value),
       Test / resourceGenerators += exportResourcesGenerator.taskValue,

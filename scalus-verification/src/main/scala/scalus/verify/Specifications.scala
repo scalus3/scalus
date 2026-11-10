@@ -99,7 +99,7 @@ private[verify] object Specifications {
             case SIR.Decl(_, inner)    => leading(inner)
             case SIR.Cast(inner, _, _) => leading(inner)
             case SIR.Let(bindings, body, _, _) =>
-                val stated = bindings.map(binding => clauseAt(binding.value))
+                val stated = bindings.map(binding => clauseAt(binding.value, name))
                 val here = stated.takeWhile(_.nonEmpty).flatten
                 if here.size < bindings.size then here else here ++ leading(body)
             case _ => Nil
@@ -107,15 +107,18 @@ private[verify] object Specifications {
         val (inner, ofResult) = ensuring(head.rest, name)
         val ofTheResult =
             if ofResult.isEmpty then Nil
-            else ensuringNode(head.rest).map(Clause.at(_, Clause.Kind.Ensuring)).toList
+            else ensuringNode(head.rest).map(Clause.at(_, Clause.Kind.Ensuring, name, 1)).toList
         leading(term) ++ (if ofResult.isEmpty then Nil else leading(inner)) ++ ofTheResult
     }
 
     /** The clause a statement of the body is, where it is one, at its call. */
-    private def clauseAt(sir: SIR): Option[Clause] = sir match
-        case SIR.Cast(inner, _, _) => clauseAt(inner)
+    private def clauseAt(sir: SIR, name: String): Option[Clause] = sir match
+        case SIR.Cast(inner, _, _) => clauseAt(inner, name)
         case apply @ SIR.Apply(SIR.ExternalVar(_, function, _, _), _, _, _) =>
-            Clause.kindOf(function).filter(_ != Clause.Kind.Ensuring).map(Clause.at(apply, _))
+            Clause
+                .kindOf(function)
+                .filter(_ != Clause.Kind.Ensuring)
+                .map(Clause.at(apply, _, name, 1))
         case _ => None
 
     /** The call of `ensuring` that `term` is, where it is one. */
