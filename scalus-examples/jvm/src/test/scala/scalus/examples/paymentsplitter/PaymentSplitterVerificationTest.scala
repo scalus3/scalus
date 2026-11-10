@@ -187,24 +187,22 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // the outputs are; and that input is the one of the output it spends, the test above. The
         // rejecting program runs the claim and then the validator, each of which reads the named
         // input and looks its script up in the withdrawals, and the search for its budget climbed
-        // by spurious counterexamples, each round longer than the one before: 12 s at 728 steps,
-        // 16 s at 856, 42 s at 1115, 273 s at 1487, 707 s at 1661, and at 3322 it did not finish
-        // in the 12 minutes left of 30 (2026-11-07). Stated of every input of the spent
+        // by spurious counterexamples, each round longer than the one before: 11 s at 728 steps,
+        // 16 s at 856, 38 s at 1115, 230 s at 1487, 582 s at 1661, and at 1743 it did not finish
+        // in the 15 minutes left of 30 (2026-11-09). Stated of every input of the spent
         // reference, the claim searched them all, and at 3200 steps it did not finish in 15
         // minutes.
         notFinished(p.spendNeedsItsOwnWithdrawal, 1487)
     }
 
-    /** The steps of the check that a spend with its withdrawal is accepted. A spend's runs end: on
-      * two inputs, the redeemer naming the second and its script the second of two withdrawals, the
-      * premise takes 1434 steps of Lean's machine and the validator 1347. The search does not come
-      * to it: it climbed by spurious counterexamples to 1146 steps, where a counterexample with two
-      * withdrawals cannot be replayed to count its steps, and doubled the budget past what Lean
-      * finishes (2026-11-07).
-      */
-    private val acceptedSpendBudget = 1600
-
     test("a spend with its withdrawal is accepted") {
+        // A spend's runs end: on two inputs, the redeemer naming the second and its script the
+        // second of two withdrawals, the premise takes 1434 steps of Lean's machine and the
+        // validator 1347. The search climbs by spurious counterexamples to 1146 steps, and then by
+        // counterexamples whose withdrawals are not in the order of their keys, which Lean does
+        // not check of a map keyed by a credential: no context has them, but Lean's machine counts
+        // their runs, and the budget must cover them. It found 1431 steps, where the check takes
+        // 128 s, in 570 s (2026-11-09).
         // With the withdrawal, and the redeemer naming the contract's output, the spend is
         // accepted. Stated so, Lean runs the validator on every context within the limits, the
         // premise pruning none: a withdrawal's context too, whose stake validator walks the
@@ -212,7 +210,7 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         check(
           VerificationRequest(
             p.spendWithItsWithdrawalIsAccepted,
-            UplcBlaster(Budget.LeanSteps(acceptedSpendBudget), lean, spendTime)
+            UplcBlaster(Budget.Auto, lean, spendTime)
           )
         )
     }

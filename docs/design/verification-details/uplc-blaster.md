@@ -548,11 +548,6 @@ through the types around it.
   and Lean's time grows far faster than the budget past about 1100 steps. Lean's profiler on one
   of them at a small budget would show which reads branch most; exact lengths in the limits, one
   shape of each value, are the next thing to try.
-- **Counting a counterexample outside the type.** Where Lean's restriction of a variable is not
-  exact, as for a map whose keys are not bytes, a counterexample can be no value of the type. It
-  refutes nothing, but Lean's variable ranges over it, so its steps on Lean's machine are what a
-  budget must cover: the search could count them, as for a spurious counterexample, instead of
-  giving up or doubling. It would find the budget of the splitter's spend, which is given by hand.
 - **Liveness under its premise.** `premise ==>: succeeds(validator, …)` has Lean run the validator on
   every context, the premise pruning none. Two accepting forms, which run the validator only where
   the premise holds, were built and measured on the suites (2026-11-09), and dropped:
@@ -1508,7 +1503,7 @@ the validators accept.
 | | an honest payout is accepted; negative control: any payout | | | not finished (`Unfinished`) |
 | the optimized validator | an accepted spend withdraws from the stake credential of the script of the input its redeemer names | any parameter; contexts of two inputs and two withdrawals at most | | not finished (`Unfinished`) |
 | | its redeemer names the spent input | | 1730, found | 490 s |
-| | a spend that names its input, with its withdrawal, is accepted | | 1600 | 333 s |
+| | a spend that names its input, with its withdrawal, is accepted | | 1431, found | 160 s |
 | | the stake validator pays the other payee exactly the split | as the naive validator's payouts | | not finished (`Unfinished`) |
 | | the stake validator accepts an honest payout | | | not finished (`Unfinished`) |
 | | an accepted certificate registers or deregisters the stake credential; registration is accepted | any parameter; every script context | 297; 190, found | 8 s; 8 s |
@@ -1541,15 +1536,21 @@ What the suite shows about the tactic:
   took 2816; at 3200 steps it did not finish in 15 minutes, where at 1000 a check took 46 s. Stated
   of the input the redeemer names, which the validator reads, the claim reads one input, and with
   "the redeemer names the spent input" it says the same. The search for its budget then climbed
-  by spurious counterexamples, 12 s at 728 steps, 16 s at 856, 42 s at 1115, 273 s at 1487 and
-  707 s at 1661, and at 3322 it did not finish: the claim and the validator read the input and
-  look its script up each, and the time grew far faster than the budget past 1100 steps.
+  by spurious counterexamples, 11 s at 728 steps, 16 s at 856, 38 s at 1115, 230 s at 1487 and
+  582 s at 1661, and at 1743 it did not finish in the 15 minutes left of 30 (2026-11-09): the
+  claim and the validator read the input and look its script up each, and the time grew far
+  faster than the budget past 1100 steps. Before the solver's characters in a counterexample were
+  counted as Lean's own, the search doubled the budget at 1661, to 3322.
 - **A liveness statement wants the budget of its longest accepted run.** That a spend with its
   withdrawal is accepted is stated as written, and Lean runs the validator on every context: its
-  search climbed by spurious counterexamples, 633, 752, 1081, 1103, 1122 and 1146 steps, until a
-  counterexample with two withdrawals could not be counted, and the doubled budget did not
-  finish. On the longest spend measured, the premise takes 1434 steps of Lean's machine and the
-  validator 1347; at 1600 it is proved in 333 s.
+  search climbs by spurious counterexamples, 633, 752, 1081, 1103, 1122 and 1146 steps, and then
+  by counterexamples whose two withdrawals are not in the order of their keys, which Lean does
+  not check of a map keyed by a credential. No context has them, but Lean's variable does, so
+  their runs are counted too, 1315, 1366 and 1431 steps, where it is proved in 160 s, after a
+  search of 10 minutes (2026-11-10). Before they were counted, the search doubled the budget
+  there, which did not finish, and the test gave 1600 by hand, at which it is proved in 333 s. On
+  the longest spend measured, the premise takes 1434 steps of Lean's machine and the validator
+  1347.
 - **What a payout pays is beyond Lean's symbolic run.** The runs of a statement about the outputs
   walk the inputs, the outputs, and the sums of the payees, which the naive validator builds as an
   association list; an accepted payout is 5569 steps on the sample. Lean was still in the
