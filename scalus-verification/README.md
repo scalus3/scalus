@@ -33,6 +33,12 @@ validator actually runs on chain.
 - `src/main/scala/scalus/verify/lean/LeanServer.scala` - a running Lean language server for a
   workspace: `LeanServer.start(directory)`, `check(source, timeout)` and `close()`. The tactic
   runs its checks in one; see `docs/design/verification-details/lean-server.md`.
+- `src/main/scala/scalus/verify/lean/LeanTypes.scala` - Lean types for Scala types: a
+  `structure` for a case class and an `inductive` for an enum, each with `toData`, `fromData`,
+  `wellFormed` and `isEncoding`, as the compiler encodes the type. `LeanTypes.of(types).module(name)`
+  is the text of a Lean module, which a workspace has under `<Package>/Generated`
+  (`LeanWorkspace.generated`), for proofs written by hand; see
+  `docs/design/verification-details/lean-types.md`.
 - `src/main/scala/scalus/verify/lean/LeanServerProvider.scala` - what gives a tactic its server,
   and `LeanServers`, the provider for a workspace: one server at a time, started when a check
   needs it.

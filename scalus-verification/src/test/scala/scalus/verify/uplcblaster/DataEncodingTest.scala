@@ -457,7 +457,7 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
 
 object DataEncodingTest {
 
-    private def hex(text: String): ByteString = ByteString.fromHex(text)
+    private[uplcblaster] def hex(text: String): ByteString = ByteString.fromHex(text)
 
     /** `encoding`, of the type `A`, held to what FromData and ToData of `A` say of `Data`: on Data
       * that `encoding` gives, on such Data changed in one part, and on Data of no type. Every Data
@@ -591,7 +591,7 @@ object DataEncodingTest {
                 )
 
     /** What a check of the definitions starts with: PlutusCore's `Data`, as `Data`. */
-    private val header = List(
+    private[uplcblaster] val header = List(
       "import ScalusProofs.Run",
       "open PlutusCore.Integer (Integer)",
       "open PlutusCore.ByteString (ByteString)",
@@ -609,7 +609,7 @@ object DataEncodingTest {
     )
 
     /** A context of a minting, with an input, an output, a signatory and a withdrawal. */
-    private val sampleContext = ScriptContext(
+    private[uplcblaster] val sampleContext = ScriptContext(
       TxInfo(
         inputs = prelude.List(TxInInfo(sampleOutRef, output)),
         outputs = prelude.List(output),

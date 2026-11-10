@@ -15,3 +15,6 @@ require ScalusProofs from "../../../../../../scalus-verification/src/main/lean"
 
 @[default_target]
 lean_lib «LinearVesting» where
+  -- Every module under `LinearVesting/` is built: those Scalus writes under `Generated/`, and a
+  -- proof written by hand, without being imported from `LinearVesting.lean`.
+  globs := #[.andSubmodules `LinearVesting]
