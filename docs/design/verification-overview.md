@@ -10,8 +10,9 @@ This document fixes the design. The details are in
 [the `blaster-uplc` tactic](verification-details/uplc-blaster.md),
 [the Lean server](verification-details/lean-server.md), which the tactic runs its checks in, and
 [Lean types for Scala types](verification-details/lean-types.md), which a workspace has for
-proofs written by hand, and [statements as Lean modules and as documents of the Universal
-Annotation Language](verification-details/lean-export.md).
+proofs written by hand, [statements as Lean modules and as documents of the Universal
+Annotation Language](verification-details/lean-export.md), and
+[which clauses of a specification are checked](verification-details/specification-checks.md).
 
 This document describes how logical statements about Scalus code are written in Scala and how they
 are proved. It fixes four layers and the contracts between them:
@@ -56,6 +57,9 @@ side stays in the backends: Lean 4, Blaster and Z3 today.
   (`LeanTypes`), written into the workspace as a module that is generated
   ([Lean types for Scala types](verification-details/lean-types.md)): the first part of a
   workspace that holds statements as Lean and takes proofs by hand (§6.4).
+- the record of which clauses of the functions' specifications are checked, and by what proof,
+  which a suite of proofs is held to
+  ([which clauses are checked](verification-details/specification-checks.md));
 - the statements proved, as Lean modules of the workspace, of which a proof by hand is a theorem,
   and as documents of the Universal Annotation Language; the sbt plugin's `leanExport` and
   `ualExport` ([statements as Lean modules](verification-details/lean-export.md)).

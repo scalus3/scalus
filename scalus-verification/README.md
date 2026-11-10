@@ -318,6 +318,13 @@ that contract's precondition.
 `VestingValidator` is specified this way: three guarantees on `spend`, and the postcondition of
 `linearVesting`.
 
+Every clause a function of the verifier states is held to being checked:
+`verifier.specifications` says, for each, whether a proof checks it, and which; a statement in a
+suite's own words checks a clause where the tactic finds it the same statement as the one
+`guarantees` makes of it. `verifier.open(statement, reason)` declares one not proved. A
+`LeanProofsSuite` whose tests all passed fails where a clause is neither, and prints the open ones;
+see `docs/design/verification-details/specification-checks.md`.
+
 ### Call-site obligations
 
 A precondition is an obligation of every caller. `verifier.obligations` declares it for each call

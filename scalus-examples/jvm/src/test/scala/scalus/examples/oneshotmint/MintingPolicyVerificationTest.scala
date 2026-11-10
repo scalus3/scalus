@@ -114,39 +114,40 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     verifier.addFunction(mints)
 
+    /** The policy on a mint whose second policy names two different tokens. The ledger's mint is a
+      * map, so its names are different; the precondition asks no more of it than that. It promises
+      * nothing more than to return, and is there for its precondition.
+      */
+    private val mintsOfDistinctTokenNames = verifier.contract(
+      "mints_of_distinct_token_names",
+      contract(mints)(expects = m => distinctTokenNames(m), ensures = m => accepted => true)
+    )
+
     /** What `MintingPolicy.mint` states at its head, with `Spec.ensures`, of every transaction the
       * policy accepts: one that does not spend the seed only burns, and the one that does mints
       * exactly the tokens. They are stated of a mint whose token names are different: the ledger's
       * mint is a map, so its names are, and `equalsAssets` compares the tokens one by one, in
       * order, so the policy accepts the tokens `[(t, q), (t, 0)]` for `[(t, q)]`, where `t` has two
-      * quantities.
-      *
-      * The policy's code is written in the statement, as `succeeds(MintingPolicy.mint(…))`, and not
-      * called as the registered `mints`: so it is compiled with the conditions, as
-      * `verifier.guarantees` compiles a clause where `mint` states it.
+      * quantities. Together, for every such mint `m`, they are
+      * {{{
+      * succeeds(MintingPolicy.mint(context, txId, txOutIdx, tokensToMint)) ==>:
+      *     ((spendsSeed(context, txId, txOutIdx) || burnsOnly(context)) &&
+      *      (!spendsSeed(context, txId, txOutIdx) || mintsExactly(context, tokensToMint)))
+      * }}}
+      * where `context`, `txId`, `txOutIdx` and `tokensToMint` are what `mints` passes `mint` for
+      * `m`. The statement is the one `verifier.guarantees` makes of the clauses in `mint`, and not
+      * that sentence written as code: written so, its conditions build the context again at each
+      * use, where `mint` binds it once, so its programs are others, and it would not check the
+      * clauses in the code ([[scalus.verify.Verifier.specifications]]).
       */
-    private val mintGuarantees = verifier.statement(
-      "one_shot_mint.mint.guarantees",
-      forAll[Mint](m =>
-          distinctTokenNames(m) ==>:
-              succeeds(MintingPolicy.mint(context(m), m.seedId, m.seedIdx, tokens(m))) ==>:
-              // mint: Spec.ensures(spendsSeed(context, txId, txOutIdx) || burnsOnly(context))
-              (Prop(
-                MintingPolicy.spendsSeed(context(m), m.seedId, m.seedIdx) ||
-                    MintingPolicy.burnsOnly(context(m))
-              ) &&
-                  // mint: Spec.ensures(!spendsSeed(context, txId, txOutIdx) ||
-                  //                    mintsExactly(context, tokensToMint))
-                  Prop(
-                    !MintingPolicy.spendsSeed(context(m), m.seedId, m.seedIdx) ||
-                        MintingPolicy.mintsExactly(context(m), tokens(m))
-                  ))
-      )
-    )
+    private val mintGuarantees = verifier.guarantees(mintsOfDistinctTokenNames)
 
     test("the guarantees stated on mint hold of every transaction the policy accepts") {
+        // A clause that is not read would be missing from what is proved.
+        assert(mintGuarantees.unsupported.isEmpty, mintGuarantees.unsupported)
+        assert(mintGuarantees.statements.size == 2)
         // They are proved together, so that the tactic runs the policy once for both.
-        check(mintGuarantees)
+        check(mintGuarantees.together.getOrElse(fail("mint states no guarantee")))
     }
 
     private val seedMintsTheTokens = verifier.statement(

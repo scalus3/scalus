@@ -134,6 +134,11 @@ object SpecifiedHandler extends SpecifiedEntry {
 class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
 
+    /** The functions here state clauses for the tests of reading specifications, which prove some
+      * of them and refute others, on purpose.
+      */
+    override protected def checksSpecifications: Boolean = false
+
     private val clamp = FunctionDef(SpecifiedExamples.clamp)
     private val positives = FunctionDef(SpecifiedExamples.positives)
     private val increment = FunctionDef(SpecifiedExamples.increment)

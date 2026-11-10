@@ -132,7 +132,11 @@ final class FunctionContract[A, R] private[verify] (
     val function: FunctionRef[A, R],
     val variables: List[PropExpr.Ident[?]],
     val expects: Prop,
-    val guarantees: List[Prop]
+    val guarantees: List[Prop],
+    /** The clauses of the function's code the contract was read from
+      * ([[FunctionContract.inSource]]): none for a contract written beside the function.
+      */
+    val clauses: List[Clause]
 ) {
 
     /** The contract as one statement. */
@@ -149,7 +153,8 @@ final class FunctionContract[A, R] private[verify] (
           function,
           variables,
           expects,
-          Props.renameVariables(guarantee, names.zip(variables.map(_.name)).toMap) :: guarantees
+          Props.renameVariables(guarantee, names.zip(variables.map(_.name)).toMap) :: guarantees,
+          clauses
         )
 
     override def toString: String = s"FunctionContract(${function.name})"
@@ -166,7 +171,17 @@ object FunctionContract {
         variables: List[PropExpr.Ident[?]],
         expects: Prop,
         guarantees: List[Prop]
-    ): FunctionContract[A, R] = new FunctionContract(function, variables, expects, guarantees)
+    ): FunctionContract[A, R] = new FunctionContract(function, variables, expects, guarantees, Nil)
+
+    /** [[of]], read from the clauses `clauses` of the function's code. */
+    private[verify] def of[A, R](
+        function: FunctionRef[A, R],
+        variables: List[PropExpr.Ident[?]],
+        expects: Prop,
+        guarantees: List[Prop],
+        clauses: List[Clause]
+    ): FunctionContract[A, R] =
+        new FunctionContract(function, variables, expects, guarantees, clauses)
 
     /** The contract `function` states in its own body, with `Spec.expects` and `ensuring`
       * ([[scalus.cardano.onchain.plutus.prelude.Spec]]), or `None` when it states none. It is the
