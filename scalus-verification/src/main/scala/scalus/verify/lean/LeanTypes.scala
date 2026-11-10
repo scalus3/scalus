@@ -306,20 +306,33 @@ object LeanTypes {
             )
         }
 
+        /** The keys of the types whose codecs are being derived. */
+        private val deriving = mutable.Set.empty[String]
+
         def codec(tp: SIRType): Codec = {
             val key = SirTypes.recursionKey(tp)
             codecs.get(key) match
                 case Some(known) => known
+                // A type asked for again while it is derived contains itself, though its layout
+                // is no `Recursive` one: where `DataLayout` cut the layout off at its size. Its
+                // values are any `Data` here, as those of a part whose encoding is not told.
+                case None if deriving(key) =>
+                    untyped += s"${tp.show} contains itself, and its layout was cut off"
+                    anyData(exact = false)
                 case None =>
-                    val derived = bound
-                        .get(SirTypes.declarationName(SirTypes.unwrap(tp)))
-                        .getOrElse(derive(tp, key))
+                    deriving += key
+                    val derived =
+                        try
+                            bound
+                                .get(SirTypes.declarationName(SirTypes.unwrap(tp)))
+                                .getOrElse(derive(tp, key))
+                        finally deriving -= key
                     codecs(key) = derived
                     derived
         }
 
-        private def derive(tp: SIRType, key: String): Codec =
-            DataLayout.of(tp) match
+        private def derive(tp: SIRType, key: String): Codec = {
+            DataLayout.of(tp) match {
                 // A type that contains itself has no Lean type of its own: its values are the
                 // `Data` its encoding's predicate holds of.
                 case layout: DataLayout.Recursive =>
@@ -353,6 +366,8 @@ object LeanTypes {
                         case DataShape.Collection(items)     => collection(codec(items))
                         case DataShape.Mapping(keys, values, order) =>
                             mapping(codec(keys), codec(values), order)
+            }
+        }
 
         /** A name for `tp` that says its type arguments: `Option_Integer`. */
         private def described(tp: SIRType): String = SirTypes.unwrap(tp) match

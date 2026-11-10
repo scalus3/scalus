@@ -125,9 +125,12 @@ module's name and file, and `LeanWorkspace.write` writes a text where the file d
   stale. The modules under `Generated` are left out of that hash: what they say comes from the
   statements and programs an entry has the hashes of already, and a type added to the module is
   no reason to prove every statement of the workspace again.
-- The lakefile of a workspace builds every module under the package's directory
-  (`globs := #[.andSubmodules …]`), so `lake build` checks the generated modules without an
-  import. `LeanWorkspaceTool.init` writes such a lakefile; `LinearVesting` has it now.
+- The lakefile of a workspace has a second library, `<Package>Proofs`, of every module under
+  `<Package>/Generated` and `<Package>/Proofs` (`globs := #[.submodules …]`), so
+  `lake build <Package>Proofs` checks the generated modules without an import. The default target
+  is the root module alone, which is all a check needs ([statements as Lean
+  modules](lean-export.md#a-proof-by-hand)). `LeanWorkspaceTool.init` writes such a lakefile;
+  `LinearVesting` has one.
 
 The vesting example writes its types from a test without Lean,
 `VestingVerificationSupportTest`: `Config`, `Action` and the script context of version 3. Where

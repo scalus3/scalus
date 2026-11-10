@@ -29,27 +29,37 @@ Either way the code claims more than the proofs show.
 by its file and line, with the functions whose code has it. The line is that of the clause's
 condition: `Spec.ensures` is inline, so its call is that of `Spec.holdsOnReturn(_ => condition)`, at
 the definition of `Spec.ensures`, and only the condition is where the function states it. By the
-call, every `Spec.ensures` would be one clause, of `Spec.scala`. A clause of an inline function, such as a
+call, every `Spec.ensures` would be one clause, of `Spec.scala`. A clause is told apart by its file,
+line and column; where one function's code has it more than once, as a handler inlined at two
+places, each is a clause of its own, numbered by its occurrence, and needs a statement of its own.
+Code that is not a function of its declared parameters is not read for statements, and its clauses
+are unchecked, as no statement can be made of them. A clause of an inline function, such as a
 validator's handler, is in the code of every function that calls it, and is one clause. Each has a
 status:
 
-- **Checked**, by a theorem, with the tactic that proved it and the kinds of its proof. An `ensures`
+- **Checked**, by a theorem, with the tactic that proved it, the kinds of its proof, and the limits
+  of its variables where it has any (`forAllDataLimited`): a clause proved over contexts of at
+  most two inputs is checked of those, and the status says so. An `ensures`
   or `ensuring` clause is checked by a theorem that states it: a statement `guarantees` declared of
   it, or a contract read from the code that has it (`verifier.contract`, or `verifier.statement` of
   the contract, as for `linearVesting`'s `ensuring`, with `returnsWhen` added). A theorem also checks
   the clause where the tactic that proved it finds it the same statement as one that states the
   clause: for `blaster-uplc`, the same check text and the same programs, which the fingerprint of a
-  kept result has (`StatementIdentity`). So a statement in the suite's words checks the clause, and
+  kept result has, without Lean's side (`Tactic.identity`). The tactic that proved the theorem
+  tells, and not another of its name: a tactic with a fixed plan tells nothing. So a statement in the suite's words checks the clause, and
   it is held to the clause's code either way.
 - **Open**: declared not proved with `verifier.open(statement, reason)`, of a statement that states
-  the clause or is the same as one that does. The vesting validator's third clause, of what stays
+  the clause or is the same as one that does; or with `verifier.open(function, line, reason)`, of
+  the clause itself, for a clause no statement can be made of, as one inside a function value.
+  The status of such a clause says why no statement is made of it. The vesting validator's third clause, of what stays
   locked, is open: Lean does not finish it.
 - **Owed by no caller**: an `expects` that no function of the verifier calls. A precondition is an
   obligation of the callers, not a claim of the function.
 - **Unchecked**: neither, with the statements that would check it and what is missing.
 
 An `expects` clause is checked where every function of the verifier that calls its function has its
-obligation stated (`verifier.obligations`, under the contract read from the code) and proved.
+obligation stated (`verifier.obligations`, under the contract read from the code) and proved, and no
+call is one `obligations` could make no statement of, as one inside a function value.
 
 A kept result is a proof of its statement, as in any run: the record needs no Lean.
 
@@ -57,8 +67,10 @@ A kept result is a proof of its statement, as in any run: the record needs no Le
 
 `LeanProofs.checkSpecifications()` fails where a clause is unchecked, and names each with what is
 missing; it returns the open ones. `LeanProofsSuite` calls it after the suite's last test, where every
-test but those tagged `Unfinished` ran and passed, and prints the open clauses. A run of some tests,
-or one in which a test failed or was canceled, does not hold the specifications to what it checked.
+test ran and passed but those tagged `Unfinished`, ignored or pending, and prints the open clauses.
+An ignored test proves nothing, so the clauses it would check are unchecked, and fail the suite. A
+run of some tests, or one in which a test failed or was canceled, does not hold the specifications
+to what it checked, and says so where the suite's functions state clauses.
 A suite whose functions state clauses for its own tests, as the verifier's `SpecificationsTest`,
 overrides `checksSpecifications` to say no.
 

@@ -356,6 +356,12 @@ final class UplcBlaster private (
                 .filter(workspace => Files.isRegularFile(workspace.resolve("lean-toolchain")))
                 .map(UplcBlaster.fingerprint(prepared, _))
 
+    /** What a statement is, as its fingerprint has it, without hashing the workspace: under the
+      * tactic's own plan only, as [[fingerprint]].
+      */
+    override def identity(prepared: Prepared): Option[(String, List[String])] =
+        Option.when(fixedPlan eq MappingPlan.Fixed.none)(UplcBlaster.identity(prepared))
+
     override def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] =
         UplcBlaster.kept(prepared, result)
 
@@ -462,9 +468,7 @@ object UplcBlaster {
     ) {
 
         /** The SHA-256 of each leaf's program CBOR, in the order of [[leaves]]. */
-        def programHashes: List[String] = leaves.toList.map { program =>
-            Hex.bytesToHex(Utils.sha2_256(program.cborEncoded)).toLowerCase
-        }
+        def programHashes: List[String] = leaves.toList.map(UplcBlaster.programHash)
 
         /** Whether a quantifier of the statement asks for a witness: an `exists` in a positive
           * position, or a `forAll` in a negative one, under `!` or in the premise of `==>:`. Either
@@ -4062,12 +4066,13 @@ object UplcBlaster {
                     if guards.isEmpty then inner else s"(${guards.mkString(" ∧ ")} → $inner)"
                 s"($symbol ${binders.map(binder).mkString(" ")}, $guarded)"
         formula match
-            // Within the budget ([[Budget.Within]]) a run the budget cuts, which neither halted
-            // nor failed, is read in the statement's favour: as true where the statement claims
-            // the test, and as false where it assumes it.
+            // Another reading of the leaves, as the Universal Annotation Language's, is its own.
             case LeafFormula.Test(leaf) if leaves.isDefined => leaves.get.test(leaf, positive)
             case LeafFormula.Denotes(leaf) if leaves.isDefined =>
                 leaves.get.denotes(leaf, positive)
+            // Within the budget ([[Budget.Within]]) a run the budget cuts, which neither halted
+            // nor failed, is read in the statement's favour: as true where the statement claims
+            // the test, and as false where it assumes it.
             case LeafFormula.Test(leaf) =>
                 val run = state(leaf)
                 if within then
@@ -4200,20 +4205,28 @@ object UplcBlaster {
       * its text has its budget.
       */
     private[uplcblaster] def fingerprint(goal: Lowered, workspace: Path): Fingerprint = {
+        val (statement, programs) = identity(goal)
+        Fingerprint(LeanWorkspace.environment(workspace), statement, programs)
+    }
+
+    /** What `goal` is, without Lean's side: the hash of the text of its check and those of its
+      * programs, as its [[fingerprint]] has them. Two goals of one identity are one statement.
+      */
+    private[uplcblaster] def identity(goal: Lowered): (String, List[String]) = {
         // A result may be of the statement as written ([[Lowered.unrewritten]]): it rests on that
         // check too.
         val checked = goal :: goal.unrewritten.toList
-        Fingerprint(
-          LeanWorkspace.environment(workspace),
-          Fingerprint.hash(
-            checked
-                .map(lowered =>
-                    document(Vector.empty, checkBody(lowered, lowered.within.getOrElse(0)), 0)
-                )
-                .mkString("\n")
-          ),
-          checked.flatMap(_.leaves).map(program => Fingerprint.hash(program.cborEncoded)).distinct
+        val statement = Fingerprint.hash(
+          checked
+              .map(lowered =>
+                  document(Vector.empty, checkBody(lowered, lowered.within.getOrElse(0)), 0)
+              )
+              .mkString("\n")
         )
+        statement -> checked
+            .flatMap(_.leaves)
+            .map(program => Fingerprint.hash(program.cborEncoded))
+            .distinct
     }
 
     /** The notes the tactic keeps with a result: the budget the check ran with, which a later
@@ -4550,7 +4563,7 @@ object UplcBlaster {
     ) {
 
         /** The SHA-256 of the program's CBOR, which the language identifies the function by. */
-        def hash: String = Hex.bytesToHex(Utils.sha2_256(program.cborEncoded)).toLowerCase
+        def hash: String = programHash(program)
     }
 
     /** An argument of a [[UalFunction]]: its value schema, as JSON, and its type as an `ONCHAIN`
@@ -4582,10 +4595,10 @@ object UplcBlaster {
       * The reason where the statement has no such form: one checked within a budget
       * ([[Budget.Within]]) is no theorem.
       */
-    def ualStatement(goal: Lowered, budget: Int, id: String): Either[String, UalStatement] =
+    def ualStatement(goal: Lowered, budget: Int, id: String): Either[String, UalStatement] = {
         if goal.within.isDefined then
             Left("a statement checked within a budget is no theorem, and is not exported")
-        else
+        else {
             val names = goal.binders.indices.map(index => s"x$index").toList
             val kinds = goal.binders.map(binder => variable(binder.tp))
             def function(leaf: Int) = s"${id}_leaf$leaf"
@@ -4630,6 +4643,14 @@ object UplcBlaster {
                 )
             }
             Right(UalStatement(functions, predicates, formal, budget))
+        }
+    }
+
+    /** The name of the statement whose module, written by [[statementModule]], `text` is: none for
+      * a statement without a name, or another text.
+      */
+    def statementModuleName(text: String): Option[String] =
+        """The statement `([^`]+)`, at""".r.findFirstMatchIn(text).map(_.group(1))
 
     /** What the text of a module written by [[statementModule]] is of: the budget, and the SHA-256
       * of each program, in order, as its header says them. None for another text.
@@ -4641,6 +4662,10 @@ object UplcBlaster {
             """(?m)^  leaf\d+ ([0-9a-f]{64})$""".r.findAllMatchIn(text).map(_.group(1)).toList
         budget.filter(_ => hashes.nonEmpty).map(_ -> hashes)
     }
+
+    /** The SHA-256 of the CBOR of `program`, in hexadecimal. */
+    def programHash(program: Program): String =
+        Hex.bytesToHex(Utils.sha2_256(program.cborEncoded)).toLowerCase
 
     /** The CBOR of `program` in hexadecimal, as `#import_uplc` reads it from a file. */
     def programHex(program: Program): String = Hex.bytesToHex(program.cborEncoded).toLowerCase

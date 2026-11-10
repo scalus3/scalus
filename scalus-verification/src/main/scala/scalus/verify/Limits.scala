@@ -87,6 +87,18 @@ enum Limit {
   */
 final case class Limits(all: List[Limit]) {
 
+    /** The limits as they read, as `txInfo.inputs has at most 2 elements`, joined with `and`. */
+    def describe: String =
+        all.map {
+            case Limit.MaxCollectionLength(max) => s"every collection has at most $max elements"
+            case Limit.Length(path, min, None) =>
+                s"${Limits.show(path)} has at least $min elements"
+            case Limit.Length(path, 0, Some(max)) =>
+                s"${Limits.show(path)} has at most $max elements"
+            case Limit.Length(path, min, Some(max)) =>
+                s"${Limits.show(path)} has from $min to $max elements"
+        }.mkString(" and ")
+
     /** These limits and `other`'s. */
     def and(other: Limits): Limits = Limits(all ++ other.all)
 

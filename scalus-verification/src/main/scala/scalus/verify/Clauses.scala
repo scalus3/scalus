@@ -4,15 +4,21 @@ import scalus.compiler.sir.{AnnotatedSIR, SIR, SIRPosition}
 
 /** A clause of a function's specification, where its code states it: `Spec.ensures(c)`,
   * `ensuring(r => c)` or `Spec.expects(c)` ([[scalus.cardano.onchain.plutus.prelude.Spec]]), at
-  * `line` of `file`. A clause of an inline function, as a validator's handler, is in the code of
-  * every function that calls it, and is one clause, of its file and line.
+  * `line` and `column` of `file`.
+  *
+  * A clause of an inline function, as a validator's handler, is in the code of every function that
+  * calls it, and is one clause there, of its file, line and column. Where one function's code has
+  * it more than once, as a handler inlined at two places, each is a clause of its own, numbered by
+  * `occurrence` in the order of the code. A clause without a position in the source is placed in
+  * the function whose code has it, `file` being `<function>`.
   */
-final case class Clause(file: String, line: Int, kind: Clause.Kind) {
+final case class Clause(file: String, line: Int, column: Int, kind: Clause.Kind, occurrence: Int) {
 
-    /** The clause as a person finds it: its file's name, its line, and its kind. */
+    /** The clause as a person finds it: its kind, its file's name, and its line. */
     def where: String = {
         val name = file.substring(file.lastIndexOf('/') + 1)
-        s"${kind.written} at $name:$line"
+        val again = if occurrence > 1 then s" (occurrence $occurrence)" else ""
+        s"${kind.written} at $name:$line$again"
     }
 }
 
@@ -31,7 +37,8 @@ object Clause {
         case Expects extends Kind("Spec.expects")
     }
 
-    /** The clause at the node `node`, a call of the clause's function, of the kind `kind`.
+    /** The clause at the node `node`, a call of the clause's function, of the kind `kind`, in the
+      * code of the function `function`, the `occurrence`-th of that place there.
       *
       * It is where the code states its condition, the call's last argument, or the body of that
       * argument where it is a lambda. `Spec.ensures` is inline: its call is that of
@@ -39,11 +46,11 @@ object Clause {
       * condition is in the code that states it. The call itself is the place of a condition that
       * has none.
       */
-    private[verify] def at(node: SIR, kind: Kind): Clause = {
+    private[verify] def at(node: SIR, kind: Kind, function: String, occurrence: Int): Clause = {
         val stated = positionOf(condition(node))
         val position = if stated.file.isEmpty then positionOf(node) else stated
-        if position.file.isEmpty then Clause("", 0, kind)
-        else Clause(position.file, position.startLine + 1, kind)
+        if position.file.isEmpty then Clause(s"<$function>", 0, 0, kind, occurrence)
+        else Clause(position.file, position.startLine + 1, position.startColumn, kind, occurrence)
     }
 
     /** The condition of the call `node`: its last argument, or the body of that argument. */
@@ -73,14 +80,23 @@ object Clause {
 enum ClauseStatus {
 
     /** Proved by the statements `statements`, with the tactic `tactic`, by proofs of `kinds`. A
-      * statement proves a clause where it is the statement the verifier makes of the clause, or
-      * where the tactic finds it the same statement as one of those: the same proposition, about
-      * the same programs.
+      * statement proves a clause where it is a statement the verifier makes of the clause, or where
+      * the tactic finds it the same statement as one of those: the same proposition, about the same
+      * programs. `within` says what the statements are of where it is less than every value: the
+      * limits of their variables ([[Props.forAllDataLimited]]), one for each variable that has
+      * them. Beyond them the clause is not checked.
       */
-    case Checked(statements: List[String], tactic: String, kinds: Set[ProofKind])
+    case Checked(
+        statements: List[String],
+        tactic: String,
+        kinds: Set[ProofKind],
+        within: List[String]
+    )
 
-    /** Declared not proved, by [[Verifier.open]] of the statement `statement`, with the reason. */
-    case Open(statement: String, reason: String)
+    /** Declared not proved, with the reason: by [[Verifier.open]] of the statement `by`, or of the
+      * clause itself, where `by` is empty.
+      */
+    case Open(by: String, reason: String)
 
     /** A `Spec.expects` that no function of the verifier calls: no caller here owes it. */
     case NotOwed
@@ -98,21 +114,25 @@ final case class Specification(clause: Clause, functions: List[String], status: 
     def describe: String = {
         val of = s"${clause.where}, in ${functions.mkString(", ")}"
         status match
-            case ClauseStatus.Checked(statements, tactic, kinds) =>
-                s"$of: checked by ${statements.mkString(", ")} ($tactic, ${kinds.mkString(", ")})"
-            case ClauseStatus.Open(statement, reason) =>
-                s"$of: open, $statement: $reason"
+            case ClauseStatus.Checked(statements, tactic, kinds, within) =>
+                val limited =
+                    if within.isEmpty then "" else s", only where ${within.mkString("; ")}"
+                s"$of: checked by ${statements.mkString(", ")} ($tactic, " +
+                    s"${kinds.mkString(", ")})$limited"
+            case ClauseStatus.Open(by, reason) =>
+                val declared = if by.isEmpty then "" else s", $by"
+                s"$of: open$declared: $reason"
             case ClauseStatus.NotOwed => s"$of: no function here calls it"
             case ClauseStatus.Unchecked(candidates, missing) =>
-                val by =
+                val stated =
                     if candidates.isEmpty then ""
                     else s" (stated by ${candidates.mkString(", ")})"
-                s"$of: not checked$by: $missing"
+                s"$of: not checked$stated: $missing"
     }
 }
 
 /** What a tactic says a statement is, to tell that two statements are one: the proposition and the
-  * programs of its fingerprint ([[Tactic.fingerprint]]), without the backend's side.
+  * programs, without the backend's side ([[Tactic.identity]]).
   */
 private[verify] final case class StatementIdentity(
     tactic: String,

@@ -170,6 +170,14 @@ trait Tactic {
       */
     def fingerprint(prepared: Prepared): Option[Fingerprint] = None
 
+    /** What `prepared` is, to tell statements apart: the hash of its proposition and those of its
+      * programs, as [[fingerprint]] has them, without the backend's side. Two statements of one
+      * identity are one statement to the tactic, and a proof of either proves the other
+      * ([[Verifier.specifications]]). Nothing where the tactic does not tell.
+      */
+    def identity(prepared: Prepared): Option[(String, List[String])] =
+        fingerprint(prepared).map(fingerprint => fingerprint.statement -> fingerprint.programs)
+
     /** What is kept of `result`, where it is one that is kept: a proof or a refutation. */
     def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] = None
 
@@ -223,7 +231,9 @@ final class PreparedRun private[verify] (
     val tacticName: String,
     private[verify] val execute: () => ExecutionResult,
     /** What the tactic says the statement is ([[StatementIdentity]]), where it says. */
-    private[verify] val identity: () => Option[StatementIdentity]
+    private[verify] val identity: () => Option[StatementIdentity],
+    /** The tactic, which tells of another statement whether it is the same as this one. */
+    private[verify] val tactic: Tactic
 )
 
 /** A runtime context for functions, named statements, and proved lemmas.
@@ -242,21 +252,29 @@ final class Verifier private (results: Option[KeptResults]) {
       */
     private var stating: Map[String, Set[Clause]] = Map.empty
 
-    /** The tactic that proved each theorem, by the statement's name. */
-    private var provedWith: Map[String, String] = Map.empty
-
-    /** The theorems by what their tactics say they are, so that a statement the tactic finds the
-      * same as one of them is proved by it.
+    /** The tactic that proved each theorem, by the statement's name: what says whether another
+      * statement is the same as it.
       */
+    private var provedBy: Map[String, Tactic] = Map.empty
+
+    /** The theorems by what the tactics that proved them say they are. */
     private var provedAs: Map[StatementIdentity, Theorem] = Map.empty
-
-    /** The tactics that proved something, by their names: what says whether a statement is the same
-      * as a theorem.
-      */
-    private var tactics: Map[String, Tactic] = Map.empty
 
     /** The statements declared not proved, with the reasons ([[open]]). */
     private var opened: Map[String, String] = Map.empty
+
+    /** The clauses declared not proved by their places, the function and the line, with the reasons
+      * ([[open]]).
+      */
+    private var openedClauses: Map[(String, Int), String] = Map.empty
+
+    /** The clauses [[guarantees]] made no statement of, with the reason. */
+    private var unstatable: Map[Clause, String] = Map.empty
+
+    /** The calls [[obligations]] made no statement of, by the caller's and the callee's names, with
+      * the reasons.
+      */
+    private var unstatedCalls: Map[(String, String), List[String]] = Map.empty
 
     def functions: FunctionTable = functionTable
     def statements: Iterable[Statement] = declarations.values
@@ -281,9 +299,6 @@ final class Verifier private (results: Option[KeptResults]) {
     def refute(name: String, prop: Prop): Statement =
         declare(name, prop, Origin.Explicit, ExpectedOutcome.Falsified)
 
-    /** Declares the contract of a function, built by [[Props.contract]] or [[Props.totalContract]].
-      * It is proved like any statement, and [[contracts]] finds it by its function.
-      */
     /** `contract` as a statement of its own, which is not the function's contract: no caller owes
       * its precondition. A contract read from the function's code ([[FunctionContract.inSource]]),
       * with `returnsWhen` or `failsWhen` added, checks the `ensures` and `ensuring` clauses it was
@@ -296,6 +311,9 @@ final class Verifier private (results: Option[KeptResults]) {
         declared
     }
 
+    /** Declares the contract of a function, built by [[Props.contract]] or [[Props.totalContract]].
+      * It is proved like any statement, and [[contracts]] finds it by its function.
+      */
     def contract(name: String, contract: FunctionContract[?, ?]): Statement = {
         val declared = declare(name, contract.prop, Origin.Contract(contract))
         stating =
@@ -484,17 +502,17 @@ final class Verifier private (results: Option[KeptResults]) {
         val conditions = List.newBuilder[(Prop, Int)]
         // The clauses that have a statement.
         val stated = List.newBuilder[Clause]
-        val clauses = Obligations.sites(
-          body.term,
-          Map(Obligations.Ensuring -> 2, Obligations.Ensures -> 1)
-        )
-        clauses.zipWithIndex.foreach { case ((site, inLambda), index) =>
-            val clause =
-                Clause.at(site.node, Clause.kindOf(site.callee).getOrElse(Clause.Kind.Ensures))
+        // The `ensures` and `ensuring` clauses, numbered as [[specifications]] numbers them.
+        val clauses = clausesIn(function.name, body.term).filter(_._2.kind != Clause.Kind.Expects)
+        clauses.zipWithIndex.foreach { case (((site, inLambda), clause), index) =>
             // Where the code states the clause: `Spec.ensures` is inline, and its call is at its
             // own definition ([[Clause.at]]).
             val line = clause.line
             val where = s"the clause of ${function.displayName} at line $line"
+            def cannot(reason: String): Unit = {
+                unsupported += s"$where $reason"
+                unstatable = unstatable.updated(clause, s"it is $reason")
+            }
             // The condition in the clause's place: about the value `ensuring` is applied to, or
             // about nothing but the variables in scope, for `ensures`.
             val atClause = site.arguments match
@@ -504,8 +522,7 @@ final class Verifier private (results: Option[KeptResults]) {
                     Some(Obligations.bind(unit, Obligations.unit, condition))
                 case _ => None
             (atClause, inLambda) match
-                case (_, true) =>
-                    unsupported += s"$where is inside a function value, which is not supported"
+                case (_, true) => cannot("inside a function value, which is not supported")
                 case (Some(condition), false) =>
                     Obligations.slice(body.term, site.node, condition) match
                         case Some(check) =>
@@ -519,10 +536,11 @@ final class Verifier private (results: Option[KeptResults]) {
                               Origin.Guarantee(function, line)
                             )
                             stating = stating.updated(name, Set(clause))
-                        case None => unsupported += s"$where was not found on a path"
+                        case None => cannot("not found on a path")
                 case (None, false) =>
-                    unsupported += s"$where: its condition must be a function literal, as in " +
-                        "body.ensuring(r => ...)"
+                    cannot(
+                      "of a condition that is no function literal, as in body.ensuring(r => ...)"
+                    )
         }
         // A precondition is part of the contract where the body starts with it. One that is
         // written after another statement is erased from the script like the rest, and is in no
@@ -591,9 +609,16 @@ final class Verifier private (results: Option[KeptResults]) {
                       Obligations.bind(variables, site.arguments, atSite)
                     )
                     .map(body.wrapped)
+            def cannot(reason: String): Unit = {
+                unsupported += s"$where$reason"
+                val key = caller.name -> callee.name
+                unstatedCalls = unstatedCalls.updated(
+                  key,
+                  unstatedCalls.getOrElse(key, Nil) :+ s"$where$reason"
+                )
+            }
             (contract.expects, inLambda) match
-                case (_, true) =>
-                    unsupported += s"$where inside a function value, which is not supported"
+                case (_, true) => cannot(" inside a function value, which is not supported")
                 case (Prop.Bool(PropExpr.SIRExpr(expects)), false) =>
                     val obligation = for
                         reach <- cut(Obligations.truth)
@@ -610,10 +635,12 @@ final class Verifier private (results: Option[KeptResults]) {
                               parameters.foldRight[Prop](guarded)(Prop.Forall(_, _)),
                               Origin.Obligation(caller, callee, declared.name, line)
                             )
-                        case None => unsupported += s"$where: the call was not found on a path"
+                        case None => cannot(": the call was not found on a path")
                 case _ =>
-                    unsupported += s"$where: the precondition of ${declared.name} is a " +
-                        "statement, not a Boolean test, which is not supported"
+                    cannot(
+                      s": the precondition of ${declared.name} is a statement, not a Boolean " +
+                          "test, which is not supported"
+                    )
         CallObligations(statements.result(), unsupported.result())
     }
 
@@ -705,11 +732,9 @@ final class Verifier private (results: Option[KeptResults]) {
               this,
               statement,
               tactic.name,
-              () => {
-                  tactics = tactics.updated(tactic.name, tactic)
-                  run(tactic)(statement, prepared)
-              },
-              () => identityOf(tactic)(prepared)
+              () => run(tactic)(statement, prepared),
+              () => identityOf(tactic)(prepared),
+              tactic
             )
         }
     }
@@ -802,7 +827,7 @@ final class Verifier private (results: Option[KeptResults]) {
                 checked(proof)
                 val theorem = new Theorem(prepared.statement, proof)
                 proven = proven.updated(prepared.statement.name, theorem)
-                provedWith = provedWith.updated(prepared.statement.name, prepared.tacticName)
+                provedBy = provedBy.updated(prepared.statement.name, prepared.tactic)
                 prepared
                     .identity()
                     .foreach(identity => provedAs = provedAs.updated(identity, theorem))
@@ -817,25 +842,39 @@ final class Verifier private (results: Option[KeptResults]) {
     }
 
     /** What `tactic` says a statement it prepared is. */
-    private def identityOf(tactic: Tactic)(prepared: tactic.Prepared): Option[StatementIdentity] =
+    private def identityOf(tactic: Tactic)(prepared: tactic.Prepared): Option[StatementIdentity] = {
         tactic
-            .fingerprint(prepared)
-            .map(fingerprint =>
-                StatementIdentity(tactic.name, fingerprint.statement, fingerprint.programs)
-            )
+            .identity(prepared)
+            .map((statement, programs) => StatementIdentity(tactic.name, statement, programs))
+    }
 
-    /** What each tactic that proved something says of a statement, once for each. */
+    /** What each tactic that proved something says of a statement, once for each: by the tactic
+      * itself, as two tactics of one name may tell differently, as one with a fixed plan does.
+      */
     private val identities =
-        scala.collection.mutable.Map.empty[(String, String), Option[StatementIdentity]]
+        new java.util.IdentityHashMap[Tactic, scala.collection.mutable.Map[
+          String,
+          Option[StatementIdentity]
+        ]]()
 
-    private def identityOf(statement: Statement, tactic: Tactic): Option[StatementIdentity] =
-        identities.getOrElseUpdate(
-          statement.name -> tactic.name,
-          tactic
-              .prepare(goalOf(statement))
-              .toOption
-              .flatMap(prepared => identityOf(tactic)(prepared))
+    private def identityOf(statement: Statement, tactic: Tactic): Option[StatementIdentity] = {
+        val known = Option(identities.get(tactic)).getOrElse {
+            val made = scala.collection.mutable.Map.empty[String, Option[StatementIdentity]]
+            identities.put(tactic, made)
+            made
+        }
+        known.getOrElseUpdate(
+          statement.name,
+          tactic.prepare(goalOf(statement)).toOption.flatMap(identityOf(tactic)(_))
         )
+    }
+
+    /** The tactics that proved something, each once. */
+    private def provers: List[Tactic] = {
+        provedBy.values.foldLeft(List.empty[Tactic])((found, tactic) =>
+            if found.exists(_ eq tactic) then found else tactic :: found
+        )
+    }
 
     /** Declares that `statement` is not proved, for `reason`: a clause it states, or one whose
       * statement a tactic finds the same as it, is open ([[specifications]]), and not unchecked.
@@ -848,6 +887,51 @@ final class Verifier private (results: Option[KeptResults]) {
         opened = opened.updated(statement.name, reason)
     }
 
+    /** Declares that the clauses at `line` of the code of `function` are not proved, for `reason`:
+      * for a clause no statement can be made of, as one inside a function value ([[specifications]]
+      * says the line of each).
+      */
+    def open(function: FunctionRef[?, ?], line: Int, reason: String): Unit = {
+        require(
+          functionTable.contains(function.name),
+          s"function ${function.name} is not registered in this verifier"
+        )
+        openedClauses = openedClauses.updated(function.name -> line, reason)
+    }
+
+    /** The clauses in `term`, the code of the function `function`, with their sites: each numbered
+      * by its occurrence, of its place, in the order of the code ([[Clause]]).
+      */
+    private def clausesIn(
+        function: String,
+        term: SIR
+    ): List[((Obligations.Site, Boolean), Clause)] = {
+        val seen = scala.collection.mutable.Map.empty[(String, Int, Int, Clause.Kind), Int]
+        Obligations.sites(term, clauseArities).flatMap { found =>
+            Clause.kindOf(found._1.callee).map { kind =>
+                val first = Clause.at(found._1.node, kind, function, 1)
+                val place = (first.file, first.line, first.column, kind)
+                val occurrence = seen.getOrElse(place, 0) + 1
+                seen(place) = occurrence
+                found -> first.copy(occurrence = occurrence)
+            }
+        }
+    }
+
+    private val clauseArities =
+        Map(Obligations.Ensures -> 1, Obligations.Ensuring -> 2, Obligations.Expects -> 1)
+
+    /** Whether the code of a function here states a clause of a specification: whether
+      * [[specifications]] has any, without saying how each stands.
+      */
+    def statesClauses: Boolean = {
+        functionTable.definitions.exists(definition =>
+            definition
+                .get(Representation.Sir)
+                .exists(sir => Obligations.sites(sir, clauseArities).nonEmpty)
+        )
+    }
+
     /** Every clause of the specifications of the functions here, where their code states them, and
       * how each stands: proved, open, owed by no caller here, or unchecked.
       *
@@ -856,91 +940,150 @@ final class Verifier private (results: Option[KeptResults]) {
       * contract). A theorem also proves a clause where the tactic that proved it finds it the same
       * statement as one that states the clause: the same proposition, about the same programs. So a
       * statement written in other words checks the clause, and the clause is in the code of the
-      * statement either way. A clause none proves is open where such a statement is declared open.
+      * statement either way. A proof of a statement with limits is of the values within them, and
+      * the status says so. A clause none proves is open where such a statement is declared open, or
+      * where the clause is ([[open]]).
       *
-      * An `expects` clause is a precondition its function's callers owe: it is proved where the
-      * obligation of every call of the function by a function here is ([[obligations]]), and owed
-      * by no caller where no function here calls it.
+      * An `expects` clause is a precondition its function's callers owe: it is proved where every
+      * call of the function by a function here has its obligation stated ([[obligations]]) and
+      * proved, and owed by no caller where no function here calls it.
       */
     def specifications: List[Specification] = {
-        val clausesOf = List.newBuilder[(Clause, FunctionDef[?, ?])]
+        val found = List.newBuilder[(Clause, FunctionDef[?, ?])]
+        val unread = Set.newBuilder[String]
         for
             definition <- functionTable.definitions
             sir <- definition.get(Representation.Sir)
-            (site, _) <- Obligations.sites(Obligations.body(definition, sir).term, clauseArities)
-            kind <- Clause.kindOf(site.callee)
-        do clausesOf += Clause.at(site.node, kind) -> definition
-        clausesOf
+        do
+            // Code that is no function of its declared parameters is not read for statements, and
+            // its clauses can be none's: they are still clauses of it.
+            val term =
+                if Obligations.hasBody(definition, sir) then Obligations.body(definition, sir).term
+                else
+                    unread += definition.name
+                    sir
+            clausesIn(definition.name, term).foreach((_, clause) => found += clause -> definition)
+        val notRead = unread.result()
+        found
             .result()
             .groupBy(_._1)
             .toList
             .map((clause, stating) => (clause, stating.map(_._2).distinctBy(_.name)))
-            .sortBy((clause, _) => (clause.file, clause.line, clause.kind.ordinal))
+            .sortBy((clause, _) =>
+                (clause.file, clause.line, clause.column, clause.kind.ordinal, clause.occurrence)
+            )
             .map((clause, functions) =>
                 Specification(
                   clause,
                   functions.map(_.ref.displayName).sorted,
                   if clause.kind == Clause.Kind.Expects then expectsStatus(clause, functions)
-                  else ensuresStatus(clause)
+                  else ensuresStatus(clause, functions, notRead)
                 )
             )
     }
 
-    private val clauseArities =
-        Map(Obligations.Ensures -> 1, Obligations.Ensuring -> 2, Obligations.Expects -> 1)
-
-    /** The theorem `name` as a status: the statements, the tactic and the proofs. */
-    private def checkedBy(theorems: List[Theorem]): ClauseStatus.Checked =
+    /** The theorems as a status: the statements, the tactics, the proofs, and the limits of their
+      * variables.
+      */
+    private def checkedBy(theorems: List[Theorem]): ClauseStatus.Checked = {
         ClauseStatus.Checked(
           theorems.map(_.statement.name),
           theorems
-              .flatMap(theorem => provedWith.get(theorem.statement.name))
+              .flatMap(theorem => provedBy.get(theorem.statement.name).map(_.name))
               .distinct
               .mkString(", "),
-          theorems.flatMap(_.proof.kinds).toSet
+          theorems.flatMap(_.proof.kinds).toSet,
+          theorems.flatMap(theorem => limitsOf(theorem.statement.prop)).distinct
         )
+    }
 
-    /** A theorem that proves `statement`: the statement itself, or one a tactic finds the same. */
-    private def provedFor(statement: Statement): Option[Theorem] =
+    /** The limits of the variables of `prop` ([[Props.forAllDataLimited]]), as they read. */
+    private def limitsOf(prop: Prop): List[String] = prop match
+        case Prop.Forall(ident, body) =>
+            val limits = DataEncoding.limits(ident.tp)
+            val here =
+                if limits.all.isEmpty then Nil else List(s"${ident.name}: ${limits.describe}")
+            here ++ limitsOf(body)
+        case Prop.Implies(premise, conclusion) => limitsOf(premise) ++ limitsOf(conclusion)
+        case Prop.Rejects(premise, claim)      => limitsOf(premise) ++ limitsOf(claim)
+        case Prop.And(left, right)             => limitsOf(left) ++ limitsOf(right)
+        case Prop.Or(left, right)              => limitsOf(left) ++ limitsOf(right)
+        case Prop.Iff(left, right)             => limitsOf(left) ++ limitsOf(right)
+        case Prop.Not(inner)                   => limitsOf(inner)
+        case _                                 => Nil
+
+    /** A theorem that proves `statement`: the statement itself, or one that the tactic that proved
+      * it finds the same.
+      */
+    private def provedFor(statement: Statement): Option[Theorem] = {
         proven.get(statement.name).orElse {
-            tactics.valuesIterator
+            provers.iterator
                 .flatMap(tactic => identityOf(statement, tactic).flatMap(provedAs.get))
                 .nextOption()
         }
+    }
 
-    /** An open statement, with its reason, that is `statement` or the same as it. */
-    private def openFor(statement: Statement): Option[(String, String)] =
-        opened.get(statement.name).map(statement.name -> _).orElse {
+    /** An open statement, with its reason, that is `statement`, or that a tactic that proved
+      * something finds the same as it.
+      */
+    private def openFor(statement: Statement): Option[ClauseStatus] = {
+        opened.get(statement.name).map(ClauseStatus.Open(statement.name, _)).orElse {
             opened.iterator.collectFirst {
-                case (name, reason) if tactics.valuesIterator.exists { tactic =>
+                case (name, reason) if provers.exists { tactic =>
                         val identity = identityOf(statement, tactic)
                         identity.nonEmpty && identity == identityOf(declarations(name), tactic)
                     } =>
-                    name -> reason
+                    ClauseStatus.Open(name, reason)
             }
         }
+    }
 
-    private def ensuresStatus(clause: Clause): ClauseStatus = {
+    /** The clause declared open by its place, in the code of one of `functions`. */
+    private def openClause(
+        clause: Clause,
+        functions: List[FunctionDef[?, ?]]
+    ): Option[ClauseStatus] = {
+        functions.iterator
+            .flatMap(function => openedClauses.get(function.name -> clause.line))
+            .nextOption()
+            .map(ClauseStatus.Open("", _))
+    }
+
+    private def ensuresStatus(
+        clause: Clause,
+        functions: List[FunctionDef[?, ?]],
+        notRead: Set[String]
+    ): ClauseStatus = {
         val candidates = stating
-            .collect {
-                case (name, clauses) if clauses(clause) => declarations(name)
-            }
+            .collect { case (name, clauses) if clauses(clause) => declarations(name) }
             .toList
             .sortBy(_.name)
         candidates.iterator.flatMap(provedFor).nextOption() match
             case Some(theorem) => checkedBy(List(theorem))
             case None =>
-                candidates.iterator.flatMap(openFor).nextOption() match
-                    case Some((name, reason)) => ClauseStatus.Open(name, reason)
-                    case None =>
-                        ClauseStatus.Unchecked(
-                          candidates.map(_.name),
-                          if candidates.isEmpty then
-                              "no statement here states it: declare its statements with " +
-                                  "verifier.guarantees, or its contract with FunctionContract.inSource"
-                          else
-                              "prove one of its statements, or one that is the same, or declare it open"
-                        )
+                candidates.iterator
+                    .flatMap(openFor)
+                    .nextOption()
+                    .orElse(openClause(clause, functions))
+                    .getOrElse {
+                        val unreadIn = functions.map(_.name).filter(notRead)
+                        val missing = unstatable.get(clause) match
+                            case Some(reason) =>
+                                s"$reason, so no statement states it: declare it open with " +
+                                    s"verifier.open(function, ${clause.line}, reason)"
+                            case None if candidates.nonEmpty =>
+                                "prove one of its statements, or one that is the same, or " +
+                                    "declare it open"
+                            case None if unreadIn.nonEmpty =>
+                                s"the code of ${unreadIn.mkString(", ")} is no function of its " +
+                                    "declared parameters, so no statement states it: declare it " +
+                                    s"open with verifier.open(function, ${clause.line}, reason)"
+                            case None =>
+                                "no statement here states it: declare its statements with " +
+                                    "verifier.guarantees, or its contract with " +
+                                    "FunctionContract.inSource"
+                        ClauseStatus.Unchecked(candidates.map(_.name), missing)
+                    }
     }
 
     private def expectsStatus(clause: Clause, owners: List[FunctionDef[?, ?]]): ClauseStatus = {
@@ -961,36 +1104,53 @@ final class Verifier private (results: Option[KeptResults]) {
         // The functions here, but those that state the clause, that call one that does.
         val callers = functionTable.definitions.toList.filter { definition =>
             !names(definition.name) && definition.get(Representation.Sir).exists { sir =>
-                val body = Obligations.body(definition, sir)
+                Obligations.hasBody(definition, sir) &&
                 Obligations
                     .sites(
-                      EraseSpecifications(body.term),
+                      EraseSpecifications(Obligations.body(definition, sir).term),
                       owners.map(owner => owner.name -> owner.arity).toMap
                     )
                     .nonEmpty
             }
         }
-        if callers.isEmpty then ClauseStatus.NotOwed
+        if callers.isEmpty then openClause(clause, owners).getOrElse(ClauseStatus.NotOwed)
         else
+            // Callers whose obligations were not asked for: none stated, and none found unstatable.
             val unstated = callers.filterNot(caller =>
                 owed.exists(_.origin match
                     case Origin.Obligation(of, _, _, _) => of.name == caller.name
-                    case _                              => false)
+                    case _                              => false) ||
+                    owners.exists(owner => unstatedCalls.contains(caller.name -> owner.name))
             )
+            // Calls an obligation could not be stated of, as one inside a function value.
+            val unstatableCalls = for
+                caller <- callers
+                owner <- owners
+                reason <- unstatedCalls.getOrElse(caller.name -> owner.name, Nil)
+            yield reason
             val unproved = owed.filterNot(statement => provedFor(statement).nonEmpty)
-            if unstated.isEmpty && unproved.isEmpty then checkedBy(owed.flatMap(provedFor))
+            if unstated.isEmpty && unstatableCalls.isEmpty && unproved.isEmpty then
+                checkedBy(owed.flatMap(provedFor))
             else
-                val toState =
-                    if unstated.isEmpty then Nil
-                    else
-                        List(
-                          s"state the obligations of ${unstated.map(_.ref.displayName).mkString(", ")}" +
-                              " with verifier.obligations, under the contract read from the code"
-                        )
-                val toProve =
-                    if unproved.isEmpty then Nil
-                    else List(s"prove ${unproved.map(_.name).mkString(", ")}")
-                ClauseStatus.Unchecked(owed.map(_.name), (toState ++ toProve).mkString("; "))
+                openClause(clause, owners).getOrElse {
+                    val toState =
+                        if unstated.isEmpty then Nil
+                        else
+                            List(
+                              s"state the obligations of ${unstated.map(_.ref.displayName).mkString(", ")}" +
+                                  " with verifier.obligations, under the contract read from the code"
+                            )
+                    val unstatableNow =
+                        if unstatableCalls.isEmpty then Nil
+                        else List(s"no statement is made of: ${unstatableCalls.mkString("; ")}")
+                    val toProve =
+                        if unproved.isEmpty then Nil
+                        else List(s"prove ${unproved.map(_.name).mkString(", ")}")
+                    ClauseStatus.Unchecked(
+                      owed.map(_.name),
+                      (toState ++ unstatableNow ++ toProve).mkString("; ")
+                    )
+                }
     }
 
     /** Prepares and runs `tactic`. Use the two-phase API to make incompatibility impossible at the

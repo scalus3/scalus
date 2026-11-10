@@ -106,7 +106,7 @@ object LeanWorkspaceTool {
               directory.resolve(s"$name.lean") -> moduleText(name),
               directory.resolve(".gitignore") -> "/.lake\n"
             ).filter((file, text) => writeIfAbsent(file, text)).map(_._1)
-            Files.createDirectories(directory.resolve(name))
+            proofDirectories(directory, name)
             // A file that was there is left, as a `lean-toolchain`, and may not be the library's.
             Outcome(directory, true, written ::: unpacked, disagreements(directory, library))
         else
@@ -119,12 +119,28 @@ object LeanWorkspaceTool {
                     val ours = library.getParent != null &&
                         library.getParent.getFileName.toString == sharedDirectory
                     val unpacked = if ours then unpack(library) else Nil
-                    // The directory of the modules its library is made of: Lake does not build
-                    // without it, and a checkout does not have it while it is empty.
-                    if Files.readString(lakefile).contains(s".andSubmodules `$name]") then
+                    // The directories of the modules its libraries are made of: Lake does not build
+                    // without them, and a checkout does not have them while they are empty.
+                    val text = Files.readString(lakefile)
+                    if text.contains(s".andSubmodules `$name]") then
                         Files.createDirectories(directory.resolve(name))
+                    if text.contains(s".submodules `$name.${LeanWorkspace.GeneratedDirectory}") then
+                        proofDirectories(directory, name)
                     Outcome(directory, false, unpacked, disagreements(directory, library))
     }
+
+    /** Makes the directories of the statements Scalus writes and of the proofs written by hand,
+      * which the library of proofs of a workspace globs, and Lake does not build without.
+      */
+    private def proofDirectories(directory: Path, name: String): Unit = {
+        Files.createDirectories(directory.resolve(name).resolve(LeanWorkspace.GeneratedDirectory))
+        Files.createDirectories(directory.resolve(name).resolve(LeanWorkspace.ProofsDirectory))
+    }
+
+    /** The name of the library of a workspace `name` that has the statements Scalus writes and the
+      * proofs written by hand: `lake build <name>Proofs` builds them.
+      */
+    def proofsLibrary(name: String): String = s"${name}Proofs"
 
     /** `init <directory>` makes the workspace in the directory ready and prints what was done. */
     def main(args: Array[String]): Unit = args.toList match
@@ -288,11 +304,20 @@ object LeanWorkspaceTool {
            |-- where this path says, as long as that is in a `.scalus`.
            |require $libraryName from "$library"
            |
+           |-- What a check imports is imported by the root module, so building this library builds
+           |-- what the checks need, and no more.
            |@[default_target]
            |lean_lib «$name» where
-           |  -- Every module under `$name/` is built, so a proof written by hand is checked without
-           |  -- being imported from `$name.lean`.
-           |  globs := #[.andSubmodules `$name]
+           |
+           |-- The statements Scalus writes under `$name/Generated`, and the proofs written by hand under
+           |-- `$name/Proofs`: `lake build ${proofsLibrary(
+            name
+          )}`, or `sbt leanProve`. A statement runs its
+           |-- programs symbolically where it is built, which may take minutes, and a proof may not
+           |-- hold yet, so they are not of the default target.
+           |lean_lib «${proofsLibrary(name)}» where
+           |  roots := #[]
+           |  globs := #[.submodules `$name.Generated, .submodules `$name.Proofs]
            |""".stripMargin
 
     private def moduleText(name: String): String =
@@ -300,8 +325,8 @@ object LeanWorkspaceTool {
            |
            |/-!
            |$name. What a check of Scalus imports is imported here, so building this library builds
-           |everything such a check needs. Proofs written by hand go into modules under `$name/`,
-           |which `lake build` builds with it.
+           |everything such a check needs. Proofs written by hand go into modules under
+           |`$name/Proofs`, which `lake build ${proofsLibrary(name)}` builds.
            |-/
            |""".stripMargin
 }

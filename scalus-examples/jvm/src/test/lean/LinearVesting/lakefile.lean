@@ -13,8 +13,15 @@ package «LinearVesting» where
 
 require ScalusProofs from "../../../../../../scalus-verification/src/main/lean"
 
+-- What a check imports is imported by the root module, so building this library builds what the
+-- checks need, and no more.
 @[default_target]
 lean_lib «LinearVesting» where
-  -- Every module under `LinearVesting/` is built: those Scalus writes under `Generated/`, and a
-  -- proof written by hand, without being imported from `LinearVesting.lean`.
-  globs := #[.andSubmodules `LinearVesting]
+
+-- The statements Scalus writes under `LinearVesting/Generated` and the proofs written by hand under
+-- `LinearVesting/Proofs`: `lake build LinearVestingProofs`, or `sbt leanProve`. Building a
+-- statement runs its programs symbolically, which takes minutes, and a proof may not hold yet, so
+-- they are not of the default target.
+lean_lib «LinearVestingProofs» where
+  roots := #[]
+  globs := #[.submodules `LinearVesting.Generated, .submodules `LinearVesting.Proofs]
