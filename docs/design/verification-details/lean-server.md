@@ -460,8 +460,9 @@ that requires it ("Several workspaces").
   written to a temporary directory.
 - **The generated Lean**, in part. The Lean types of a contract's Scala types are written into
   the workspace, under `<Package>/Generated` ([Lean types for Scala types](lean-types.md)).
-  Statements are not: `LeanExporter` still waits for `lean-direct`, and a statement over the
-  programs of its tests is proposed there.
+  So are the statements proved, over the programs of their tests
+  ([statements as Lean modules](lean-export.md)). `LeanExporter`, a statement over functions
+  mapped to Lean, still waits for `lean-direct`.
 
 ## Keeping prepared leaves
 

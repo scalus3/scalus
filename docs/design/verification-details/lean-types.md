@@ -207,21 +207,11 @@ Language ("What comes next"), whose consumers have that library.
 
 ## What comes next
 
-Proposed, in this order.
-
 1. **Agreement with the predicate.** For a type whose encoding is exact,
    `T.isEncoding d = <predicate of DataEncoding> d` for every `d`. It is to be stated as a lemma
    of the generated module and proved once per type, so that a statement over `Data` with the
-   predicate and one over the typed variable are the same statement.
-2. **Statements as Lean.** A named statement of a `Verifier` as `def <name> : Prop`, in
-   `<Package>.Generated.<Suite>`, over the programs of its tests, which are written beside it
-   with paths in the workspace. Variables are typed by the types here.
-3. **`lean-manual`.** A proof written by hand, `theorem … : Generated.<name> := by …`, in the
-   workspace's own modules. A tactic checks that the theorem is of the generated statement,
-   classifies it with `#print axioms`, and keeps the result with the hash of the proof's file.
-   The statements Lean does not finish, as those of a loop over a list of unknown length, are
-   the ones to prove so.
-4. **An sbt task**, `leanExport`, that writes the generated modules of a project, beside
-   `leanInit` and `leanBuild`.
-5. **Export to the Universal Annotation Language**: the same Lean terms as the `formal` bodies of
-   an assurance document, with the programs in its function registry.
+   predicate and one over the typed variable are the same statement. Proposed.
+2. **Statements over the types.** A statement is written into the workspace as a Lean module
+   ([statements as Lean modules](lean-export.md)), over the variables the tactic quantifies:
+   fields and `Data`, not yet the types here. A statement over a typed variable passes `toData x`
+   to its programs, with `wellFormed x` as a premise. Proposed.

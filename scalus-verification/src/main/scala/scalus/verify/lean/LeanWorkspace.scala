@@ -29,6 +29,11 @@ object LeanWorkspace {
       */
     val GeneratedDirectory = "Generated"
 
+    /** The directory of a workspace's package, under that of its library's modules, that holds the
+      * proofs written by hand of the statements under [[GeneratedDirectory]].
+      */
+    val ProofsDirectory = "Proofs"
+
     /** The name of the workspace's package: that of its manifest, or of its directory where it has
       * no manifest yet.
       */
@@ -111,11 +116,14 @@ object LeanWorkspace {
       * run by hand, or a file someone tries something in, changes no result. Nor do the modules
       * under `<name>/Generated` ([[generated]]): they are written from the Scala sources, whose
       * statements and programs a result's entry has the hashes of already, and a type added to one
-      * of them is no reason to prove every statement of the workspace again.
+      * of them is no reason to prove every statement of the workspace again. Nor do the proofs
+      * written by hand, under `<name>/Proofs` ([[ProofsDirectory]]): a check imports Scalus's
+      * library, and no module of the workspace, so a proof changes no check.
       */
     private def sources(directory: Path, name: String): String = {
         val modules = directory.resolve(name)
         val written = modules.resolve(GeneratedDirectory)
+        val byHand = modules.resolve(ProofsDirectory)
         val below =
             if Files.isDirectory(modules) then
                 val walked = Files.walk(modules)
@@ -123,7 +131,10 @@ object LeanWorkspace {
                     walked
                         .iterator()
                         .asScala
-                        .filter(file => Files.isRegularFile(file) && !file.startsWith(written))
+                        .filter(file =>
+                            Files.isRegularFile(file) && !file.startsWith(written) &&
+                                !file.startsWith(byHand)
+                        )
                         .toList
                 finally walked.close()
             else Nil

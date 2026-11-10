@@ -120,15 +120,19 @@ class LeanTypesTest extends AnyFunSuite with LeanProofsSuite {
         assert(types.codec(LeanTypes.typeOf[TypedRecord]).contains(theirs))
     }
 
-    test("a module that is generated is no part of what a kept result rests on") {
+    test(
+      "a module that is generated, or a proof by hand, is no part of what a kept result rests on"
+    ) {
         import java.nio.file.Files
         import scalus.verify.lean.LeanWorkspace
         val workspace = Files.createTempDirectory("scalus-lean-types").resolve("Vault")
-        Files.createDirectories(workspace.resolve("Vault"))
+        Files.createDirectories(workspace.resolve("Vault").resolve("Proofs"))
         Files.writeString(workspace.resolve("lean-toolchain"), "leanprover/lean4:v4.24.0\n")
         Files.writeString(workspace.resolve("Vault.lean"), "import ScalusProofs.Run\n")
-        val byHand = workspace.resolve("Vault").resolve("Proofs.lean")
+        val byHand = workspace.resolve("Vault").resolve("Proofs").resolve("Clamp.lean")
         Files.writeString(byHand, "theorem one : 1 = 1 := rfl\n")
+        val own = workspace.resolve("Vault").resolve("Lemmas.lean")
+        Files.writeString(own, "theorem one : 1 = 1 := rfl\n")
         val before = LeanWorkspace.environment(workspace)
 
         val (module, file) = LeanWorkspace.generated(workspace, "Types")
@@ -140,9 +144,56 @@ class LeanTypesTest extends AnyFunSuite with LeanProofsSuite {
         assert(!LeanWorkspace.write(file, text))
         assert(LeanWorkspace.environment(workspace) == before)
 
-        // A proof written by hand is the workspace's own source, and is.
+        // A proof written by hand is not either: a check imports none of the workspace's modules.
         Files.writeString(byHand, "theorem two : 2 = 2 := rfl\n")
+        assert(LeanWorkspace.environment(workspace) == before)
+
+        // Another module of the workspace's package is.
+        Files.writeString(own, "theorem two : 2 = 2 := rfl\n")
         assert(LeanWorkspace.environment(workspace) != before)
+    }
+
+    test("a statement is a Lean module, of which a proof by hand is a theorem") {
+        import java.nio.file.Files
+        import scalus.cardano.onchain.plutus.prelude.Math
+        import scalus.verify.{FunctionDef, FunctionTable}
+        import scalus.verify.Props.*
+        val clamp = FunctionDef(Math.clamp)
+        val inRange = forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
+            (lo <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+        )
+        val lowered = UplcBlaster.lower(inRange, FunctionTable(clamp)).fold(fail(_), identity)
+        val module = "Vault.Generated.clamp_in_range"
+        // In a workspace the programs are at paths from its directory; here, in a directory of
+        // the test, by their whole paths.
+        val directory = Files.createTempDirectory("scalus-statement-module")
+        val written =
+            UplcBlaster.statementModule(lowered, 120, 400000, module, directory.toString)
+        assert(
+          written.programs.map(_._1) == Vector(s"$directory/Leaf0.flat", s"$directory/Leaf1.flat")
+        )
+        written.programs.foreach((path, program) =>
+            Files.writeString(java.nio.file.Path.of(path), UplcBlaster.programHex(program))
+        )
+        assert(written.text.contains(s"namespace $module"), written.text)
+        assert(written.text.contains("def statement : Prop :=\n  (∀ (x0 : Integer)"), written.text)
+        // The header says the programs and the budget, so the text changes with them, and a
+        // module is held to the code by them.
+        assert(UplcBlaster.statementModuleOf(written.text) == Some(120 -> lowered.programHashes))
+        assert(UplcBlaster.statementModuleOf("def statement : Prop := True").isEmpty)
+        assert(!written.text.contains("#blaster"))
+
+        requireLean()
+        val proof = s"theorem clamp_in_range : $module.statement := by\n" +
+            s"  unfold $module.statement\n  blaster\n"
+        leanServer.check(
+          written.text + "\nset_option warn.sorry false\n" + proof,
+          Some(5.minutes)
+        ) match
+            case Result.Finished(messages) =>
+                val errors = messages.filter(_.severity == Severity.Error)
+                assert(errors.isEmpty, errors.map((m: Message) => s"${m.line}: ${m.text}"))
+            case other => fail(s"Lean did not check the statement: $other")
     }
 
     test("Lean takes the types, and encodes values as Scalus does") {

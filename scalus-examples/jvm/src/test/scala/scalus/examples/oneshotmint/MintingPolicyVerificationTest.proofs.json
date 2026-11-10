@@ -8,26 +8,6 @@
     }
   },
   "results": {
-    "mints_of_distinct_token_names/ensures": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "5839592f71e54d67",
-      "programs": [
-        "05042940663a17f3",
-        "dc60b5edc419394e",
-        "31fff90cea6c400a",
-        "4ad4c32829df2318",
-        "0024902df9ce39b1",
-        "1ea5b97d92c2b1a6"
-      ],
-      "notes": {
-        "budget": "4010",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the guarantees stated on mint hold of every transaction the policy accepts"
-      ]
-    },
     "one_shot_mint.deployed.only_the_seed_mints.two_of_each": {
       "tactic": "uplc-blaster",
       "result": "proved",
@@ -115,6 +95,27 @@
       },
       "tests": [
         "a transaction that does not spend the seed burns the tokens"
+      ]
+    },
+    "one_shot_mint.mint.guarantees": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5839592f71e54d67",
+      "programs": [
+        "05042940663a17f3",
+        "b6e895014e43f262",
+        "8cb11a7ed78ab24e",
+        "4ad4c32829df2318",
+        "b02747ece388a25c",
+        "5d92e8eca5dbb36e"
+      ],
+      "notes": {
+        "budget": "2920",
+        "form": "as written",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the guarantees stated on mint hold of every transaction the policy accepts"
       ]
     },
     "one_shot_mint.mint.seed_mints_any_quantity": {

@@ -49,6 +49,13 @@ import sbtcompat.PluginCompat.*
   * is not part of `test`: the first build clones and builds what the library requires, which
   * takes minutes and the network. A project without `scalus-verification` is passed over by
   * both tasks.
+  *
+  * Two tasks export what the proofs prove, by running the project's tests with the export on: all
+  * of them, or those named, as `testOnly` takes them (`leanExport *VestingVerificationTest`).
+  * `leanExport` writes every named statement into the workspace as a Lean module, under
+  * `<Package>/Generated`, where a proof written by hand is a theorem of it. `ualExport` writes
+  * the statements as documents of the Universal Annotation Language, in a directory for each
+  * suite of proofs under `ualExportDirectory`, `target/ual` unless the build says another.
   */
 object ScalusSbtPlugin extends AutoPlugin {
 
@@ -84,6 +91,18 @@ object ScalusSbtPlugin extends AutoPlugin {
         val leanBuild =
             taskKey[Unit](
               "Run `lake build` in the Lean workspace, which the checks of the proofs need"
+            )
+        val leanExport =
+            inputKey[Unit](
+              "Run the project's tests, or the ones named, and write every named statement they prove into the Lean workspace as a module"
+            )
+        val ualExportDirectory =
+            settingKey[java.io.File](
+              "Where ualExport writes: a directory for each suite of proofs, under it"
+            )
+        val ualExport =
+            inputKey[java.io.File](
+              "Run the project's tests, or the ones named, and export the statements they prove as documents of the Universal Annotation Language"
             )
     }
 
@@ -423,6 +442,79 @@ object ScalusSbtPlugin extends AutoPlugin {
         }
     }.tag(LeanTag)
 
+    /** Where the export tasks leave word for the resource generator below, while they run the
+      * tests: a file for each export that is on, with what its resource is to say.
+      */
+    private val exportFlags =
+        settingKey[java.io.File]("Where leanExport and ualExport say that they run")
+
+    private val exportResources =
+        taskKey[Seq[java.io.File]](
+          "The resources on the test class path that say which exports of the proofs are on"
+        )
+
+    /** Tells the project's tests which exports are on, by resources on their class path
+      * (`LeanProofs.leanExportResource`, `LeanProofs.ualExportResource`), as they are told their
+      * workspace. A resource is there while its task runs the tests, and is deleted after: a
+      * plain `test` exports nothing.
+      */
+    lazy val exportResourcesTask: Def.Initialize[Task[Seq[java.io.File]]] = Def.task {
+        val managed = (Test / resourceManaged).value / "scalus" / "verify"
+        val flags = exportFlags.value
+        Seq("lean", "ual").flatMap { kind =>
+            val flag = flags / kind
+            val file = managed / kind / "export"
+            if (flag.isFile) {
+                val said = IO.read(flag)
+                if (!file.isFile || IO.read(file) != said) IO.write(file, said)
+                Seq(file)
+            } else {
+                IO.delete(file)
+                Seq.empty[java.io.File]
+            }
+        }
+    }
+
+    lazy val exportResourcesGenerator: Def.Initialize[Task[Seq[java.io.File]]] = Def.task {
+        exportResources.value
+    }
+
+    /** Runs the project's tests with the export `kind` on, saying `said` to them: all of them,
+      * or those the arguments name, as `testOnly` takes them. The proofs of the tests do the
+      * export (`scalus.verify.uplcblaster.LeanProofs`): a statement is exported as it is proved,
+      * or as its kept result says where Lean does not run.
+      */
+    private def exporting[A](kind: String, said: java.io.File => String)(
+        result: java.io.File => A
+    ): Def.Initialize[InputTask[A]] = Def.inputTaskDyn {
+        val tests = spaceDelimited("<test>").parsed
+        val flag = exportFlags.value / kind
+        val directory = ualExportDirectory.value
+        IO.write(flag, said(directory))
+        // `testOnly` without a test runs all of them. It returns no result in sbt 1 and a
+        // `TestResult` in sbt 2, which is not read: a test that fails fails the task.
+        val selected = tests.mkString(" ", " ", "")
+        Def
+            .task {
+                val _ = (Test / testOnly).toTask(selected).value
+                result(directory)
+            }
+            .andFinally(IO.delete(flag))
+    }
+
+    /** Writes every named statement the tests prove into the Lean workspace, under
+      * `<Package>/Generated`, where a proof written by hand is a theorem of it.
+      */
+    lazy val leanExportTask: Def.Initialize[InputTask[Unit]] =
+        exporting("lean", _ => "on")(_ => ())
+
+    /** Exports the statements the tests prove as documents of the Universal Annotation Language:
+      * `assurance.json`, `annotations.ual` and the checking contexts, in a directory for each
+      * suite of proofs under `ualExportDirectory`.
+      */
+    lazy val ualExportTask: Def.Initialize[InputTask[java.io.File]] =
+        exporting("ual", _.getAbsolutePath)(directory => directory)
+
     override lazy val globalSettings: Seq[Setting[?]] = Seq(
       Global / concurrentRestrictions += Tags.limit(LeanTag, 1)
     )
@@ -451,7 +543,13 @@ object ScalusSbtPlugin extends AutoPlugin {
       Test / resourceGenerators += leanWorkspaceGenerator.taskValue,
       leanReady := Def.uncached(leanReadyTask.value),
       leanInit := Def.uncached(leanInitTask.value),
-      leanBuild := Def.uncached(leanBuildTask.value)
+      leanBuild := Def.uncached(leanBuildTask.value),
+      exportFlags := target.value / "scalus-export",
+      exportResources := Def.uncached(exportResourcesTask.value),
+      Test / resourceGenerators += exportResourcesGenerator.taskValue,
+      ualExportDirectory := target.value / "ual",
+      leanExport := Def.uncached(leanExportTask.evaluated),
+      ualExport := Def.uncached(ualExportTask.evaluated)
     )
 
     /** Derive a simple file name from a fully qualified class name. */
