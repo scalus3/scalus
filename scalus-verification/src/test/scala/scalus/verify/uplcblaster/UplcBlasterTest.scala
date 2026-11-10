@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude
 import scalus.cardano.onchain.plutus.prelude.{require, Math}
-import scalus.cardano.onchain.plutus.v1.Value
+import scalus.cardano.onchain.plutus.v1.{PubKeyHash, Value}
 import scalus.compiler.{Compile, UplcRepr, UplcRepresentation}
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRBuiltins, SIRType, TargetLoweringBackend}
 import scalus.compiler.sir.lowering.{PrimitiveRepresentation, ProductCaseClassRepresentation, SumCaseClassRepresentation}
@@ -1065,6 +1065,14 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         val firstOnly =
             forAllData[BlasterPair](p => p.a + p.b == p.b + p.a)(using BlasterPairReader.firstOnly)
         assert(PropIdentity.of(firstOnly) == PropIdentity.of(plain))
+        // So is a variable marked as over the encodings without limits, as no macro builds one: it
+        // is the statement of its values, as the tactic checks it.
+        plain match
+            case Prop.Forall(variable, body) =>
+                val decoder = SIR.Const(Constant.Unit, SIRType.Unit, AnnotationsDecl.empty)
+                val marked = Prop.Forall(DataEncoding.encodedVariable(variable, decoder), body)
+                assert(PropIdentity.of(marked) == PropIdentity.of(plain))
+            case other => fail(s"expected a forAll, got $other")
         val lowering = lowered(commutes, FunctionTable.empty)
         assert(lowering.binders.size == 2, lowering.binders)
         assert(lowering.programHashes == lowered(plain, FunctionTable.empty).programHashes)
@@ -1814,6 +1822,19 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
               "(Data.B (ByteString.mk \"\")), " +
               "(Data.List [(Data.I 3)]), (Data.Map [((Data.I 1), (Data.I 2))])])"
         )
+        // Values read with a renaming of the solver's characters are written as Lean's own, each
+        // renamed byte the character again, in a byte string and in a Data's.
+        val renaming = SmtValues.Renaming(Map(0x100 -> 0xfe, 0x10000 -> 0xff), Map.empty)
+        val renamed = ByteString.fromArray(Array[Byte](0x41, -2, -1))
+        val above = Character.toString(0x10000)
+        assert(
+          UplcBlaster.leanValue(Constant.ByteString(renamed), renaming) ==
+              "Const.ByteString (ByteString.mk \"\\x41\\u0100" + above + "\")"
+        )
+        assert(
+          UplcBlaster.leanValue(Constant.Data(Data.B(renamed)), renaming) ==
+              "Const.Data (Data.B (ByteString.mk \"\\x41\\u0100" + above + "\"))"
+        )
 
         // The count of a test's program takes the values of the variables in its scope.
         val goal = lowered(forAll[BigInt, Data]((x, d) => x == x), FunctionTable.empty)
@@ -1967,6 +1988,30 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         // A false statement is refuted, at whatever budget shows it.
         val negative = refuted(forAll[BlasterOwned](o => o.amount >= BigInt(0)), Budget.Auto)
         assert(negative.exists((name, value) => name.endsWith(".amount") && integer(value) < 0))
+    }
+
+    test("a counterexample outside its variable's type is counted, and can need every budget") {
+        // Lean does not check the order of the keys of a map keyed by a case class, nor does the
+        // tactic, so Lean's variable has maps whose keys are out of order, which no SortedMap is.
+        // `get` stops at a greater key: on such a map it misses the second key, and the statement,
+        // true of every SortedMap, is false there on the Scalus CEK. That refutes it only if the
+        // map is a SortedMap, which the tactic cannot tell, and no budget proves it. The search
+        // counts the counterexamples before it, which may be no SortedMap either, instead of
+        // doubling the budget, and stops there.
+        val secondIsFound = forAll[prelude.SortedMap[PubKeyHash, BigInt]](m =>
+            m.toList match
+                case prelude.List.Cons(_, prelude.List.Cons(second, _)) =>
+                    m.get(second._1).isDefined
+                case _ => true
+        )
+        val searched = inconclusive(secondIsFound, UplcBlaster(Budget.Auto, lean, 3.minutes))
+        assert(searched.contains("no value of its variable's type"), searched)
+        assert(searched.contains("no budget proves it"), searched)
+        assert(searched.contains("only if it is a value of the type"), searched)
+        assert(!searched.contains(UplcBlaster.maxDoubledBudget.toString), searched)
+        // At a given budget, the count says so too.
+        val atGiven = inconclusive(secondIsFound, 400, 2.minutes)
+        assert(atGiven.contains("no budget proves it"), atGiven)
     }
 
     test("what a result rests on is hashed part by part, without Lean and without the budget") {

@@ -51,6 +51,13 @@ was found at, `Artifact.budget`, whichever way the budget came.
 3. A counterexample that is spurious says what is missing. Lean's machine counts what each
    test's program does on its values. The next budget is the least at which the statement, read
    as Lean reads it under a budget, holds on those values. Go to 2.
+4. A counterexample that may be no value of its variable's type, which Lean's variable has where
+   its restriction is not exact, is replayed too. A map keyed by a case class is one: Lean does
+   not check the order of its keys, nor does the tactic, so it cannot tell a value of the type
+   from one that is none. Where the statement holds on it on the Scalus CEK, it is spurious and
+   counted as any: Lean's variable ranges over it, so a proof needs a budget that covers its
+   runs. Where it is false there, it refutes the statement only if it is a value of the type,
+   and no budget proves the statement: the search ends, and says so.
 
 ### Counting on Lean's machine
 
@@ -64,6 +71,10 @@ counterexample's values written as Lean terms.
   the Scalus CEK takes in memory and that an encoded program does not carry to Lean, such as a
   `Data` constructor with a tag of more than 64 bits. Written as a term it is the value Lean
   falsified the statement with.
+- **They are Lean's own.** A byte string of Lean's model can have characters above 255, which
+  the replay reads as bytes that no value and no constant uses. The count writes each such byte
+  as the solver's character again, so Lean's machine runs on what it found. A string's renamed
+  character was a surrogate, which no Lean string has: such a counterexample is not counted.
 - **The programs are the ones of the check.** A search writes its programs once, into a
   directory of its own, and every check and count of the search imports them from there. The
   lines that import them are then the same text in every document, and the server elaborates
@@ -88,9 +99,15 @@ thousands of steps, and taking its count is the oversized budget again.
 - **A proof or a refutation.** A refutation is one at whatever budget showed it: the replay is
   without the budget.
 - **No values to count on.** A statement that asks for a witness is falsified without values
-  that could be replayed, and a counterexample can be outside its variable's type. The budget
-  is then doubled, a few times: a false statement of that kind would else cost one check
-  after the other for the same answer.
+  that could be replayed, and a counterexample can be no value at all, as a string with a
+  surrogate. The budget is then doubled, a few times: a false statement of that kind would else
+  cost one check after the other for the same answer.
+- **No budget, of values that may be outside the type.** Where the statement is false on the
+  Scalus CEK of a counterexample that may be no value of its variable's type, no budget proves
+  it, and the result says that it is a refutation only if the values are of the type. On a map
+  keyed by a case class whose keys are not in order, `get` misses a key: "the second key is
+  found" holds of every `SortedMap`, and the search ends after three checks, at 100, 116 and 393
+  steps, where it doubled to 6288 before (2026-11-10).
 - **The most that is counted,** 100000 steps. A counterexample that needs more gives no budget.
 - **Time.** The tactic's time limit is that of the whole search. `withAttemptTimeout` gives one
   check of it a limit of its own. The two guard against different things: one check that

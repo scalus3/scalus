@@ -548,15 +548,32 @@ through the types around it.
   and Lean's time grows far faster than the budget past about 1100 steps. Lean's profiler on one
   of them at a small budget would show which reads branch most; exact lengths in the limits, one
   shape of each value, are the next thing to try.
-- **Counting a counterexample outside the type.** Where Lean's restriction of a variable is not
-  exact, as for a map whose keys are not bytes, a counterexample can be no value of the type. It
-  refutes nothing, but Lean's variable ranges over it, so its steps on Lean's machine are what a
-  budget must cover: the search could count them, as for a spurious counterexample, instead of
-  giving up or doubling. It would find the budget of the splitter's spend, which is given by hand.
 - **Liveness under its premise.** `premise ==>: succeeds(validator, …)` has Lean run the validator on
-  every context, the premise pruning none, as the rejecting form does for a guarantee. One program
-  `if premise then validator else ()`, which halts on every context exactly where the statement
-  holds, would run the validator only where the premise holds, for a premise that returns.
+  every context, the premise pruning none. Two accepting forms, which run the validator only where
+  the premise holds, were built and measured on the suites (2026-11-09), and dropped:
+  - One program, `if premise then validator else true`, which returns `true` exactly where the
+    statement holds, for a premise that returns. The suites' premises do not: HTLC's and the
+    splitter's read the redeemer with a decoder that fails on other `Data`. The attempt in that
+    form ended at a context where the premise fails, after 24 to 52 s, and the statement as
+    written was checked after it.
+  - `premise ==>: (if premise then validator else true)`, which states the same on every value,
+    so with no fallback. One program runs the premise and then the validator, so the budget must
+    cover both, and a check has one budget for every program: the premise's own is explored at
+    it too. The three `Unfinished` liveness statements, Vesting's withdrawal after the end and the
+    splitters' honest payouts, did not finish in 20 minutes with `Budget.Auto`: after a spurious
+    counterexample at about 2030 steps, Lean was in the premise's symbolic run at 2280 to 2859.
+    Of the statements that finish, HTLC's refund from the timeout took 50 s at 4000 steps (24 s as
+    written), the mint's two were 10 to 20% faster at budgets 15% higher, and the optimized
+    splitter's spend with its withdrawal was no longer proved at its given 1600 steps.
+
+  A budget of each program, the accepting program's the premise's and the validator's, would
+  keep the premise's at its own; that is a change of the Lean check.
+- **An exact order of the keys of a map keyed by a case class.** Lean's restriction of a map,
+  and the tactic's check of a value, test the order of the keys only where they are byte strings
+  or integers. A map keyed by a credential, as a context's withdrawals, can then be one whose keys
+  are out of order: such a counterexample refutes nothing, and where a statement reads the order,
+  as `get` does, no budget proves it. An order derived from the key type's `Ord`, of a type the
+  compiler knows it of, would make the restriction exact for these maps.
 - **Two walks of one name throw.** `LeanRecursions` fails with an exception where two walks of
   different text have one 64-bit name, inside `lower`, whose other failures are a `Left`. It is
   an invariant, not an error a statement can meet, but it could be told as a reason.
@@ -1492,7 +1509,7 @@ the validators accept.
 | | an honest payout is accepted; negative control: any payout | | | not finished (`Unfinished`) |
 | the optimized validator | an accepted spend withdraws from the stake credential of the script of the input its redeemer names | any parameter; contexts of two inputs and two withdrawals at most | | not finished (`Unfinished`) |
 | | its redeemer names the spent input | | 1730, found | 490 s |
-| | a spend that names its input, with its withdrawal, is accepted | | 1600 | 333 s |
+| | a spend that names its input, with its withdrawal, is accepted | | 1431, found | 128 to 160 s |
 | | the stake validator pays the other payee exactly the split | as the naive validator's payouts | | not finished (`Unfinished`) |
 | | the stake validator accepts an honest payout | | | not finished (`Unfinished`) |
 | | an accepted certificate registers or deregisters the stake credential; registration is accepted | any parameter; every script context | 297; 190, found | 8 s; 8 s |
@@ -1525,15 +1542,21 @@ What the suite shows about the tactic:
   took 2816; at 3200 steps it did not finish in 15 minutes, where at 1000 a check took 46 s. Stated
   of the input the redeemer names, which the validator reads, the claim reads one input, and with
   "the redeemer names the spent input" it says the same. The search for its budget then climbed
-  by spurious counterexamples, 12 s at 728 steps, 16 s at 856, 42 s at 1115, 273 s at 1487 and
-  707 s at 1661, and at 3322 it did not finish: the claim and the validator read the input and
-  look its script up each, and the time grew far faster than the budget past 1100 steps.
+  by spurious counterexamples, 11 s at 728 steps, 16 s at 856, 38 s at 1115, 230 s at 1487 and
+  582 s at 1661, and at 1743 it did not finish in the 15 minutes left of 30 (2026-11-09): the
+  claim and the validator read the input and look its script up each, and the time grew far
+  faster than the budget past 1100 steps. Before the solver's characters in a counterexample were
+  counted as Lean's own, the search doubled the budget at 1661, to 3322.
 - **A liveness statement wants the budget of its longest accepted run.** That a spend with its
   withdrawal is accepted is stated as written, and Lean runs the validator on every context: its
-  search climbed by spurious counterexamples, 633, 752, 1081, 1103, 1122 and 1146 steps, until a
-  counterexample with two withdrawals could not be counted, and the doubled budget did not
-  finish. On the longest spend measured, the premise takes 1434 steps of Lean's machine and the
-  validator 1347; at 1600 it is proved in 333 s.
+  search climbs by spurious counterexamples, 633, 752, 1081, 1103, 1122 and 1146 steps, and then
+  by counterexamples of two withdrawals, a map keyed by a credential, whose keys' order neither
+  Lean nor the tactic checks: they may be no context, but Lean's variable has them, and the
+  statement holds on them on the Scalus CEK, so their runs are counted too, 1315, 1366 and 1431
+  steps. At 1431 it is proved in 128 to 160 s, after a search of about 10 minutes
+  (2026-11-10). Before they were counted, the search doubled the budget there, which did not
+  finish, and the test gave 1600 by hand, at which it is proved in 333 s. On the longest spend
+  measured, the premise takes 1434 steps of Lean's machine and the validator 1347.
 - **What a payout pays is beyond Lean's symbolic run.** The runs of a statement about the outputs
   walk the inputs, the outputs, and the sums of the payees, which the naive validator builds as an
   association list; an accepted payout is 5569 steps on the sample. Lean was still in the

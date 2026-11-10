@@ -15,20 +15,28 @@ import java.nio.charset.StandardCharsets
   * @param tp
   *   the type of the values, which is the parameter's
   * @param decoder
-  *   the compiled `(d: Data) => d.to[A]`, which reads them
+  *   the compiled `(d: Data) => d.to[A]` that reads the values, where there are limits: none
+  *   without them, where the parameter is a variable of its values
+  * @param limits
+  *   the limits the values meet, none for every value
   */
 final class LimitedData private[verify] (
     private[verify] val tp: SIRType,
-    private[verify] val decoder: scalus.compiler.sir.SIR,
+    private[verify] val decoder: Option[scalus.compiler.sir.SIR],
     private[verify] val limits: Limits
-)
+) {
+    require(
+      decoder.isDefined == limits.all.nonEmpty,
+      "a parameter has a decoder where it has limits, and none where it has none"
+    )
+}
 
 object LimitedData {
 
     /** [[Props.limitedData]]'s value: an inline method cannot call the private constructor. */
     private[verify] def of(
         tp: SIRType,
-        decoder: scalus.compiler.sir.SIR,
+        decoder: Option[scalus.compiler.sir.SIR],
         limits: Limits
     ): LimitedData =
         new LimitedData(tp, decoder, limits)

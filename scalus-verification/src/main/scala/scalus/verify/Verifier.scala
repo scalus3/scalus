@@ -395,11 +395,10 @@ final class Verifier private (results: Option[KeptResults]) {
                 // By what they show: the parameter's type is the function's SIR's, and `limited`'s
                 // is compiled apart, so their annotations differ.
                 case List(variable) if variable.tp.show == limited.tp.show =>
-                    if limited.limits.all.isEmpty then List(variable)
-                    else
-                        List(
-                          DataEncoding.encodedVariable(variable, limited.decoder, limited.limits)
-                        )
+                    limited.decoder match
+                        case Some(decoder) =>
+                            List(DataEncoding.encodedVariable(variable, decoder, limited.limits))
+                        case None => List(variable)
                 case List(variable) =>
                     throw new IllegalArgumentException(
                       s"${function.displayName} takes a ${variable.tp.show}, and the values that " +

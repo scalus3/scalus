@@ -343,9 +343,10 @@ object Props {
       * variable: over the `Data` encodings of all the values of `A`, without limits, which states
       * what a variable of `A` does. It is [[limitedData]]'s counterpart: a statement over every
       * script context, of which Lean does not finish a validator that walks a list of the context.
+      * `decode` is not read.
       */
     inline def unlimitedData[A](using inline decode: FromData[A]): LimitedData =
-        ${ PropMacro.unlimitedData[A]('decode) }
+        ${ PropMacro.unlimitedData[A] }
 
     /** The length of the longest list or map of `value`: of no use but in a limit of
       * [[forAllDataLimited]], which says it of the variable, and does not run it.
