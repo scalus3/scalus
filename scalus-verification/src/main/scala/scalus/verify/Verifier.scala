@@ -633,6 +633,15 @@ final class Verifier private (results: Option[KeptResults]) {
             case _ => proven = proven.updated(name, theorem)
     }
 
+    /** The goal a tactic is given for `statement`: the statement, the functions, and the theorems
+      * proved so far, which are its lemmas.
+      */
+    private[verify] def goalOf(statement: Statement): Goal = {
+        // A statement is no lemma of its own, as where one that is proved is stated again.
+        val lemmas = proven.values.filter(_.statement.name != statement.name)
+        Goal(statement, functionTable, lemmas.toList.sortBy(_.statement.name))
+    }
+
     /** Checks that `tactic` supports the complete goal and, if so, returns opaque evidence that can
       * be passed to [[prove]]. Function representations and available lemmas are captured now.
       */
@@ -641,9 +650,7 @@ final class Verifier private (results: Option[KeptResults]) {
           declarations.get(statement.name).exists(_ eq statement),
           s"statement ${statement.name} is not registered in this verifier"
         )
-        // A statement is no lemma of its own, as where one that is proved is stated again.
-        val lemmas = proven.values.filter(_.statement.name != statement.name)
-        val goal = Goal(statement, functionTable, lemmas.toList.sortBy(_.statement.name))
+        val goal = goalOf(statement)
         tactic.prepare(goal).map { prepared =>
             new PreparedRun(this, statement, tactic.name, () => run(tactic)(statement, prepared))
         }

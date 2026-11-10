@@ -307,6 +307,40 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
                     case VerificationResult.Proven(_) =>
                     case other                        => fail(s"expected a proof, got $other")
             finally servers.close()
+
+            // A statement written into the workspace as a module, which Lake builds there, and
+            // which the proofs hold to the code from then on.
+            val proofs = LeanProofs(workspace, None, reason => cancel(reason))
+            try
+                val held = proofs.verifier.statement(
+                  "held_to_the_code",
+                  forAll[BigInt](x => x + BigInt(0) == x)
+                )
+                val result = proofs.check(held, 40)
+                assert(proofs.writeStatement(held, result) == "Created.Generated.held_to_the_code")
+                val (_, module) = LeanWorkspace.generated(workspace, "held_to_the_code")
+                // The programs are beside it; their texts are not committed.
+                assert(Files.isRegularFile(module.resolveSibling("held_to_the_code/Leaf0.flat")))
+                assert(text(module.resolveSibling(".gitignore")).contains("*.uplc"))
+                lakeBuild()
+                assert(
+                  Files.isRegularFile(
+                    workspace.resolve(
+                      ".lake/build/lib/lean/Created/Generated/held_to_the_code.olean"
+                    )
+                  )
+                )
+                // Checked again, the module is of the code.
+                proofs.check(held, 40)
+                // A module of other programs than the code's fails the statement's check.
+                Files.writeString(
+                  module,
+                  text(module).replaceAll("(?m)^  leaf0 [0-9a-f]{64}$", "  leaf0 " + "0" * 64)
+                )
+                val stale = intercept[AssertionError](proofs.check(held, 40))
+                assert(stale.getMessage.contains("is not of the code"), stale.getMessage)
+                assert(stale.getMessage.contains("sbt leanExport"), stale.getMessage)
+            finally proofs.close()
         }
     }
 }

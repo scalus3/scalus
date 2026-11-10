@@ -240,6 +240,46 @@ final class UplcBlaster private (
                 )
             )
 
+    /** The Lean module `module` that states `goal`, which `artifact` proved, as it was proved: at
+      * the artifact's budget, and as written where that decided ([[UplcBlaster.statementModule]]).
+      * The reason where the goal is not in the tactic's language.
+      */
+    def statementModule(
+        goal: Goal,
+        artifact: UplcBlaster.Artifact,
+        module: String,
+        directory: String
+    ): Either[String, UplcBlaster.StatementModule] =
+        prepare(goal).left
+            .map(report => s"${goal.statement.name} is not in the tactic's language: $report")
+            .map { lowered =>
+                val proved =
+                    if artifact.asWritten then lowered.unrewritten.getOrElse(lowered) else lowered
+                UplcBlaster.statementModule(
+                  proved,
+                  artifact.budget,
+                  maxHeartbeats,
+                  module,
+                  directory
+                )
+            }
+
+    /** `goal`, which `artifact` proved, as a statement of the Universal Annotation Language whose
+      * functions are named after `id` ([[UplcBlaster.ualStatement]]), as it was proved.
+      */
+    def ualStatement(
+        goal: Goal,
+        artifact: UplcBlaster.Artifact,
+        id: String
+    ): Either[String, UplcBlaster.UalStatement] =
+        prepare(goal).left
+            .map(report => s"${goal.statement.name} is not in the tactic's language: $report")
+            .flatMap { lowered =>
+                val proved =
+                    if artifact.asWritten then lowered.unrewritten.getOrElse(lowered) else lowered
+                UplcBlaster.ualStatement(proved, artifact.budget, id)
+            }
+
     /** A search starts at the budget that was kept, also with another revision of Blaster or of the
       * library: where the statement is still decided there, that is one check.
       */
@@ -1341,6 +1381,33 @@ object UplcBlaster {
             case DataList                => s"Term.Const (Const.ConstDataList $name)"
             case PairList                => s"Term.Const (Const.ConstPairDataList $name)"
             case DataMap                 => s"Term.Const (Const.Data (Data.Map $name))"
+
+        /** The Lean term a function of the Universal Annotation Language is given for the Lean
+          * variable `name`: the variable, or the `Data` of the entries of a map.
+          */
+        def ualValue(name: String): String = this match
+            case DataMap => s"(Data.Map $name)"
+            case _       => name
+
+        /** The value schema and the annotation type of the argument a function of the Universal
+          * Annotation Language takes for the variable: native for a constant of another type than
+          * `Data`, and raw `Data`, whose schema says nothing, for the rest.
+          */
+        def ualArgument: UalArgument = this match
+            case Integer => UalArgument("""{"dataType":"#integer"}""", "{ Integer : asNative }")
+            case Boolean => UalArgument("""{"dataType":"#boolean"}""", "{ Bool : asNative }")
+            case ByteString =>
+                UalArgument("""{"dataType":"#bytes"}""", "{ BuiltinByteString : asNative }")
+            case String => UalArgument("""{"dataType":"#string"}""", "{ BuiltinString : asNative }")
+            case WholeData | EncodedData | DataMap =>
+                UalArgument("{}", "{ BuiltinData : asData }")
+            case DataList =>
+                UalArgument("""{"dataType":"#list","items":{}}""", "{ [BuiltinData] : asNative }")
+            case PairList =>
+                UalArgument(
+                  """{"dataType":"#list","items":{"dataType":"#pair","left":{},"right":{}}}""",
+                  "{ [(BuiltinData, BuiltinData)] : asNative }"
+                )
     }
 
     /** The variables Lean quantifies over for a statement's variable `name` of type `tp`, and the
@@ -2438,7 +2505,7 @@ object UplcBlaster {
     private def written(programs: Vector[Program], directory: Path): Vector[Path] =
         programs.zipWithIndex.map { (program, index) =>
             val flat = directory.resolve(s"Leaf$index.flat")
-            Files.writeString(flat, Hex.bytesToHex(program.cborEncoded).toLowerCase)
+            Files.writeString(flat, programHex(program))
             flat
         }
 
@@ -3952,6 +4019,14 @@ object UplcBlaster {
     private def variable(tp: SIRType): Variable =
         variableOf(tp).getOrElse(throw new IllegalStateException(s"unexpected ${tp.show} binder"))
 
+    /** Another reading of the leaves of a formula than that of a check ([[renderFormula]]): the
+      * Lean text of a test and of a `denotes`, by the leaf and whether its position is positive.
+      */
+    private trait LeafReading {
+        def test(leaf: Int, positive: Boolean): String
+        def denotes(leaf: Int, positive: Boolean): String
+    }
+
     /** Renders a formula with each leaf read by its polarity (design doc §6.2).
       *
       * Each predicate runs with `ScalusProofs.Run.runFor`, where `State.Error` means that the
@@ -3971,10 +4046,11 @@ object UplcBlaster {
         binder: Int => String,
         guardOf: Int => Option[String],
         positive: Boolean,
-        within: Boolean
+        within: Boolean,
+        leaves: Option[LeafReading] = None
     ): String = {
         def render(inner: LeafFormula, positive: Boolean) =
-            renderFormula(inner, state, binder, guardOf, positive, within)
+            renderFormula(inner, state, binder, guardOf, positive, within, leaves)
         // A variable whose Lean type has more values than its own is restricted to its type's by a
         // premise: `∀ x, p x = true → body`, and so an `exists`, `¬∀¬`, to `∃ x, p x ∧ body`.
         def quantified(symbol: String, binders: List[Int], body: LeafFormula): String =
@@ -3989,6 +4065,9 @@ object UplcBlaster {
             // Within the budget ([[Budget.Within]]) a run the budget cuts, which neither halted
             // nor failed, is read in the statement's favour: as true where the statement claims
             // the test, and as false where it assumes it.
+            case LeafFormula.Test(leaf) if leaves.isDefined => leaves.get.test(leaf, positive)
+            case LeafFormula.Denotes(leaf) if leaves.isDefined =>
+                leaves.get.denotes(leaf, positive)
             case LeafFormula.Test(leaf) =>
                 val run = state(leaf)
                 if within then
@@ -4032,11 +4111,38 @@ object UplcBlaster {
     /** The commands of a check after its programs: the symbolic runs and the statement, or the
       * closed statement.
       */
-    private def checkBody(goal: Lowered, budget: Int): String = {
+    private def checkBody(goal: Lowered, budget: Int): String =
+        body(
+          goal,
+          budget,
+          closed = formula => s"example : $formula := by native_decide",
+          quantified = formula => s"#blaster (gen-cex: 1) [$formula]"
+        )
+
+    /** The commands of a Lean text about a lowered statement, after its programs: the definitions
+      * its variables' types need, the symbolic runs of its programs, and what `closed` makes of the
+      * proposition of a statement without variables, or `quantified` of one with them.
+      */
+    private def body(
+        goal: Lowered,
+        budget: Int,
+        closed: String => String,
+        quantified: String => String,
+        prefix: String = ""
+    ): String = {
         val check =
             if goal.binders.isEmpty then
-                val state = (leaf: Int) => s"(runProgramFor leaf$leaf.script [] $budget)"
-                s"example : ${renderFormula(goal.body, state, _ => "", _ => None, positive = true, goal.within.isDefined)} := by native_decide"
+                val state = (leaf: Int) => s"(runProgramFor ${prefix}leaf$leaf.script [] $budget)"
+                closed(
+                  renderFormula(
+                    goal.body,
+                    state,
+                    _ => "",
+                    _ => None,
+                    positive = true,
+                    goal.within.isDefined
+                  )
+                )
             else
                 val names = goal.binders.indices.map(index => s"x$index").toList
                 val declarations = goal.binders.zip(names).map { (binder, name) =>
@@ -4052,11 +4158,11 @@ object UplcBlaster {
                         s": List Term := [${terms.mkString(", ")}]").mkString(" ")
                 }
                 val prepared = goal.leaves.indices.map(index =>
-                    s"#prep_uplc_run prepared$index leaf$index arguments$index $budget"
+                    s"#prep_uplc_run ${prefix}prepared$index ${prefix}leaf$index arguments$index $budget"
                 )
                 val state = (leaf: Int) => {
                     val arguments = goal.leafBinders(leaf).map(index => " " + names(index)).mkString
-                    s"(prepared$leaf$arguments)"
+                    s"(${prefix}prepared$leaf$arguments)"
                 }
                 val declaration = (index: Int) => declarations(index)
                 val premise = (index: Int) =>
@@ -4074,7 +4180,7 @@ object UplcBlaster {
                    |
                    |${prepared.mkString("\n")}
                    |
-                   |#blaster (gen-cex: 1) [$formula]""".stripMargin
+                   |${quantified(formula)}""".stripMargin
         // The definitions a check uses where a variable is restricted to its type's values, and
         // the recursive ones: the walks of their lists and maps, and the blocks of the types among
         // them that contain themselves. A check without such a variable has none of them in its
@@ -4333,16 +4439,35 @@ object UplcBlaster {
       * `leaf<n>`, and the commands of `body`. The lines up to the programs are the same in every
       * check, so the server elaborates them once.
       */
-    private def document(flats: Vector[Path], body: String, maxHeartbeats: Int): String = {
+    private def document(flats: Vector[Path], body: String, maxHeartbeats: Int): String =
+        document(
+          flats.map(_.toAbsolutePath.toString),
+          body,
+          maxHeartbeats,
+          "ScalusProofs.Runtime",
+          "",
+          ""
+        )
+
+    /** [[document]] in the namespace `namespace`, with the programs at the paths `flats` as they
+      * are written, and `header` after the import: a comment, or nothing.
+      */
+    private def document(
+        flats: Vector[String],
+        body: String,
+        maxHeartbeats: Int,
+        namespace: String,
+        header: String,
+        prefix: String
+    ): String = {
         val imports = flats.zipWithIndex.map { (flat, index) =>
-            val path = leanString(flat.toAbsolutePath.toString)
-            s"""#import_uplc leaf$index PlutusV3 single_cbor_hex "$path""""
+            s"""#import_uplc ${prefix}leaf$index PlutusV3 single_cbor_hex "${leanString(flat)}""""
         }
         s"""import ScalusProofs.Run
-           |
+           |$header
            |set_option maxHeartbeats $maxHeartbeats
            |
-           |namespace ScalusProofs.Runtime
+           |namespace $namespace
            |
            |open PlutusCore.Integer (Integer)
            |open PlutusCore.ByteString (ByteString)
@@ -4356,7 +4481,167 @@ object UplcBlaster {
            |
            |$body
            |
-           |end ScalusProofs.Runtime
+           |end $namespace
            |""".stripMargin
     }
+
+    /** A statement as a Lean module of a workspace: its text, and the programs of its tests, each
+      * with the path the text reads it from, from the workspace's directory.
+      */
+    final case class StatementModule(text: String, programs: Vector[(String, Program)])
+
+    /** The Lean module `module` that states `goal`, a statement lowered for a check at `budget`
+      * steps: `def statement : Prop`, the proposition a check gives Blaster, over the programs of
+      * the statement's tests, which the module reads from `directory`, a path from the workspace's
+      * directory, as `Leaf<n>.flat`. A proof written by hand is `theorem … : <module>.statement`.
+      *
+      * The proposition is that of the check: a test claimed returns `true` within the budget, and
+      * one assumed neither returns `false` nor fails within it, so it implies the statement without
+      * the budget ([[renderFormula]]). The module's header has the hash of each program: Lake does
+      * not see what `#import_uplc` reads, and builds the module again where its text has changed.
+      */
+    def statementModule(
+        goal: Lowered,
+        budget: Int,
+        maxHeartbeats: Int,
+        module: String,
+        directory: String
+    ): StatementModule = {
+        val paths = goal.leaves.indices.map(index => s"$directory/Leaf$index.flat").toVector
+        val hashes = goal.programHashes.zipWithIndex.map((hash, index) => s"  leaf$index $hash")
+        val named = if goal.name.isEmpty then "A statement" else s"The statement `${goal.name}`"
+        val header =
+            s"""
+               |/-!
+               |$named, at $budget steps of the machine.
+               |Generated by Scalus (`scalus.verify.uplcblaster.UplcBlaster.statementModule`): do not
+               |edit, generate it again.
+               |
+               |The programs of its tests, by the SHA-256 of their CBOR:
+               |${hashes.mkString("\n")}
+               |-/
+               |""".stripMargin
+        val stated = (formula: String) => s"def statement : Prop :=\n  $formula"
+        // `#import_uplc` and `#prep_uplc_run` declare their names outside the namespace they are
+        // written in: the names of a module's programs have the module's name, so that a proof
+        // can import two modules.
+        val prefix = module.map(c => if c.isLetterOrDigit then c else '_') + "_"
+        StatementModule(
+          document(
+            paths,
+            body(goal, budget, stated, stated, prefix),
+            maxHeartbeats,
+            module,
+            header,
+            prefix
+          ),
+          paths.zip(goal.leaves)
+        )
+    }
+
+    /** A program of a statement as a compiled function of the Universal Annotation Language: its
+      * id, the program, and the schema and the surface type of each argument, in order. Its result
+      * is a native Boolean.
+      */
+    final case class UalFunction(
+        id: String,
+        program: Program,
+        arguments: List[UalArgument]
+    ) {
+
+        /** The SHA-256 of the program's CBOR, which the language identifies the function by. */
+        def hash: String = Hex.bytesToHex(Utils.sha2_256(program.cborEncoded)).toLowerCase
+    }
+
+    /** An argument of a [[UalFunction]]: its value schema, as JSON, and its type as an `ONCHAIN`
+      * annotation writes it.
+      */
+    final case class UalArgument(schema: String, annotation: String)
+
+    /** A statement in the terms of the Universal Annotation Language (UAL 1.0): the programs of its
+      * tests as compiled functions, the Lean definitions its proposition uses, and the proposition,
+      * over the wrappers a consumer makes of the functions: `f x` is the state of the machine after
+      * at most `steps` steps, and `f_returns x v` says that it halted with `v`.
+      */
+    final case class UalStatement(
+        functions: Vector[UalFunction],
+        predicates: String,
+        formal: String,
+        steps: Int
+    )
+
+    /** `goal`, lowered for a check at `budget` steps, as a statement of the Universal Annotation
+      * Language, whose functions are named `<id>_leaf<n>`.
+      *
+      * The proposition is read as a check reads it ([[renderFormula]]), in the language's words: a
+      * test claimed is `f_returns … true`, and one assumed is that the function neither returns
+      * `false` nor fails, `¬ f_returns … false ∧ ¬ isUnsuccessful (f …)`, so a run that the steps
+      * cut counts as possibly true. The language keeps an unfinished run apart from a failed one as
+      * `runFor` here does.
+      *
+      * The reason where the statement has no such form: one checked within a budget
+      * ([[Budget.Within]]) is no theorem.
+      */
+    def ualStatement(goal: Lowered, budget: Int, id: String): Either[String, UalStatement] =
+        if goal.within.isDefined then
+            Left("a statement checked within a budget is no theorem, and is not exported")
+        else
+            val names = goal.binders.indices.map(index => s"x$index").toList
+            val kinds = goal.binders.map(binder => variable(binder.tp))
+            def function(leaf: Int) = s"${id}_leaf$leaf"
+            def call(leaf: Int): String =
+                (function(leaf) :: goal
+                    .leafBinders(leaf)
+                    .map(index => kinds(index).ualValue(names(index)))).mkString(" ")
+            def returns(leaf: Int, value: String): String =
+                ((function(leaf) + "_returns") :: goal
+                    .leafBinders(leaf)
+                    .map(index => kinds(index).ualValue(names(index))) ::: List(value))
+                    .mkString(" ")
+            val reading = new LeafReading {
+                def test(leaf: Int, positive: Boolean): String =
+                    if positive then s"(${returns(leaf, "true")})"
+                    else s"(¬ ${returns(leaf, "false")} ∧ ¬ isUnsuccessful (${call(leaf)}))"
+                def denotes(leaf: Int, positive: Boolean): String =
+                    if positive then s"(isSuccessful (${call(leaf)}))"
+                    else s"(¬ isUnsuccessful (${call(leaf)}))"
+            }
+            val declaration = (index: Int) => s"(${names(index)} : ${kinds(index).leanType})"
+            val premise = (index: Int) =>
+                goal.predicates.lift(index).flatten.map(p => s"($p ${names(index)} = true)")
+            val formal = renderFormula(
+              goal.body,
+              _ => "",
+              declaration,
+              premise,
+              positive = true,
+              within = false,
+              Some(reading)
+            )
+            val predicates =
+                if goal.predicates.exists(_.isDefined) then
+                    (DataEncoding.leanDefinitions :: goal.recursions).mkString("\n\n")
+                else ""
+            val functions = goal.leaves.zipWithIndex.map { (program, leaf) =>
+                UalFunction(
+                  function(leaf),
+                  program,
+                  goal.leafBinders(leaf).map(index => kinds(index).ualArgument)
+                )
+            }
+            Right(UalStatement(functions, predicates, formal, budget))
+
+    /** What the text of a module written by [[statementModule]] is of: the budget, and the SHA-256
+      * of each program, in order, as its header says them. None for another text.
+      */
+    def statementModuleOf(text: String): Option[(Int, List[String])] = {
+        val budget =
+            """at (\d+) steps of the machine""".r.findFirstMatchIn(text).map(_.group(1).toInt)
+        val hashes =
+            """(?m)^  leaf\d+ ([0-9a-f]{64})$""".r.findAllMatchIn(text).map(_.group(1)).toList
+        budget.filter(_ => hashes.nonEmpty).map(_ -> hashes)
+    }
+
+    /** The CBOR of `program` in hexadecimal, as `#import_uplc` reads it from a file. */
+    def programHex(program: Program): String = Hex.bytesToHex(program.cborEncoded).toLowerCase
 }

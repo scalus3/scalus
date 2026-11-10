@@ -83,7 +83,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       "vesting.schedule.zero_before_start",
       forAll[Config, BigInt]((config, time) =>
           (time < config.startTimestamp) ==>:
-              call(linearVesting, (config, time))(vested => vested == BigInt(0))
+              (VestingValidator.linearVesting(config, time) == BigInt(0))
       )
     )
 
@@ -96,7 +96,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       forAll[Config, BigInt]((config, time) =>
           (config.startTimestamp <= time
               && config.startTimestamp + config.duration <= time) ==>:
-              call(linearVesting, (config, time))(vested => vested == config.initialAmount)
+              (VestingValidator.linearVesting(config, time) == config.initialAmount)
       )
     )
 
@@ -106,7 +106,9 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val scheduleReturns = verifier.statement(
       "vesting.schedule.returns",
-      forAll[Config, BigInt]((config, time) => succeeds(linearVesting, (config, time)))
+      forAll[Config, BigInt]((config, time) =>
+          succeeds(VestingValidator.linearVesting(config, time))
+      )
     )
 
     test("the schedule returns for every datum and time") {
@@ -162,9 +164,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       "vesting.schedule.does_not_decrease",
       forAll[Config, BigInt, BigInt]((config, earlier, later) =>
           (config.initialAmount >= BigInt(0) && earlier <= later) ==>:
-              call(linearVesting, (config, earlier))(before =>
-                  call(linearVesting, (config, later))(after => before <= after)
-              )
+              (VestingValidator.linearVesting(config, earlier) <=
+                  VestingValidator.linearVesting(config, later))
       )
     )
 
@@ -172,9 +173,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       "vesting.schedule.does_not_decrease_for_any_amount",
       forAll[Config, BigInt, BigInt]((config, earlier, later) =>
           (earlier <= later) ==>:
-              call(linearVesting, (config, earlier))(before =>
-                  call(linearVesting, (config, later))(after => before <= after)
-              )
+              (VestingValidator.linearVesting(config, earlier) <=
+                  VestingValidator.linearVesting(config, later))
       )
     )
 
@@ -290,69 +290,89 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     verifier.addFunction(spends)
 
-    /** The contexts of the verifier's statements about withdrawals: of at most two inputs, as the
-      * vesting output and one of the beneficiary's that pays the fee, of one signatory, and of
-      * inputs whose values are of one policy of one token. Everything else of the context is free,
-      * the outputs among it: the validator rejects a withdrawal that breaks a clause before it
-      * reads them, and the statements are checked in the rejecting form, which runs only the runs
-      * it rejects ([[UplcBlaster]], "The rejecting form").
-      */
-    private val fewInputs = limitedData[ScriptContext](ctx =>
-        ctx.txInfo.inputs.length <= 2 && ctx.txInfo.signatories.length <= 1 &&
-            ctx.txInfo.inputs.forall(i =>
-                i.resolved.value.toSortedMap.length <= 1 &&
-                    i.resolved.value.toSortedMap.values.forall(t => t.length <= 1)
-            )
+    /** [[fewInputs]], as the verifier takes the contexts of the obligations it declares. */
+    private val fewInputsData = limitedData[ScriptContext](ctx => fewInputs(ctx))
+
+    // What holds of every spend the script accepts: the three conditions `VestingValidator.spend`
+    // states at its head with `Spec.ensures`, each as a statement about the compiled script.
+    //
+    // `spend` is inline: the program is the script's entry point, `validate`, which reads the
+    // datum, the redeemer and the transaction from the script context and gives them to `spend`.
+    // So a statement is of a context: where the script accepts it, the condition holds of its
+    // datum, redeemer and transaction. The validator's code is written in the statement, as
+    // `succeeds(VestingValidator.validate(ctx.toData))`, not called as the registered `validator`:
+    // so it is compiled with the condition, and what both read of the context is read once. Called,
+    // the statement of the first condition did not come to the solver in ten minutes; written so,
+    // it is checked as `verifier.guarantees` would check it, with the same program (2026-11-10).
+    //
+    // Each is stated with `==>?:`: wherever the condition is false, the script rejects. A
+    // condition reads the datum, the redeemer, the spent input and the validity range as the
+    // validator does, and fails where they cannot be read, where the validator rejects too; there
+    // it says nothing, and the rejecting program ends at once. With `==>:` a condition would have
+    // to return there as well: one that read a default instead lets every datum it cannot read
+    // run on into the validator, which reads the datum after it walks the inputs, and Lean does
+    // not finish.
+
+    // spend: Spec.ensures(txInfo.isSignedBy(configOf(datum).beneficiary))
+    private val beneficiarySigned = verifier.statement(
+      "vesting.spend.beneficiary_signed",
+      forAllDataLimited[ScriptContext](ctx => fewInputs(ctx))(ctx =>
+          accepts(ctx) ==>?: signedByTheBeneficiary(ctx)
+      )
     )
 
-    /** What `VestingValidator.spend` states at its head, with `Spec.ensures`: the beneficiary
-      * signed, something is withdrawn, and what stays locked is at least what has not vested.
-      *
-      * Each is stated with `==>?:` ([[Connective.Rejects]]): wherever a clause is false, the
-      * validator rejects the spend. A clause reads the datum, the redeemer, the spent input and the
-      * validity range as the validator does, and fails where they cannot be read, where the
-      * validator rejects the spend too; there it says nothing, and the rejecting program ends at
-      * once. With `==>:` a clause would have to return there as well: one that read a default
-      * instead lets every datum it cannot read run on into the validator, which reads the datum
-      * after it walks the inputs, and Lean does not finish.
-      */
-    private val spendGuarantees = verifier.guarantees(spends.ref, fewInputs, Connective.Rejects)
+    // spend: Spec.ensures(amountOf(redeemer) > 0)
+    //
+    // Of every script context, without limits: the validator rejects a spend of no amount at its
+    // first check, before it reads a list of the context.
+    private val somethingIsWithdrawn = verifier.statement(
+      "vesting.spend.something_is_withdrawn",
+      forAllData[ScriptContext](ctx => accepts(ctx) ==>?: withdrawsSomething(ctx))
+    )
+
+    // spend: Spec.ensures(lockedBy(txInfo, txOutRef) - amountOf(redeemer) >=
+    //            configOf(datum).initialAmount - linearVesting(configOf(datum), validFrom))
+    private val unvestedStaysLocked = verifier.statement(
+      "vesting.spend.unvested_stays_locked",
+      forAllDataLimited[ScriptContext](ctx => fewInputs(ctx))(ctx =>
+          accepts(ctx) ==>?: keepsTheUnvestedLocked(ctx)
+      )
+    )
 
     test("spend's guarantees hold: the signature of spends of two inputs, the amount of any") {
-        // A clause that is not read would be missing from what is proved.
-        assert(spendGuarantees.unsupported.isEmpty, spendGuarantees.unsupported)
-        val List(signed, _, _) = spendGuarantees.statements
         // They are proved one by one. Each rejecting program runs the validator only where its
-        // clause is false, to the check that rejects the spend: together, every way one of them is
-        // false would run on into the validator, and Lean does not finish.
-        check(signed, guaranteesBudget)
-        // The second holds of every script context, without limits: the validator rejects a spend
-        // of no amount at its first check, before it reads a list of the context.
-        val List(_, something, _) = spendGuaranteesOnAnyContext.statements
-        check(something, guaranteesBudget)
+        // condition is false, to the check that rejects the spend: together, every way one of
+        // them is false would run on into the validator, and Lean does not finish.
+        check(beneficiarySigned, guaranteesBudget)
+        check(somethingIsWithdrawn, guaranteesBudget)
     }
 
-    test("spend's clauses return true on the samples the validator accepts") {
-        // Stated with `==>?:`, a clause that failed wherever the validator returns would be proved
-        // of every context. Read with `==>:` on a spend the validator accepts, each returns `true`
-        // there: run on the Scalus CEK, without Lean.
+    test("spend's conditions return true on the samples the validator accepts") {
+        // Stated with `==>?:`, a condition that failed wherever the validator returns would be
+        // proved of every context. Read with `==>:` on a spend the validator accepts, each returns
+        // `true` there: run on the Scalus CEK, without Lean.
         val accepted = List(sampleOfEverything(signed), sampleHalfway(halfOfTheAmount))
         for
             sample <- accepted
-            statement <- spendGuarantees.statements ++ spendGuaranteesOnAnyContext.statements
+            statement <- List(
+              beneficiarySigned,
+              somethingIsWithdrawn,
+              unvestedStaysLocked,
+              beneficiarySignedOnAnyContext,
+              unvestedStaysLockedOnAnyContext
+            )
         do assert(holdsAsImplicationOn(statement, Constant.Data(sample)), statement.name)
     }
 
     test("the third guarantee, of what stays locked, is not finished by Lean", Unfinished) {
         // What stays locked is at least what has not vested. Its rejecting program did not end its
-        // symbolic run in 30 minutes, at 3300 or at 3800 steps, written as the clause is or as the
-        // validator's check, with the outputs free or of at most two; and the search for its
+        // symbolic run in 30 minutes, at 3300 or at 3800 steps, written as the condition is or as
+        // the validator's check, with the outputs free or of at most two; and the search for its
         // budget came, by 1173, 1327, 1406 and 1450 steps, each a spurious counterexample of a
         // minute or two, to 2517, which it did not finish in the time left (2026-11-06). The first
         // two take 149 s and 14 s. The time limit ends it.
-        val List(_, _, unvested) = spendGuarantees.statements
         val unfinished = inconclusive(
-          unvested,
+          unvestedStaysLocked,
           UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
         )
         assert(unfinished.contains("symbolically"), unfinished)
@@ -370,7 +390,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     /** What the validator's call of the schedule owes to `vested_in_range`. */
-    private val spendObligations = verifier.obligations(spends.ref, fewInputs)
+    private val spendObligations = verifier.obligations(spends.ref, fewInputsData)
 
     /** A contract of the validator that expects a datum whose initial amount `vested_in_range` asks
       * for.
@@ -384,7 +404,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     /** The same obligation, where the validator's contract holds. */
-    private val obligationsOfAnAmount = verifier.obligations(spendOfAnAmount, fewInputs)
+    private val obligationsOfAnAmount = verifier.obligations(spendOfAnAmount, fewInputsData)
 
     test("the validator would not establish a precondition on the amount") {
         // Why the schedule states its bound with a condition.
@@ -489,16 +509,23 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     /** Every script context: the parameter a `forAllData[ScriptContext]` variable. */
     private val anyContext = unlimitedData[ScriptContext]
 
-    private val spendGuaranteesOnAnyContext =
-        verifier.guarantees(spendsOnAnyContext.ref, anyContext, Connective.Rejects)
+    // The first and the third condition of spend, as above, of every script context.
+    private val beneficiarySignedOnAnyContext = verifier.statement(
+      "vesting.spend.beneficiary_signed_on_any_context",
+      forAllData[ScriptContext](ctx => accepts(ctx) ==>?: signedByTheBeneficiary(ctx))
+    )
+
+    private val unvestedStaysLockedOnAnyContext = verifier.statement(
+      "vesting.spend.unvested_stays_locked_on_any_context",
+      forAllData[ScriptContext](ctx => accepts(ctx) ==>?: keepsTheUnvestedLocked(ctx))
+    )
 
     test(
       "spend's first and third guarantees, on every script context, are not finished",
       Unfinished
     ) {
         // The second is proved of every context, with the first above.
-        val List(signed, _, unvested) = spendGuaranteesOnAnyContext.statements
-        List(signed, unvested).foreach { statement =>
+        List(beneficiarySignedOnAnyContext, unvestedStaysLockedOnAnyContext).foreach { statement =>
             val unfinished = inconclusive(
               statement,
               UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
@@ -673,6 +700,56 @@ object VestingVerificationTest {
       TxOut(beneficiaryAddress, Value.lovelace(paid)),
       prelude.List.Nil
     )
+
+    /** The contexts of the statements about withdrawals: of at most two inputs, as the vesting
+      * output and one of the beneficiary's that pays the fee, of one signatory, and of inputs whose
+      * values are of one policy of one token. Everything else of the context is free, the outputs
+      * among it: the validator rejects a withdrawal that breaks a condition before it reads them,
+      * and the statements are checked in the rejecting form, which runs only the runs it rejects
+      * ([[UplcBlaster]], "The rejecting form").
+      */
+    inline def fewInputs(inline ctx: ScriptContext): Boolean =
+        ctx.txInfo.inputs.length <= 2 && ctx.txInfo.signatories.length <= 1 &&
+            ctx.txInfo.inputs.forall(i =>
+                i.resolved.value.toSortedMap.length <= 1 &&
+                    i.resolved.value.toSortedMap.values.forall(t => t.length <= 1)
+            )
+
+    /** That the script accepts `ctx`: its code, to be written in a statement as
+      * `succeeds(accepts(ctx))`, where it is compiled with what the statement says of `ctx`.
+      */
+    inline def accepts(inline ctx: ScriptContext): Prop =
+        succeeds(VestingValidator.validate(ctx.toData))
+
+    /** spend's first condition, of the context `ctx`: the beneficiary named in the datum signed the
+      * transaction. It reads the datum as the validator does, and fails where it cannot be read. Of
+      * a context that is no spend, which the script rejects, it says nothing.
+      */
+    inline def signedByTheBeneficiary(inline ctx: ScriptContext): Boolean = ctx.scriptInfo match
+        case ScriptInfo.SpendingScript(_, datum) =>
+            ctx.txInfo.isSignedBy(VestingValidator.configOf(datum).beneficiary)
+        case _ => true
+
+    /** spend's second condition, of the context `ctx`: the amount the redeemer asks for is
+      * positive.
+      */
+    inline def withdrawsSomething(inline ctx: ScriptContext): Boolean = ctx.scriptInfo match
+        case ScriptInfo.SpendingScript(_, _) => VestingValidator.amountOf(ctx.redeemer) > BigInt(0)
+        case _                               => true
+
+    /** spend's third condition, of the context `ctx`: what stays locked, the lovelace of the spent
+      * output less the amount withdrawn, is at least what has not vested at the earliest time the
+      * transaction can be included.
+      */
+    inline def keepsTheUnvestedLocked(inline ctx: ScriptContext): Boolean = ctx.scriptInfo match
+        case ScriptInfo.SpendingScript(ref, datum) =>
+            VestingValidator.lockedBy(ctx.txInfo, ref) - VestingValidator.amountOf(ctx.redeemer) >=
+                VestingValidator.configOf(datum).initialAmount -
+                VestingValidator.linearVesting(
+                  VestingValidator.configOf(datum),
+                  ctx.txInfo.validFromOrFail(VestingValidator.NoValidityLowerBound)
+                )
+        case _ => true
 
     /** Whether the datum of `ctx`, a spend, has an initial amount that is not negative: true of a
       * context that is no spend. It fails where the datum cannot be read, as the validator does.

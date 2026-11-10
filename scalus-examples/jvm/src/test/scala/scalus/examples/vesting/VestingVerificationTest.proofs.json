@@ -27,22 +27,6 @@
         "where the validator's contract expects such an amount, the obligation holds"
       ]
     },
-    "spends/ensures#1": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "14ef5dfc9d7b013a",
-      "programs": [
-        "bfe19f251e845f79",
-        "06370ae120acc99f"
-      ],
-      "notes": {
-        "budget": "3300",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "spend's guarantees hold: the signature of spends of two inputs, the amount of any"
-      ]
-    },
     "spends/vested_in_range#1": {
       "tactic": "uplc-blaster",
       "result": "refuted",
@@ -61,21 +45,6 @@
       },
       "tests": [
         "the validator would not establish a precondition on the amount"
-      ]
-    },
-    "spends_on_any_context/ensures#2": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "9ed9239da9511e53",
-      "programs": [
-        "874dc86236c2b70d"
-      ],
-      "notes": {
-        "budget": "3300",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "spend's guarantees hold: the signature of spends of two inputs, the amount of any"
       ]
     },
     "vesting.schedule.bounded_without_condition": {
@@ -161,9 +130,9 @@
     "vesting.schedule.returns": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "3139cd9327fcf613",
+      "statement": "66d435560a4b4191",
       "programs": [
-        "1a02b353d6639bbb"
+        "c761d7b2b6f3888c"
       ],
       "notes": {
         "budget": "400",
@@ -229,6 +198,37 @@
       },
       "tests": [
         "nothing is vested before the start"
+      ]
+    },
+    "vesting.spend.beneficiary_signed": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "14ef5dfc9d7b013a",
+      "programs": [
+        "bfe19f251e845f79",
+        "06370ae120acc99f"
+      ],
+      "notes": {
+        "budget": "3300",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "spend's guarantees hold: the signature of spends of two inputs, the amount of any"
+      ]
+    },
+    "vesting.spend.something_is_withdrawn": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "9ed9239da9511e53",
+      "programs": [
+        "874dc86236c2b70d"
+      ],
+      "notes": {
+        "budget": "3300",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "spend's guarantees hold: the signature of spends of two inputs, the amount of any"
       ]
     },
     "vesting.validator.no_datum_is_rejected": {

@@ -39,6 +39,10 @@ validator actually runs on chain.
   is the text of a Lean module, which a workspace has under `<Package>/Generated`
   (`LeanWorkspace.generated`), for proofs written by hand; see
   `docs/design/verification-details/lean-types.md`.
+- `src/main/scala/scalus/verify/ual/UalExport.scala` - statements as documents of the Universal
+  Annotation Language: `assurance.json`, the checking contexts and the annotations. With
+  `LeanProofs.writeStatement` and the sbt plugin's `leanExport` and `ualExport`, see
+  `docs/design/verification-details/lean-export.md`.
 - `src/main/scala/scalus/verify/lean/LeanServerProvider.scala` - what gives a tactic its server,
   and `LeanServers`, the provider for a workspace: one server at a time, started when a check
   needs it.
@@ -192,7 +196,12 @@ of Blaster and Z3. This also works for programs Blaster cannot reduce, such as t
 `integerToByteString` ([Lean-blaster#273](https://github.com/input-output-hk/Lean-blaster/issues/273)).
 
 A call of a function registered in the verifier is linked to that function's compiled program, so
-the proof is about those exact bytes. A `call` is total: it claims that the function returns.
+the proof is about those exact bytes. That is so wherever a test applies the function, written as
+Scala, as in `VestingValidator.linearVesting(config, time) == BigInt(0)`: the test gets the
+registered program in place of a copy compiled from the source, as `call(linearVesting, (config,
+time))(v => v == BigInt(0))` does. So a statement about a function's result is written so, and
+`call` is for a result a statement goes on about, with quantifiers or implications, and for the
+partial `whenReturns`. A `call` is total: it claims that the function returns.
 `whenReturns(f, a)(r => p)` is partial: it claims `p` only where the function returns, and is
 proved as `denotes(f(a)) ==>: call(f, a)(r => p)`. The proof still needs `f` to return or fail
 within the budget on every input: a run that exhausts the budget counts as one that may return,
@@ -610,6 +619,13 @@ its search starts at the steps the tests take on the largest values the limits a
 
 Upstream force-pushes. If `lake build` fails with `git exited with code 128`, a pinned rev is
 gone; re-run `lake update` and commit the new `lake-manifest.json`.
+
+Moving to PlutusCoreBlaster `main` waits for Lean-blaster. `main` of PlutusCoreBlaster, which has
+the checker of the Universal Annotation Language, does not build against the Lean-blaster pinned
+here (`6c27ff9`); it builds against Lean-blaster `main` (`983f10f`), which needs Z3 5.3.1 or later.
+From `1fe209e` (#155) on, `#blaster` does not return on a function that recurses on a sublist bound
+by an as-pattern, as the check that a map's keys ascend does (measured 2026-11-10), and every
+statement about a script context has that check.
 
 ## Coverage
 
