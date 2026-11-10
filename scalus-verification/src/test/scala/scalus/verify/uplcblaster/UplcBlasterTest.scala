@@ -1991,11 +1991,13 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("a counterexample outside its variable's type is counted, and can need every budget") {
-        // Lean does not check the order of the keys of a map keyed by a case class, so its
-        // variable has maps whose keys are out of order, which no SortedMap is. `get` stops at a
-        // greater key: on such a map it misses the second key, and the statement, true of every
-        // SortedMap, is false at every budget. The search counts the counterexample on Lean's
-        // machine instead of doubling the budget, and stops: no budget proves the statement.
+        // Lean does not check the order of the keys of a map keyed by a case class, nor does the
+        // tactic, so Lean's variable has maps whose keys are out of order, which no SortedMap is.
+        // `get` stops at a greater key: on such a map it misses the second key, and the statement,
+        // true of every SortedMap, is false there on the Scalus CEK. That refutes it only if the
+        // map is a SortedMap, which the tactic cannot tell, and no budget proves it. The search
+        // counts the counterexamples before it, which may be no SortedMap either, instead of
+        // doubling the budget, and stops there.
         val secondIsFound = forAll[prelude.SortedMap[PubKeyHash, BigInt]](m =>
             m.toList match
                 case prelude.List.Cons(_, prelude.List.Cons(second, _)) =>
@@ -2005,6 +2007,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         val searched = inconclusive(secondIsFound, UplcBlaster(Budget.Auto, lean, 3.minutes))
         assert(searched.contains("no value of its variable's type"), searched)
         assert(searched.contains("no budget proves it"), searched)
+        assert(searched.contains("only if it is a value of the type"), searched)
         assert(!searched.contains(UplcBlaster.maxDoubledBudget.toString), searched)
         // At a given budget, the count says so too.
         val atGiven = inconclusive(secondIsFound, 400, 2.minutes)

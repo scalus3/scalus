@@ -51,11 +51,13 @@ was found at, `Artifact.budget`, whichever way the budget came.
 3. A counterexample that is spurious says what is missing. Lean's machine counts what each
    test's program does on its values. The next budget is the least at which the statement, read
    as Lean reads it under a budget, holds on those values. Go to 2.
-4. A counterexample outside its variable's type, as a map whose keys are not in order, which
-   Lean's variable has where its restriction is not exact, refutes nothing, and is counted as a
-   spurious one is: Lean's variable ranges over it, so a proof needs a budget that covers its
-   runs. Where the statement is false of it at every budget, no budget proves the statement,
-   and the search ends.
+4. A counterexample that may be no value of its variable's type, which Lean's variable has where
+   its restriction is not exact, is replayed too. A map keyed by a case class is one: Lean does
+   not check the order of its keys, nor does the tactic, so it cannot tell a value of the type
+   from one that is none. Where the statement holds on it on the Scalus CEK, it is spurious and
+   counted as any: Lean's variable ranges over it, so a proof needs a budget that covers its
+   runs. Where it is false there, it refutes the statement only if it is a value of the type,
+   and no budget proves the statement: the search ends, and says so.
 
 ### Counting on Lean's machine
 
@@ -100,11 +102,12 @@ thousands of steps, and taking its count is the oversized budget again.
   that could be replayed, and a counterexample can be no value at all, as a string with a
   surrogate. The budget is then doubled, a few times: a false statement of that kind would else
   cost one check after the other for the same answer.
-- **No budget, of values outside the type.** Where the statement is false of a counterexample
-  outside its variable's type at every budget, Lean's restriction of the variable leaves it
-  values on which no budget proves it. Of a map keyed by a case class, whose order Lean does not
-  check, `get` misses a key: "the second key is found" holds of every `SortedMap`, and the
-  search ends after three checks, at 100, 116 and 393 steps, where it doubled to 6288 before.
+- **No budget, of values that may be outside the type.** Where the statement is false on the
+  Scalus CEK of a counterexample that may be no value of its variable's type, no budget proves
+  it, and the result says that it is a refutation only if the values are of the type. On a map
+  keyed by a case class whose keys are not in order, `get` misses a key: "the second key is
+  found" holds of every `SortedMap`, and the search ends after three checks, at 100, 116 and 393
+  steps, where it doubled to 6288 before (2026-11-10).
 - **The most that is counted,** 100000 steps. A counterexample that needs more gives no budget.
 - **Time.** The tactic's time limit is that of the whole search. `withAttemptTimeout` gives one
   check of it a limit of its own. The two guard against different things: one check that

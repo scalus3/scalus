@@ -568,6 +568,12 @@ through the types around it.
 
   A budget of each program, the accepting program's the premise's and the validator's, would
   keep the premise's at its own; that is a change of the Lean check.
+- **An exact order of the keys of a map keyed by a case class.** Lean's restriction of a map,
+  and the tactic's check of a value, test the order of the keys only where they are byte strings
+  or integers. A map keyed by a credential, as a context's withdrawals, can then be one whose keys
+  are out of order: such a counterexample refutes nothing, and where a statement reads the order,
+  as `get` does, no budget proves it. An order derived from the key type's `Ord`, of a type the
+  compiler knows it of, would make the restriction exact for these maps.
 - **Two walks of one name throw.** `LeanRecursions` fails with an exception where two walks of
   different text have one 64-bit name, inside `lower`, whose other failures are a `Left`. It is
   an invariant, not an error a statement can meet, but it could be told as a reason.
@@ -1503,7 +1509,7 @@ the validators accept.
 | | an honest payout is accepted; negative control: any payout | | | not finished (`Unfinished`) |
 | the optimized validator | an accepted spend withdraws from the stake credential of the script of the input its redeemer names | any parameter; contexts of two inputs and two withdrawals at most | | not finished (`Unfinished`) |
 | | its redeemer names the spent input | | 1730, found | 490 s |
-| | a spend that names its input, with its withdrawal, is accepted | | 1431, found | 160 s |
+| | a spend that names its input, with its withdrawal, is accepted | | 1431, found | 128 to 160 s |
 | | the stake validator pays the other payee exactly the split | as the naive validator's payouts | | not finished (`Unfinished`) |
 | | the stake validator accepts an honest payout | | | not finished (`Unfinished`) |
 | | an accepted certificate registers or deregisters the stake credential; registration is accepted | any parameter; every script context | 297; 190, found | 8 s; 8 s |
@@ -1544,13 +1550,13 @@ What the suite shows about the tactic:
 - **A liveness statement wants the budget of its longest accepted run.** That a spend with its
   withdrawal is accepted is stated as written, and Lean runs the validator on every context: its
   search climbs by spurious counterexamples, 633, 752, 1081, 1103, 1122 and 1146 steps, and then
-  by counterexamples whose two withdrawals are not in the order of their keys, which Lean does
-  not check of a map keyed by a credential. No context has them, but Lean's variable does, so
-  their runs are counted too, 1315, 1366 and 1431 steps, where it is proved in 160 s, after a
-  search of 10 minutes (2026-11-10). Before they were counted, the search doubled the budget
-  there, which did not finish, and the test gave 1600 by hand, at which it is proved in 333 s. On
-  the longest spend measured, the premise takes 1434 steps of Lean's machine and the validator
-  1347.
+  by counterexamples of two withdrawals, a map keyed by a credential, whose keys' order neither
+  Lean nor the tactic checks: they may be no context, but Lean's variable has them, and the
+  statement holds on them on the Scalus CEK, so their runs are counted too, 1315, 1366 and 1431
+  steps. At 1431 it is proved in 128 to 160 s, after a search of about 10 minutes
+  (2026-11-10). Before they were counted, the search doubled the budget there, which did not
+  finish, and the test gave 1600 by hand, at which it is proved in 333 s. On the longest spend
+  measured, the premise takes 1434 steps of Lean's machine and the validator 1347.
 - **What a payout pays is beyond Lean's symbolic run.** The runs of a statement about the outputs
   walk the inputs, the outputs, and the sums of the payees, which the naive validator builds as an
   association list; an accepted payout is 5569 steps on the sample. Lean was still in the

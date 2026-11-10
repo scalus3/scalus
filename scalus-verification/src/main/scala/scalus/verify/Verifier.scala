@@ -396,9 +396,9 @@ final class Verifier private (results: Option[KeptResults]) {
                 // is compiled apart, so their annotations differ.
                 case List(variable) if variable.tp.show == limited.tp.show =>
                     limited.decoder match
-                        case Some(decoder) if limited.limits.all.nonEmpty =>
+                        case Some(decoder) =>
                             List(DataEncoding.encodedVariable(variable, decoder, limited.limits))
-                        case _ => List(variable)
+                        case None => List(variable)
                 case List(variable) =>
                     throw new IllegalArgumentException(
                       s"${function.displayName} takes a ${variable.tp.show}, and the values that " +

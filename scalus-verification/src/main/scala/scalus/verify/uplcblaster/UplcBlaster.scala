@@ -537,6 +537,10 @@ object UplcBlaster {
     private def limited(wait: Option[FiniteDuration]): String =
         wait.fold("")(time => s", in ${time.toSeconds} s")
 
+    /** `time` as a reason says it: in whole seconds from a second on, and in its own unit below. */
+    private def roughly(time: FiniteDuration): FiniteDuration =
+        if time >= 1.second then FiniteDuration(time.toSeconds, SECONDS) else time
+
     /** The time since `started`, a `System.nanoTime`, for the trace. */
     private def since(started: Long): String =
         f"after ${(System.nanoTime() - started) / 1e9}%.1f s"
@@ -546,7 +550,6 @@ object UplcBlaster {
         case Probe.Decided(result)        => described(result)
         case Probe.Spurious(_, _, reason) => reason
         case Probe.Unreplayed(reason)     => s"unreplayed: $reason"
-        case Probe.Outside(_, _, reason)  => reason
         case Probe.ClaimFails(reason)     => s"the claim fails: $reason"
 
     private def described(result: ExecutionResult): String = result match
@@ -2453,19 +2456,10 @@ object UplcBlaster {
         case Spurious(values: List[Constant], renaming: SmtValues.Renaming, reason: String)
 
         /** Lean falsified the statement under the budget, and gave no values to replay: the
-          * statement asks for a witness, or the values are outside a variable's type and not Lean's
-          * own, or no values at all. Nothing shows whether the statement or the budget is at fault.
+          * statement asks for a witness, or the values are no values at all, or not Lean's own.
+          * Nothing shows whether the statement or the budget is at fault.
           */
         case Unreplayed(reason: String)
-
-        /** Lean falsified the statement under the budget with `values`, which are Lean's own and no
-          * values of their variables' types: Lean's restriction of a variable is not exact, as of a
-          * map whose keys are not in order. They refute nothing, but Lean's variable ranges over
-          * them, so a proof needs a budget that covers their runs, which Lean's machine counts, as
-          * of a spurious counterexample ([[counted]]), on Lean's own values: `values` with
-          * `renaming` undone.
-          */
-        case Outside(values: List[Constant], renaming: SmtValues.Renaming, reason: String)
 
         /** Lean falsified the statement in the rejecting form where a claim fails and its premise
           * does not hold, so the statement holds there: the rejecting form decides nothing, and the
@@ -2480,7 +2474,6 @@ object UplcBlaster {
             case Decided(result)        => result
             case Spurious(_, _, reason) => VerificationResult.Inconclusive(reason)
             case Unreplayed(reason)     => VerificationResult.Inconclusive(reason)
-            case Outside(_, _, reason)  => VerificationResult.Inconclusive(reason)
             case ClaimFails(reason)     => VerificationResult.Inconclusive(reason)
     }
 
@@ -2589,14 +2582,12 @@ object UplcBlaster {
         trace(goal, s"at $budget steps${limited(timeout)}: ${described(probe)}, ${since(started)}")
 
         // The budget was given, so no other is tried. Lean's machine says whether the budget is
-        // at fault for `values`, a spurious counterexample, or one `outside` the type: a
-        // counterexample is spurious for another reason too, and one outside the type may be false
-        // of the statement at every budget.
+        // at fault for `values`, a spurious counterexample read with `renaming`: a counterexample
+        // is spurious for another reason too.
         def explained(
             values: List[Constant],
             renaming: SmtValues.Renaming,
-            reason: String,
-            outside: Boolean
+            reason: String
         ): ExecutionResult = {
             keepCount(goal, values, renaming, maxHeartbeats, keep)
             val count = server.check(
@@ -2610,7 +2601,7 @@ object UplcBlaster {
                   ),
               timeout
             )
-            val why = runs(goal, count).map(counted(goal, _, budget, outside)) match
+            val why = runs(goal, count).map(counted(goal, _, budget, renaming)) match
                 case Right(Right(more)) =>
                     s"On Lean's machine it holds there from $more steps on, so a test needs " +
                         s"more than $budget steps"
@@ -2636,15 +2627,8 @@ object UplcBlaster {
             // checked next, and Lean's machine is asked about the budget there.
             case Probe.Spurious(_, _, reason) if goal.unrewritten.isDefined =>
                 VerificationResult.Inconclusive(reason)
-            // So of values outside the type, which refute nothing either way.
-            case Probe.Outside(_, _, reason)
-                if goal.within.isDefined || goal.unrewritten.isDefined =>
-                VerificationResult.Inconclusive(reason)
-            case Probe.Spurious(values, renaming, reason) =>
-                explained(values, renaming, reason, outside = false)
-            case Probe.Outside(values, renaming, reason) =>
-                explained(values, renaming, reason, outside = true)
-            case probe => probe.toResult
+            case Probe.Spurious(values, renaming, reason) => explained(values, renaming, reason)
+            case probe                                    => probe.toResult
     }
 
     /** A directory of its own under `kept`, for one check that is kept. */
@@ -2710,13 +2694,14 @@ object UplcBlaster {
       * long the program of the conclusion runs: the budget of that run is the oversized one, at
       * which Lean follows the programs through every loop.
       *
-      * A counterexample outside its variable's type, of Lean's own values, as a map whose keys are
-      * not in order, refutes nothing, but Lean's variable ranges over it: it is counted so too, and
-      * where the statement is false of it at every budget, no budget proves the statement. A
-      * falsification without values to count on has the budget doubled, up to [[maxDoubledBudget]].
-      * `timeout` is the time of the whole search, and `attempt` that of one check of it. The server
-      * is asked for before every check, as for any other. `first` is a budget an earlier search
-      * came to, which is tried before the search begins.
+      * A counterexample that may be no value of its variable's type, as a map whose keys' order the
+      * tactic does not check, is replayed as any: where the statement holds there, it is counted so
+      * too, as Lean's variable ranges over it; where it is false there, it refutes the statement
+      * only if it is a value of the type, and no budget proves the statement. A falsification
+      * without values to count on has the budget doubled, up to [[maxDoubledBudget]]. `timeout` is
+      * the time of the whole search, and `attempt` that of one check of it. The server is asked for
+      * before every check, as for any other. `first` is a budget an earlier search came to, which
+      * is tried before the search begins.
       */
     private[uplcblaster] def search(
         goal: Lowered,
@@ -2792,15 +2777,14 @@ object UplcBlaster {
                     )
                     came
 
-        // The budget after `steps`, whose check gave the spurious counterexample `values`, or one
-        // `outside` its variables' types.
+        // The budget after `steps`, whose check gave the spurious counterexample `values`, read
+        // with `renaming`.
         def counted(
             values: List[Constant],
             renaming: SmtValues.Renaming,
             steps: Int,
             tried: List[Int],
-            reason: String,
-            outside: Boolean
+            reason: String
         ): Either[ExecutionResult, Int] =
             time() match
                 case None => Left(outOfTime(tried, Some(reason)))
@@ -2811,7 +2795,6 @@ object UplcBlaster {
                       values,
                       renaming,
                       steps,
-                      outside,
                       maxHeartbeats,
                       servers,
                       wait,
@@ -2842,23 +2825,11 @@ object UplcBlaster {
                                 at(steps * 2, steps :: tried, last)
                             else inconclusive(reason, steps :: tried, last)
                         case Probe.Spurious(values, renaming, reason) =>
-                            counted(values, renaming, steps, steps :: tried, reason, false) match
+                            counted(values, renaming, steps, steps :: tried, reason) match
                                 case Right(more) =>
                                     trace(
                                       goal,
                                       s"Lean's machine counted the runs: $more steps next"
-                                    )
-                                    at(more, steps :: tried, Some(reason))
-                                case Left(result) => result
-                        // Values Lean's variable has and its type has not are counted as a spurious
-                        // counterexample is: the budget must cover their runs too.
-                        case Probe.Outside(values, renaming, reason) =>
-                            counted(values, renaming, steps, steps :: tried, reason, true) match
-                                case Right(more) =>
-                                    trace(
-                                      goal,
-                                      "Lean's machine counted the runs on values outside the " +
-                                          s"type: $more steps next"
                                     )
                                     at(more, steps :: tried, Some(reason))
                                 case Left(result) => result
@@ -2874,11 +2845,11 @@ object UplcBlaster {
                 steps <- first
                 _ = trace(goal, s"the budget that was kept first, $steps steps")
                 (wait, limit) <- time()
-                half = wait.map(time => FiniteDuration((time / 2).toSeconds max 1, SECONDS))
+                half = wait.map(_ / 2)
                 result <- probe(
                   steps,
                   half,
-                  half.fold(limit)(time => s"$time, half of $limit")
+                  half.fold(limit)(time => s"${roughly(time)}, half of $limit")
                 ) match
                     case Probe.Decided(proved: VerificationResult.Proven)   => Some(proved)
                     case Probe.Decided(refuted: VerificationResult.Refuted) => Some(refuted)
@@ -2953,9 +2924,8 @@ object UplcBlaster {
         case Variable.DataMap  => Constant.Data(Data.Map(PList.Nil))
     }
 
-    /** The budget to go on with after `steps` gave the spurious counterexample `values`, or one
-      * `outside` its variables' types, or the result where there is none. With `keep`, the count is
-      * also written there.
+    /** The budget to go on with after `steps` gave the spurious counterexample `values`, read with
+      * `renaming`, or the result where there is none. With `keep`, the count is also written there.
       */
     private def raised(
         goal: Lowered,
@@ -2963,7 +2933,6 @@ object UplcBlaster {
         values: List[Constant],
         renaming: SmtValues.Renaming,
         steps: Int,
-        outside: Boolean,
         maxHeartbeats: Int,
         servers: LeanServerProvider,
         wait: Option[FiniteDuration],
@@ -2971,18 +2940,18 @@ object UplcBlaster {
     ): Either[ExecutionResult, Int] =
         measured(goal, flats, values, renaming, maxHeartbeats, servers, wait, keep).flatMap {
             runs =>
-                counted(goal, runs, steps, outside).left.map(VerificationResult.Inconclusive(_))
+                counted(goal, runs, steps, renaming).left.map(VerificationResult.Inconclusive(_))
         }
 
     /** What the runs of the tests' programs on Lean's counterexample to a check at `steps` come to,
-      * where the statement holds on it on the Scalus CEK, or where it is `outside` its variables'
-      * types: the least budget at which it holds on Lean's machine too, or why there is none.
+      * where the statement holds on it on the Scalus CEK, its values read with `renaming`: the
+      * least budget at which it holds on Lean's machine too, or why there is none.
       */
     private def counted(
         goal: Lowered,
         runs: Vector[Run],
         steps: Int,
-        outside: Boolean
+        renaming: SmtValues.Renaming
     ): Either[String, Int] =
         // Lean falsified the statement at `steps`. Where the runs do not, the values read from
         // its model are not those it falsified the statement with.
@@ -3000,14 +2969,14 @@ object UplcBlaster {
                       s"on Lean's counterexample the statement takes more than " +
                           s"$maxSearchedBudget steps of Lean's machine, the most the tactic counts"
                     )
-                // Of values outside the type, the statement is false on Lean's machine at every
-                // budget, and Lean's variable ranges over them: no budget proves it.
-                case None if outside =>
+                // The CEK ran the solver's characters as bytes, and Lean's machine ran them as they
+                // are, which no byte string has: they are what the two differ by.
+                case None if !renaming.isEmpty =>
                     Left(
-                      "on Lean's counterexample, which is no value of its variable's type, the " +
-                          "statement holds at no budget on Lean's machine: Lean's variable ranges " +
-                          "over values its type has not, which the statement is false of, so no " +
-                          "budget proves it"
+                      "on Lean's counterexample, with the solver's characters, which no byte " +
+                          "string has, the statement holds at no budget on Lean's machine, though " +
+                          "it holds on the Scalus CEK, where they are read as bytes: Lean's byte " +
+                          "strings have more values than Plutus's, and no budget proves it"
                     )
                 case None =>
                     Left(
@@ -3185,16 +3154,19 @@ object UplcBlaster {
       * each is one character's. A character of a string renamed so was a surrogate, which no Lean
       * string has: such values are not counted ([[countable]]).
       */
-    private[uplcblaster] def leanValue(value: Constant, renaming: SmtValues.Renaming): String =
+    private[uplcblaster] def leanValue(value: Constant, renaming: SmtValues.Renaming): String = {
+        // The solver's character of each renamed byte.
+        val characters = renaming.bytes.map((character, byte) => byte -> character)
         value match
-            case Constant.Integer(number)    => s"Const.Integer ${leanInteger(number)}"
-            case Constant.Bool(truth)        => s"Const.Bool $truth"
-            case Constant.ByteString(string) => s"Const.ByteString ${leanBytes(string, renaming)}"
-            case Constant.String(string)     => s"Const.String \"${leanString(string)}\""
-            case Constant.Data(tree)         => s"Const.Data ${leanData(tree, renaming)}"
+            case Constant.Integer(number) => s"Const.Integer ${leanInteger(number)}"
+            case Constant.Bool(truth)     => s"Const.Bool $truth"
+            case Constant.ByteString(string) =>
+                s"Const.ByteString ${leanBytes(string, characters)}"
+            case Constant.String(string) => s"Const.String \"${leanString(string)}\""
+            case Constant.Data(tree)     => s"Const.Data ${leanData(tree, characters)}"
             case Constant.List(DefaultUni.Data, items) =>
                 val values = items.map {
-                    case Constant.Data(tree) => leanData(tree, renaming)
+                    case Constant.Data(tree) => leanData(tree, characters)
                     case other =>
                         throw new IllegalArgumentException(s"a list of Data has the item $other")
                 }
@@ -3202,7 +3174,7 @@ object UplcBlaster {
             case Constant.List(element, items) if element == DataPair =>
                 val pairs = items.map {
                     case Constant.Pair(Constant.Data(key), Constant.Data(value)) =>
-                        s"(${leanData(key, renaming)}, ${leanData(value, renaming)})"
+                        s"(${leanData(key, characters)}, ${leanData(value, characters)})"
                     case other =>
                         throw new IllegalArgumentException(s"a list of pairs has the item $other")
                 }
@@ -3211,13 +3183,15 @@ object UplcBlaster {
                 throw new IllegalArgumentException(
                   s"no variable of a statement has the value $other"
                 )
+    }
 
     /** A `Data` as a Lean term of PlutusCore's `Data`. */
-    private[uplcblaster] def leanData(value: Data): String =
-        leanData(value, SmtValues.Renaming.none)
+    private[uplcblaster] def leanData(value: Data): String = leanData(value, Map.empty)
 
-    /** [[leanData]] of a value read with `renaming`, as Lean's own ([[leanValue]]). */
-    private def leanData(value: Data, renaming: SmtValues.Renaming): String = {
+    /** [[leanData]] of a value whose renamed bytes are the solver's `characters`, as Lean's own
+      * ([[leanValue]]).
+      */
+    private def leanData(value: Data, characters: Map[Int, Int]): String = {
         def of(data: Data): String = data match
             case Data.Constr(tag, fields) =>
                 s"(Data.Constr ${leanInteger(tag)} [${fields.toScalaList.map(of).mkString(", ")}])"
@@ -3226,19 +3200,19 @@ object UplcBlaster {
                 s"(Data.Map [${pairs.mkString(", ")}])"
             case Data.List(items) => s"(Data.List [${items.toScalaList.map(of).mkString(", ")}])"
             case Data.I(number)   => s"(Data.I ${leanInteger(number)})"
-            case Data.B(string)   => s"(Data.B ${leanBytes(string, renaming)})"
+            case Data.B(string)   => s"(Data.B ${leanBytes(string, characters)})"
         of(value)
     }
 
     private def leanInteger(value: BigInt): String =
         if value < 0 then s"($value)" else value.toString
 
-    /** One character for a byte, as Lean's library holds a byte string, but for a byte `renaming`
-      * read a character of the solver's as, which is that character again. Lean reads `\xHH` as the
-      * character of that code, and `\uHHHH` too; what it prints, `\u{HH}`, it does not read.
+    /** One character for a byte, as Lean's library holds a byte string, but for a byte the replay
+      * read a character of the solver's as, which `characters` gives, and which is that character
+      * again. Lean reads `\xHH` as the character of that code, and `\uHHHH` too; what it prints,
+      * `\u{HH}`, it does not read.
       */
-    private def leanBytes(value: ByteString, renaming: SmtValues.Renaming): String = {
-        val characters = renaming.bytes.map((character, byte) => byte -> character)
+    private def leanBytes(value: ByteString, characters: Map[Int, Int]): String = {
         value.bytes
             .map { byte =>
                 characters.get(byte & 0xff) match
@@ -3442,24 +3416,24 @@ object UplcBlaster {
                 Probe.Unreplayed(
                   s"Lean's counterexample is no value of its variable's type: $error"
                 )
-            // A value of Lean's variable that its type has not, as a map whose keys are not in
-            // order: it refutes nothing, but Lean's variable ranges over it, so the budget must
-            // cover its runs, which Lean's machine counts on Lean's own values.
-            case Right(ReadValues(values, renaming, Some(error))) =>
-                val reason = s"Lean's counterexample is no value of its variable's type: $error"
-                if countable(renaming) then Probe.Outside(values, renaming, reason)
-                else Probe.Unreplayed(reason)
-            case Right(ReadValues(values, renaming, None)) =>
-                replayValues(goal, artifact, values, renaming)
+            // A value of Lean's variable that may be none of its type's, as a map whose keys' order
+            // is not checked, is replayed as any: the CEK says whether the budget is at fault.
+            case Right(ReadValues(values, renaming, outside)) =>
+                replayValues(goal, artifact, values, renaming, outside)
 
     /** Replays `values` on the Scalus CEK. They were read from Lean's counterexample with
-      * `renaming` for the characters that are none of their type.
+      * `renaming` for the characters that are none of their type. Where a value may be no value of
+      * its variable's type, `outside` says why: the tactic cannot tell, as of a map whose keys'
+      * order it does not check, or it is none. Such values refute nothing, but Lean's variable
+      * ranges over them: where the statement holds there, the budget is at fault, as of any
+      * spurious counterexample, and where it is false there, no budget proves the statement.
       */
     private def replayValues(
         goal: Lowered,
         artifact: Artifact,
         values: List[Constant],
-        renaming: SmtValues.Renaming
+        renaming: SmtValues.Renaming,
+        outside: Option[String]
     ): Probe = {
         val read =
             if renaming.isEmpty then ""
@@ -3479,7 +3453,19 @@ object UplcBlaster {
         def outcomes(lowered: Lowered) = lowered.leaves
             .zip(lowered.leafBinders)
             .map((program, scope) => evaluate(program, scope.map(values)))
+        // Of values that may be none of the type's, what the tactic could not tell.
+        val untold = outside.fold("")(why =>
+            s"; it is no value of its variable's type, or one the tactic cannot tell is: $why"
+        )
         def decided(written: Option[Boolean]): Probe = written match
+            case Some(false) if outside.isDefined =>
+                Probe.Decided(
+                  VerificationResult.Inconclusive(
+                    s"$falsification is false on the Scalus CEK$untold. It refutes the statement " +
+                        "only if it is a value of the type; Lean's variable ranges over it, so no " +
+                        "budget proves it"
+                  )
+                )
             case Some(false) =>
                 Probe.Decided(
                   VerificationResult.Refuted(
@@ -3497,14 +3483,14 @@ object UplcBlaster {
             // on as for a falsification without values.
             case Some(true) if !countable(renaming) =>
                 Probe.Unreplayed(
-                  s"$falsification is spurious: the statement holds there on the Scalus CEK, " +
-                      "and values that are not Lean's say nothing of the budget"
+                  s"$falsification is spurious: the statement holds there on the Scalus CEK" +
+                      s"$untold, and values that are not Lean's say nothing of the budget"
                 )
             case Some(true) =>
                 Probe.Spurious(
                   values,
                   renaming,
-                  s"$falsification is spurious: the statement holds there on the Scalus CEK"
+                  s"$falsification is spurious: the statement holds there on the Scalus CEK$untold"
                 )
             case None =>
                 Probe.Decided(
@@ -4229,7 +4215,7 @@ object UplcBlaster {
                             yield value :: others
                     }
                 read.flatMap { values =>
-                    replayValues(goal, artifact, values, SmtValues.Renaming.none) match
+                    replayValues(goal, artifact, values, SmtValues.Renaming.none, None) match
                         case Probe.Decided(refuted: VerificationResult.Refuted) => Right(refuted)
                         case Probe.Decided(VerificationResult.Inconclusive(reason)) => Left(reason)
                         case Probe.Spurious(_, _, _) =>

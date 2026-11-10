@@ -199,10 +199,10 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // A spend's runs end: on two inputs, the redeemer naming the second and its script the
         // second of two withdrawals, the premise takes 1434 steps of Lean's machine and the
         // validator 1347. The search climbs by spurious counterexamples to 1146 steps, and then by
-        // counterexamples whose withdrawals are not in the order of their keys, which Lean does
-        // not check of a map keyed by a credential: no context has them, but Lean's machine counts
-        // their runs, and the budget must cover them. It found 1431 steps, where the check takes
-        // 128 s, in 570 s (2026-11-09).
+        // counterexamples of two withdrawals, a map keyed by a credential, whose keys' order
+        // neither Lean nor the tactic checks: they may be no context, but the statement holds on
+        // them on the Scalus CEK, and the budget must cover their runs. It finds 1431 steps, where
+        // the check takes 128 to 160 s, in about 10 minutes (2026-11-10).
         // With the withdrawal, and the redeemer naming the contract's output, the spend is
         // accepted. Stated so, Lean runs the validator on every context within the limits, the
         // premise pruning none: a withdrawal's context too, whose stake validator walks the
