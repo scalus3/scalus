@@ -458,7 +458,10 @@ that requires it ("Several workspaces").
   (`LeanProofsSuite.keptChecksDirectory`, as `PaymentSplitterVerificationTest` does, under
   `KeptChecks/`). That is not the default, and the leaf files of the checks that run are still
   written to a temporary directory.
-- **The generated Lean** is not: it waits for `lean-direct`.
+- **The generated Lean**, in part. The Lean types of a contract's Scala types are written into
+  the workspace, under `<Package>/Generated` ([Lean types for Scala types](lean-types.md)).
+  Statements are not: `LeanExporter` still waits for `lean-direct`, and a statement over the
+  programs of its tests is proposed there.
 
 ## Keeping prepared leaves
 

@@ -24,6 +24,39 @@ object LeanWorkspace {
         Option.when(Files.isRegularFile(file))(readFromArray[Manifest](Files.readAllBytes(file)))
     }
 
+    /** The directory of a workspace's package, under that of its library's modules, that holds the
+      * modules Scalus writes from Scala sources ([[generated]]).
+      */
+    val GeneratedDirectory = "Generated"
+
+    /** The name of the workspace's package: that of its manifest, or of its directory where it has
+      * no manifest yet.
+      */
+    def packageName(workspace: Path): String =
+        manifest(workspace).fold(workspace.getFileName.toString)(_.name)
+
+    /** The module `name` that Scalus writes for `workspace`, as `Types`: its Lean name,
+      * `<Package>.Generated.Types`, and its file. A module there is written again whenever the
+      * Scala sources it comes from change, and is nobody's to edit.
+      */
+    def generated(workspace: Path, name: String): (String, Path) = {
+        val own = packageName(workspace)
+        s"$own.$GeneratedDirectory.$name" ->
+            workspace.resolve(own).resolve(GeneratedDirectory).resolve(s"$name.lean")
+    }
+
+    /** Writes `text` to `file` where the file is not that text already, and says whether it wrote.
+      */
+    def write(file: Path, text: String): Boolean = {
+        val current =
+            Option.when(Files.isRegularFile(file))(Files.readString(file, StandardCharsets.UTF_8))
+        val changed = !current.contains(text)
+        if changed then
+            Files.createDirectories(file.getParent)
+            Files.writeString(file, text, StandardCharsets.UTF_8)
+        changed
+    }
+
     /** The Lean that `workspace` pins. */
     def toolchain(workspace: Path): String =
         Files.readString(workspace.resolve("lean-toolchain")).trim
@@ -75,14 +108,23 @@ object LeanWorkspace {
       * paths in the package and their texts.
       *
       * Other Lean files of the directory are not the package's: a check that is kept there to be
-      * run by hand, or a file someone tries something in, changes no result.
+      * run by hand, or a file someone tries something in, changes no result. Nor do the modules
+      * under `<name>/Generated` ([[generated]]): they are written from the Scala sources, whose
+      * statements and programs a result's entry has the hashes of already, and a type added to one
+      * of them is no reason to prove every statement of the workspace again.
       */
     private def sources(directory: Path, name: String): String = {
         val modules = directory.resolve(name)
+        val written = modules.resolve(GeneratedDirectory)
         val below =
             if Files.isDirectory(modules) then
                 val walked = Files.walk(modules)
-                try walked.iterator().asScala.filter(Files.isRegularFile(_)).toList
+                try
+                    walked
+                        .iterator()
+                        .asScala
+                        .filter(file => Files.isRegularFile(file) && !file.startsWith(written))
+                        .toList
                 finally walked.close()
             else Nil
         val files =

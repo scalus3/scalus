@@ -337,6 +337,10 @@ private[verify] object PropMacro {
     def dataEncoding[A: Type](using Quotes): Expr[DataEncoding] =
         '{ DataEncoding.of(Props.variableType(scalus.compiler.compile((value: A) => value))) }
 
+    /** The SIR type of `A`, as the compiler has it: that of the variable of a statement. */
+    def sirType[A: Type](using Quotes): Expr[scalus.compiler.sir.SIRType] =
+        '{ Props.variableType(scalus.compiler.compile((value: A) => value)) }
+
     def denotes[A: Type](e: Expr[A])(using Quotes): Expr[Prop] = '{ Prop.Denotes(${ leaf(e) }) }
 
     def equal[A: Type](a: Expr[A], b: Expr[A])(using Quotes): Expr[Prop] =
