@@ -122,9 +122,11 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val statedContractHolds = FunctionContract
         .inSource(linearVesting)
         .map(stated =>
+            // A statement of the contract, and not its `prop`: so the verifier knows that it checks
+            // the `ensuring` clause it was read from.
             verifier.statement(
               "vesting.schedule.stated_contract_holds",
-              stated.returnsWhen((config, time) => true).prop
+              stated.returnsWhen((config, time) => true)
             )
         )
 
@@ -339,6 +341,13 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       )
     )
 
+    // The third is not finished by Lean (below): it is declared open, so that the suite says so of
+    // the clause, and does not fail it as unchecked.
+    verifier.open(
+      unvestedStaysLocked,
+      "Lean does not finish its symbolic run (the test of it is tagged Unfinished)"
+    )
+
     test("spend's guarantees hold: the signature of spends of two inputs, the amount of any") {
         // They are proved one by one. Each rejecting program runs the validator only where its
         // condition is false, to the check that rejects the spend: together, every way one of
@@ -508,6 +517,15 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     /** Every script context: the parameter a `forAllData[ScriptContext]` variable. */
     private val anyContext = unlimitedData[ScriptContext]
+
+    /** The statements the verifier makes of spend's clauses themselves, over the contexts of the
+      * statements above: what ties those to the clauses in `VestingValidator.spend`. They are not
+      * proved: each of the statements above is the same statement as one of them, and checks its
+      * clause so ([[Verifier.specifications]]). A clause changed in the code, or a statement here,
+      * would leave the clause unchecked, and fail the suite.
+      */
+    verifier.guarantees(spends.ref, fewInputsData, Connective.Rejects)
+    verifier.guarantees(spendsOnAnyContext.ref, anyContext, Connective.Rejects)
 
     // The first and the third condition of spend, as above, of every script context.
     private val beneficiarySignedOnAnyContext = verifier.statement(

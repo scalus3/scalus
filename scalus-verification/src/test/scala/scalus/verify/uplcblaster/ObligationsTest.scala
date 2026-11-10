@@ -31,6 +31,11 @@ object ObligationExamples {
 class ObligationsTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
 
+    /** The functions here state clauses for the tests of the obligations of calls, which prove some
+      * of them and refute others, on purpose.
+      */
+    override protected def checksSpecifications: Boolean = false
+
     private val clamp = FunctionDef(Math.clamp)
     private val violates = FunctionDef(ObligationExamples.violates)
     private val guarded = FunctionDef(ObligationExamples.guarded)

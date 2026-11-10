@@ -552,6 +552,26 @@ final class LeanProofs private (
             .map(stated => scalus.verify.ual.UalExport.Property(id, text, stated))
     }
 
+    /** Every clause of the specifications of the functions of [[verifier]], where their code states
+      * them, and how each stands ([[Verifier.specifications]]).
+      */
+    def specifications: List[Specification] = verifier.specifications
+
+    /** Fails where a clause of the specification of a function of [[verifier]] is not checked:
+      * neither proved nor declared open ([[Verifier.open]]). It returns the clauses that are open,
+      * to be said.
+      */
+    def checkSpecifications(): List[Specification] = {
+        val all = verifier.specifications
+        val unchecked = all.filter(_.status.isInstanceOf[ClauseStatus.Unchecked])
+        if unchecked.nonEmpty then
+            failed(
+              ("clauses of the specifications of functions here are not checked:" ::
+                  unchecked.map(specification => s"  ${specification.describe}")).mkString("\n")
+            )
+        all.filter(_.status.isInstanceOf[ClauseStatus.Open])
+    }
+
     /** What [[UplcBlaster]] reported with the proof or the refutation that a check returned. */
     def artifactOf(result: VerificationResult): UplcBlaster.Artifact = {
         val proof = result match

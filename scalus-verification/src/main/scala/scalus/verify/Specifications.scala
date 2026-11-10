@@ -84,10 +84,52 @@ private[verify] object Specifications {
                 )
               ),
               if guarantees.isEmpty then List(Prop.Bool(PropExpr.SIRExpr(constant(true))))
-              else guarantees
+              else guarantees,
+              clauses(body.term, function.name)
             )
         }
     }
+
+    /** The clauses of the contract [[read]] makes of the body `term`, where the code states them:
+      * the `Spec.expects` and `Spec.ensures` the body starts with, also inside what `ensuring` is
+      * applied to, and the `ensuring` of its result.
+      */
+    private def clauses(term: SIR, name: String): List[Clause] = {
+        def leading(term: SIR): List[Clause] = term match
+            case SIR.Decl(_, inner)    => leading(inner)
+            case SIR.Cast(inner, _, _) => leading(inner)
+            case SIR.Let(bindings, body, _, _) =>
+                val stated = bindings.map(binding => clauseAt(binding.value))
+                val here = stated.takeWhile(_.nonEmpty).flatten
+                if here.size < bindings.size then here else here ++ leading(body)
+            case _ => Nil
+        val head = statements(term)
+        val (inner, ofResult) = ensuring(head.rest, name)
+        val ofTheResult =
+            if ofResult.isEmpty then Nil
+            else ensuringNode(head.rest).map(Clause.at(_, Clause.Kind.Ensuring)).toList
+        leading(term) ++ (if ofResult.isEmpty then Nil else leading(inner)) ++ ofTheResult
+    }
+
+    /** The clause a statement of the body is, where it is one, at its call. */
+    private def clauseAt(sir: SIR): Option[Clause] = sir match
+        case SIR.Cast(inner, _, _) => clauseAt(inner)
+        case apply @ SIR.Apply(SIR.ExternalVar(_, function, _, _), _, _, _) =>
+            Clause.kindOf(function).filter(_ != Clause.Kind.Ensuring).map(Clause.at(apply, _))
+        case _ => None
+
+    /** The call of `ensuring` that `term` is, where it is one. */
+    private def ensuringNode(term: SIR): Option[SIR] = term match
+        case SIR.Decl(_, inner)    => ensuringNode(inner)
+        case SIR.Cast(inner, _, _) => ensuringNode(inner)
+        case apply @ SIR.Apply(
+              SIR.Apply(SIR.ExternalVar(_, EraseSpecifications.Ensuring, _, _), _, _, _),
+              _,
+              _,
+              _
+            ) =>
+            Some(apply)
+        case _ => None
 
     /** `Spec.expects(c)` and `Spec.ensures(c)` statements at the start of `term`, in order. */
     private def statements(term: SIR): Head = term match

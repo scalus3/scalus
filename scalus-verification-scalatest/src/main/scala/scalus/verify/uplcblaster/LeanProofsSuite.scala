@@ -76,11 +76,22 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
       */
     protected def keptChecksDirectory: Option[Path] = None
 
+    /** Whether the suite holds the specifications of the functions of its verifier to being checked
+      * ([[LeanProofs.checkSpecifications]]): after its last test, where every test but those tagged
+      * [[Unfinished]] ran and passed, a clause of a function's code that no proof checks, and that
+      * is not declared open, fails the suite. A suite about the verifier itself, whose functions
+      * state clauses to be read and not to be proved, says no.
+      */
+    protected def checksSpecifications: Boolean = true
+
     /** The test that runs: what it checks is said to be its. The tests run one after another, so
       * one variable says it, also to a check the test makes on another thread, which a thread-local
       * one would not.
       */
     @volatile private var running = ""
+
+    /** The tests that passed. */
+    private val passed = java.util.concurrent.ConcurrentHashMap.newKeySet[String]()
 
     /** The proofs, once a test has asked for them. A suite whose tests ask for none has no
       * workspace made ready, and nothing to close.
@@ -110,7 +121,9 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
             try super.withFixture(test)
             finally running = ""
         // A test that passed states all it states: what it no longer does is not kept.
-        if outcome.isSucceeded then made.foreach(_.finished(test.name))
+        if outcome.isSucceeded then
+            passed.add(test.name)
+            made.foreach(_.finished(test.name))
         outcome
     }
 
@@ -118,11 +131,29 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
     // where the proofs are made: a suite that states its statements as it is constructed makes
     // them before its tests are registered.
     override protected def afterAll(): Unit = {
-        try super.afterAll()
+        try
+            super.afterAll()
+            made.filter(_ => checksSpecifications && everyTestPassed).foreach { proofs =>
+                val open = proofs.checkSpecifications()
+                if open.nonEmpty then
+                    println(
+                      (s"${getClass.getSimpleName}: clauses that are open:" ::
+                          open.map(specification => s"  ${specification.describe}")).mkString("\n")
+                    )
+            }
         finally
             made.foreach { proofs =>
                 proofs.tests(testNames)
                 proofs.close()
             }
     }
+
+    /** Whether every test of the suite but those tagged [[Unfinished]] ran and passed: a run of
+      * some of them, or one with a test that failed or was canceled, does not hold the
+      * specifications to what it checked.
+      */
+    private def everyTestPassed: Boolean =
+        testNames.forall(name =>
+            tags.get(name).exists(_.contains(Unfinished.name)) || passed.contains(name)
+        )
 }
