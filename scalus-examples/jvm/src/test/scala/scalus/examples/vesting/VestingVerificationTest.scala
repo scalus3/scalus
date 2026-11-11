@@ -24,21 +24,23 @@ import scala.concurrent.duration.*
   *   - the vesting schedule, `linearVesting`, and its contract, for every datum and time;
   *   - the validator on every script context, of any transaction: what it rejects before it reads
   *     the transaction;
-  *   - the validator on every script context of a few inputs and outputs: who may withdraw, how
-  *     much, what its call of the schedule owes, and that everything can be withdrawn after the
-  *     end. Sample withdrawals, decided by running the validator, show that it accepts some.
+  *   - withdrawals: who may withdraw, how much, what the validator's call of the schedule owes, and
+  *     that everything can be withdrawn after the end. Each is stated of every script context,
+  *     under the plain name, and of the contexts of a few inputs and outputs, under the name with
+  *     `Limited`, the two side by side. Sample withdrawals, decided by running the validator, show
+  *     that it accepts some.
   *
   * Two limits of what is proved:
   *   - the validator is compiled here with the tactic's options (`UplcBlaster.options`), which
   *     differ from those of [[VestingContract]]: Lean's model has no `Value` builtins yet. The
   *     statements are about the same source, not about the published script's bytes;
-  *   - a statement about withdrawals says nothing about transactions of more inputs or outputs than
-  *     its limits. The validator walks the inputs and the outputs, and the tactic cannot follow a
-  *     loop over a list of unknown length.
+  *   - of withdrawals, Lean proves only that something is withdrawn of every context; the others it
+  *     proves, of the contexts within their limits. The validator walks the inputs and the outputs,
+  *     and the tactic cannot follow a loop over a list of unknown length.
   *
   * Without Lean, that is without `lake` and a built workspace, the tests pass on the results kept
-  * beside this file (see [[LeanProofs]]). The test tagged `Unfinished` is about what Lean does not
-  * finish, and keeps nothing: it needs Lean.
+  * beside this file (see [[LeanProofs]]). The tests tagged `Unfinished` are about what Lean does
+  * not finish, and keep nothing: they need Lean.
   */
 class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
@@ -283,7 +285,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     /** The validator on a script context of its type: what the verifier's statements about its code
       * are of. `spend` is inlined into `validate`, so the verifier finds the clauses of `spend` in
-      * the code of this function.
+      * the code of this function. Its statements are of the contexts of [[fewInputs]].
       */
     private val spends = FunctionDef.named(
       "spends",
@@ -292,11 +294,29 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     verifier.addFunction(spends)
 
+    /** The same validator under a name of its own: the verifier's statements of it are of every
+      * context, without limits. Lean does not finish them. The validator walks the inputs, and
+      * where it accepts the outputs, lists of any length, and the tactic cannot follow a loop over
+      * one: a run goes on to the end of the budget on every length. They are what the limits of the
+      * statements of [[spends]] are for.
+      */
+    private val spendsOnAnyContext = FunctionDef.named(
+      "spends_on_any_context",
+      (ctx: ScriptContext) => VestingValidator.validate(ctx.toData)
+    )
+
+    verifier.addFunction(spendsOnAnyContext)
+
     /** [[fewInputs]], as the verifier takes the contexts of the obligations it declares. */
     private val fewInputsData = limitedData[ScriptContext](ctx => fewInputs(ctx))
 
+    /** Every script context: the parameter a `forAllData[ScriptContext]` variable. */
+    private val anyContext = unlimitedData[ScriptContext]
+
     // What holds of every spend the script accepts: the three conditions `VestingValidator.spend`
-    // states at its head with `Spec.ensures`, each as a statement about the compiled script.
+    // states at its head with `Spec.ensures`, each as a statement about the compiled script, of
+    // every script context and of those of a few inputs. The statement of every context has the
+    // plain name, and the one of the limited contexts the name with `Limited`.
     //
     // `spend` is inline: the program is the script's entry point, `validate`, which reads the
     // datum, the redeemer and the transaction from the script context and gives them to `spend`.
@@ -314,46 +334,99 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     // to return there as well: one that read a default instead lets every datum it cannot read
     // run on into the validator, which reads the datum after it walks the inputs, and Lean does
     // not finish.
+    //
+    // They are proved one by one. Each rejecting program runs the validator only where its
+    // condition is false, to the check that rejects the spend: together, every way one of them is
+    // false would run on into the validator, and Lean does not finish.
+
+    /** The statements the verifier makes of spend's clauses themselves, over the contexts of the
+      * statements below: what ties those to the clauses in `VestingValidator.spend`. They are not
+      * proved: each of the statements below is the same statement as one of them, and checks its
+      * clause so ([[Verifier.specifications]]). A clause changed in the code, or a statement here,
+      * would leave the clause unchecked, and fail the suite.
+      */
+    verifier.guarantees(spends.ref, fewInputsData, Connective.Rejects)
+    verifier.guarantees(spendsOnAnyContext.ref, anyContext, Connective.Rejects)
 
     // spend: Spec.ensures(txInfo.isSignedBy(configOf(datum).beneficiary))
     private val beneficiarySigned = verifier.statement(
       "vesting.spend.beneficiary_signed",
+      forAllData[ScriptContext](ctx => accepts(ctx) ==>?: signedByTheBeneficiary(ctx))
+    )
+
+    test("spend's first guarantee, of every script context, is not finished by Lean", Unfinished) {
+        val unfinished = inconclusive(
+          beneficiarySigned,
+          UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
+        )
+        assert(unfinished.contains("did not finish"), unfinished)
+    }
+
+    private val beneficiarySignedLimited = verifier.statement(
+      "vesting.spend.beneficiary_signed_limited",
       forAllDataLimited[ScriptContext](ctx => fewInputs(ctx))(ctx =>
           accepts(ctx) ==>?: signedByTheBeneficiary(ctx)
       )
     )
 
+    test("spend's first guarantee holds of spends of two inputs: the beneficiary signed") {
+        check(beneficiarySignedLimited, guaranteesBudget)
+    }
+
     // spend: Spec.ensures(amountOf(redeemer) > 0)
     //
     // Of every script context, without limits: the validator rejects a spend of no amount at its
-    // first check, before it reads a list of the context.
+    // first check, before it reads a list of the context. It needs no statement with limits.
     private val somethingIsWithdrawn = verifier.statement(
       "vesting.spend.something_is_withdrawn",
       forAllData[ScriptContext](ctx => accepts(ctx) ==>?: withdrawsSomething(ctx))
     )
 
+    test("spend's second guarantee holds of every script context: something is withdrawn") {
+        check(somethingIsWithdrawn, guaranteesBudget)
+    }
+
     // spend: Spec.ensures(lockedBy(txInfo, txOutRef) - amountOf(redeemer) >=
     //            configOf(datum).initialAmount - linearVesting(configOf(datum), validFrom))
     private val unvestedStaysLocked = verifier.statement(
       "vesting.spend.unvested_stays_locked",
+      forAllData[ScriptContext](ctx => accepts(ctx) ==>?: keepsTheUnvestedLocked(ctx))
+    )
+
+    test("spend's third guarantee, of every script context, is not finished by Lean", Unfinished) {
+        val unfinished = inconclusive(
+          unvestedStaysLocked,
+          UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
+        )
+        assert(unfinished.contains("did not finish"), unfinished)
+    }
+
+    private val unvestedStaysLockedLimited = verifier.statement(
+      "vesting.spend.unvested_stays_locked_limited",
       forAllDataLimited[ScriptContext](ctx => fewInputs(ctx))(ctx =>
           accepts(ctx) ==>?: keepsTheUnvestedLocked(ctx)
       )
     )
 
-    // The third is not finished by Lean (below): it is declared open, so that the suite says so of
+    // Lean finishes the third of no contexts: it is declared open, so that the suite says so of
     // the clause, and does not fail it as unchecked.
     verifier.open(
-      unvestedStaysLocked,
+      unvestedStaysLockedLimited,
       "Lean does not finish its symbolic run (the test of it is tagged Unfinished)"
     )
 
-    test("spend's guarantees hold: the signature of spends of two inputs, the amount of any") {
-        // They are proved one by one. Each rejecting program runs the validator only where its
-        // condition is false, to the check that rejects the spend: together, every way one of
-        // them is false would run on into the validator, and Lean does not finish.
-        check(beneficiarySigned, guaranteesBudget)
-        check(somethingIsWithdrawn, guaranteesBudget)
+    test("spend's third guarantee, of spends of two inputs, is not finished by Lean", Unfinished) {
+        // What stays locked is at least what has not vested. Its rejecting program did not end its
+        // symbolic run in 30 minutes, at 3300 or at 3800 steps, written as the condition is or as
+        // the validator's check, with the outputs free or of at most two; and the search for its
+        // budget came, by 1173, 1327, 1406 and 1450 steps, each a spurious counterexample of a
+        // minute or two, to 2517, which it did not finish in the time left (2026-11-06). The first
+        // two take 149 s and 14 s. The time limit ends it.
+        val unfinished = inconclusive(
+          unvestedStaysLockedLimited,
+          UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
+        )
+        assert(unfinished.contains("symbolically"), unfinished)
     }
 
     test("spend's conditions return true on the samples the validator accepts") {
@@ -365,26 +438,12 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
             sample <- accepted
             statement <- List(
               beneficiarySigned,
+              beneficiarySignedLimited,
               somethingIsWithdrawn,
               unvestedStaysLocked,
-              beneficiarySignedOnAnyContext,
-              unvestedStaysLockedOnAnyContext
+              unvestedStaysLockedLimited
             )
         do assert(holdsAsImplicationOn(statement, Constant.Data(sample)), statement.name)
-    }
-
-    test("the third guarantee, of what stays locked, is not finished by Lean", Unfinished) {
-        // What stays locked is at least what has not vested. Its rejecting program did not end its
-        // symbolic run in 30 minutes, at 3300 or at 3800 steps, written as the condition is or as
-        // the validator's check, with the outputs free or of at most two; and the search for its
-        // budget came, by 1173, 1327, 1406 and 1450 steps, each a spurious counterexample of a
-        // minute or two, to 2517, which it did not finish in the time left (2026-11-06). The first
-        // two take 149 s and 14 s. The time limit ends it.
-        val unfinished = inconclusive(
-          unvestedStaysLocked,
-          UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
-        )
-        assert(unfinished.contains("symbolically"), unfinished)
     }
 
     /** A contract the schedule does not state: had it expected an initial amount that is not
@@ -398,26 +457,29 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       )
     )
 
-    /** What the validator's call of the schedule owes to `vested_in_range`. */
-    private val spendObligations = verifier.obligations(spends.ref, fewInputsData)
+    /** What the validator's call of the schedule owes to `vested_in_range`, of every context. */
+    private val spendObligations = verifier.obligations(spendsOnAnyContext.ref, anyContext)
 
-    /** A contract of the validator that expects a datum whose initial amount `vested_in_range` asks
-      * for.
-      */
-    private val spendOfAnAmount = verifier.contract(
-      "spend_of_an_amount",
-      contract(spends)(
-        expects = ctx => initialAmountIsNotNegative(ctx),
-        ensures = ctx => done => true
-      )
-    )
+    test(
+      "the obligation of the schedule's call, of every script context, is not finished by Lean",
+      Unfinished
+    ) {
+        val owed = spendObligations match
+            case CallObligations(List(owed), Nil) => owed
+            case other                            => fail(s"expected one obligation, got $other")
+        val unfinished = inconclusive(
+          owed,
+          UplcBlaster(Budget.LeanSteps(obligationBudget), lean, 60.seconds)
+        )
+        assert(unfinished.contains("did not finish"), unfinished)
+    }
 
-    /** The same obligation, where the validator's contract holds. */
-    private val obligationsOfAnAmount = verifier.obligations(spendOfAnAmount, fewInputsData)
+    /** The same, of the contexts of [[fewInputs]]. */
+    private val spendObligationsLimited = verifier.obligations(spends.ref, fewInputsData)
 
     test("the validator would not establish a precondition on the amount") {
-        // Why the schedule states its bound with a condition.
-        val owed = spendObligations match
+        // Why the schedule states its bound with a condition. Of the contexts of a few inputs.
+        val owed = spendObligationsLimited match
             case CallObligations(List(owed), Nil) => owed
             case other                            => fail(s"expected one obligation, got $other")
         // It is refuted: the validator reads the amount from the datum and does not check it.
@@ -436,8 +498,52 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         assert(amounts.exists(_.exists(_ < 0)), values)
     }
 
-    test("where the validator's contract expects such an amount, the obligation holds") {
+    /** A contract of the validator that expects a datum whose initial amount `vested_in_range` asks
+      * for, of every context.
+      */
+    private val spendOnAnyContextOfAnAmount = verifier.contract(
+      "spend_on_any_context_of_an_amount",
+      contract(spendsOnAnyContext)(
+        expects = ctx => initialAmountIsNotNegative(ctx),
+        ensures = ctx => done => true
+      )
+    )
+
+    /** The obligation of the schedule's call, where the validator's contract holds, of every
+      * context.
+      */
+    private val obligationsOfAnAmount =
+        verifier.obligations(spendOnAnyContextOfAnAmount, anyContext)
+
+    test(
+      "where the validator's contract expects such an amount, the obligation, of every script " +
+          "context, is not finished by Lean",
+      Unfinished
+    ) {
         val assumed = obligationsOfAnAmount match
+            case CallObligations(List(assumed), Nil) => assumed
+            case other                               => fail(s"expected one obligation, got $other")
+        val unfinished = inconclusive(
+          assumed,
+          UplcBlaster(Budget.LeanSteps(obligationBudget), lean, 60.seconds)
+        )
+        assert(unfinished.contains("did not finish"), unfinished)
+    }
+
+    /** The same contract, of the contexts of [[fewInputs]]. */
+    private val spendOfAnAmount = verifier.contract(
+      "spend_of_an_amount",
+      contract(spends)(
+        expects = ctx => initialAmountIsNotNegative(ctx),
+        ensures = ctx => done => true
+      )
+    )
+
+    /** The same obligation, of the contexts of [[fewInputs]]. */
+    private val obligationsOfAnAmountLimited = verifier.obligations(spendOfAnAmount, fewInputsData)
+
+    test("where the validator's contract expects such an amount, the obligation holds") {
+        val assumed = obligationsOfAnAmountLimited match
             case CallObligations(List(assumed), Nil) => assumed
             case other                               => fail(s"expected one obligation, got $other")
         check(
@@ -448,153 +554,69 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         )
     }
 
+    // Everything after the end of the period
+
     private val everythingAfterTheEnd = verifier.statement(
       "vesting.withdrawal.everything_after_the_end",
-      forAllDataLimited[ScriptContext](ctx =>
-          ctx.txInfo.inputs.length <= 2 && ctx.txInfo.outputs.length <= 2 &&
-              ctx.txInfo.signatories.length <= 1 &&
-              ctx.txInfo.inputs.forall(i =>
-                  i.resolved.value.toSortedMap.length <= 1 &&
-                      i.resolved.value.toSortedMap.values.forall(t => t.length <= 1)
-              ) &&
-              ctx.txInfo.outputs.forall(o =>
-                  o.value.toSortedMap.length <= 1 &&
-                      o.value.toSortedMap.values.forall(t => t.length <= 1)
-              )
-      )(ctx => (takesEverything(ctx) && afterTheEnd(ctx)) ==>: succeeds(validator, ctx.toData))
-    )
-
-    private val everythingAtAnyTime = verifier.refute(
-      "vesting.withdrawal.everything_at_any_time",
-      forAllDataLimited[ScriptContext](ctx =>
-          ctx.txInfo.inputs.length <= 2 && ctx.txInfo.outputs.length <= 2 &&
-              ctx.txInfo.signatories.length <= 1 &&
-              ctx.txInfo.inputs.forall(i =>
-                  i.resolved.value.toSortedMap.length <= 1 &&
-                      i.resolved.value.toSortedMap.values.forall(t => t.length <= 1)
-              ) &&
-              ctx.txInfo.outputs.forall(o =>
-                  o.value.toSortedMap.length <= 1 &&
-                      o.value.toSortedMap.values.forall(t => t.length <= 1)
-              )
-      )(ctx => takesEverything(ctx) ==>: succeeds(validator, ctx.toData))
-    )
-
-    test(
-      "after the end of the period the beneficiary withdraws everything, not finished by Lean",
-      Unfinished
-    ) {
-        // The funds are not stuck: of every context of at most two inputs and two outputs, a
-        // withdrawal of everything, signed by the beneficiary and paying them what the validator
-        // asks, is accepted from the end of the period on. The negative control: before the end of
-        // the period not everything has vested, `everythingAtAnyTime`.
-        //
-        // An accepted run goes to the validator's end, and Lean runs the validator on every path
-        // of every such context: the search for the budget starts at 1922 steps, where the limits
-        // have every test end on the largest values that meet them, and Lean was still in the
-        // validator's symbolic run after 16 minutes (2026-11-06). The time limit ends it.
-        val unfinished = inconclusive(
-          everythingAfterTheEnd,
-          UplcBlaster(Budget.LeanSteps(1922), lean, 60.seconds)
-        )
-        assert(unfinished.contains("symbolically"), unfinished)
-    }
-
-    // On every script context
-
-    /** The validator on a typed script context, as [[spends]], under a name of its own: the
-      * verifier's statements of it are of every context, without limits, and Lean does not finish
-      * them. The validator walks the inputs, and where it accepts the outputs, lists of any length,
-      * and the tactic cannot follow a loop over one: a run goes on to the end of the budget on
-      * every length. They are what the limits of the statements above are for.
-      */
-    private val spendsOnAnyContext = FunctionDef.named(
-      "spends_on_any_context",
-      (ctx: ScriptContext) => VestingValidator.validate(ctx.toData)
-    )
-
-    verifier.addFunction(spendsOnAnyContext)
-
-    /** Every script context: the parameter a `forAllData[ScriptContext]` variable. */
-    private val anyContext = unlimitedData[ScriptContext]
-
-    /** The statements the verifier makes of spend's clauses themselves, over the contexts of the
-      * statements above: what ties those to the clauses in `VestingValidator.spend`. They are not
-      * proved: each of the statements above is the same statement as one of them, and checks its
-      * clause so ([[Verifier.specifications]]). A clause changed in the code, or a statement here,
-      * would leave the clause unchecked, and fail the suite.
-      */
-    verifier.guarantees(spends.ref, fewInputsData, Connective.Rejects)
-    verifier.guarantees(spendsOnAnyContext.ref, anyContext, Connective.Rejects)
-
-    // The first and the third condition of spend, as above, of every script context.
-    private val beneficiarySignedOnAnyContext = verifier.statement(
-      "vesting.spend.beneficiary_signed_on_any_context",
-      forAllData[ScriptContext](ctx => accepts(ctx) ==>?: signedByTheBeneficiary(ctx))
-    )
-
-    private val unvestedStaysLockedOnAnyContext = verifier.statement(
-      "vesting.spend.unvested_stays_locked_on_any_context",
-      forAllData[ScriptContext](ctx => accepts(ctx) ==>?: keepsTheUnvestedLocked(ctx))
-    )
-
-    test(
-      "spend's first and third guarantees, on every script context, are not finished",
-      Unfinished
-    ) {
-        // The second is proved of every context, with the first above.
-        List(beneficiarySignedOnAnyContext, unvestedStaysLockedOnAnyContext).foreach { statement =>
-            val unfinished = inconclusive(
-              statement,
-              UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
-            )
-            assert(unfinished.contains("did not finish"), unfinished)
-        }
-    }
-
-    private val spendObligationsOnAnyContext =
-        verifier.obligations(spendsOnAnyContext.ref, anyContext)
-
-    private val spendOnAnyContextOfAnAmount = verifier.contract(
-      "spend_on_any_context_of_an_amount",
-      contract(spendsOnAnyContext)(
-        expects = ctx => initialAmountIsNotNegative(ctx),
-        ensures = ctx => done => true
-      )
-    )
-
-    private val obligationsOnAnyContextOfAnAmount =
-        verifier.obligations(spendOnAnyContextOfAnAmount, anyContext)
-
-    test(
-      "the obligation of the schedule's call, on every script context, is not finished",
-      Unfinished
-    ) {
-        val statements =
-            spendObligationsOnAnyContext.statements ++ obligationsOnAnyContextOfAnAmount.statements
-        assert(statements.size == 2)
-        statements.foreach { statement =>
-            val unfinished = inconclusive(
-              statement,
-              UplcBlaster(Budget.LeanSteps(obligationBudget), lean, 60.seconds)
-            )
-            assert(unfinished.contains("did not finish"), unfinished)
-        }
-    }
-
-    private val everythingAfterTheEndOnAnyContext = verifier.statement(
-      "vesting.withdrawal.everything_after_the_end.any_context",
       forAllData[ScriptContext](ctx =>
           (takesEverything(ctx) && afterTheEnd(ctx)) ==>: succeeds(validator, ctx.toData)
       )
     )
 
-    test("after the end of the period, on every script context, not finished by Lean", Unfinished) {
-        val unfinished = inconclusive(
-          everythingAfterTheEndOnAnyContext,
-          UplcBlaster(Budget.LeanSteps(1922), lean, 60.seconds)
-        )
-        assert(unfinished.contains("did not finish"), unfinished)
+    private val everythingAtAnyTime = verifier.refute(
+      "vesting.withdrawal.everything_at_any_time",
+      forAllData[ScriptContext](ctx => takesEverything(ctx) ==>: succeeds(validator, ctx.toData))
+    )
+
+    test(
+      "after the end of the period the beneficiary withdraws everything, of every script " +
+          "context, not finished by Lean",
+      Unfinished
+    ) {
+        List(everythingAfterTheEnd, everythingAtAnyTime).foreach { statement =>
+            val unfinished = inconclusive(
+              statement,
+              UplcBlaster(Budget.LeanSteps(1922), lean, 60.seconds)
+            )
+            assert(unfinished.contains("did not finish"), unfinished)
+        }
+    }
+
+    private val everythingAfterTheEndLimited = verifier.statement(
+      "vesting.withdrawal.everything_after_the_end_limited",
+      forAllDataLimited[ScriptContext](ctx => fewInputsAndOutputs(ctx))(ctx =>
+          (takesEverything(ctx) && afterTheEnd(ctx)) ==>: succeeds(validator, ctx.toData)
+      )
+    )
+
+    private val everythingAtAnyTimeLimited = verifier.refute(
+      "vesting.withdrawal.everything_at_any_time_limited",
+      forAllDataLimited[ScriptContext](ctx => fewInputsAndOutputs(ctx))(ctx =>
+          takesEverything(ctx) ==>: succeeds(validator, ctx.toData)
+      )
+    )
+
+    test(
+      "after the end of the period the beneficiary withdraws everything, of contexts of two " +
+          "inputs and two outputs, not finished by Lean",
+      Unfinished
+    ) {
+        // The funds are not stuck: of every context of at most two inputs and two outputs, a
+        // withdrawal of everything, signed by the beneficiary and paying them what the validator
+        // asks, is accepted from the end of the period on. The negative control: before the end of
+        // the period not everything has vested, `everythingAtAnyTimeLimited`.
+        //
+        // An accepted run goes to the validator's end, and Lean runs the validator on every path
+        // of every such context: the search for the budget starts at 1922 steps, where the limits
+        // have every test end on the largest values that meet them, and Lean was still in the
+        // validator's symbolic run after 16 minutes (2026-11-06). The time limit ends it.
+        List(everythingAfterTheEndLimited, everythingAtAnyTimeLimited).foreach { statement =>
+            val unfinished = inconclusive(
+              statement,
+              UplcBlaster(Budget.LeanSteps(1922), lean, 60.seconds)
+            )
+            assert(unfinished.contains("symbolically"), unfinished)
+        }
     }
 }
 
@@ -731,6 +753,22 @@ object VestingVerificationTest {
             ctx.txInfo.inputs.forall(i =>
                 i.resolved.value.toSortedMap.length <= 1 &&
                     i.resolved.value.toSortedMap.values.forall(t => t.length <= 1)
+            )
+
+    /** The contexts of the statements of a withdrawal of everything: of two inputs and two outputs
+      * at most, of one signatory, and of values of one policy of one token. An accepted run goes to
+      * the validator's end, which walks the outputs too.
+      */
+    inline def fewInputsAndOutputs(inline ctx: ScriptContext): Boolean =
+        ctx.txInfo.inputs.length <= 2 && ctx.txInfo.outputs.length <= 2 &&
+            ctx.txInfo.signatories.length <= 1 &&
+            ctx.txInfo.inputs.forall(i =>
+                i.resolved.value.toSortedMap.length <= 1 &&
+                    i.resolved.value.toSortedMap.values.forall(t => t.length <= 1)
+            ) &&
+            ctx.txInfo.outputs.forall(o =>
+                o.value.toSortedMap.length <= 1 &&
+                    o.value.toSortedMap.values.forall(t => t.length <= 1)
             )
 
     /** That the script accepts `ctx`: its code, to be written in a statement as

@@ -78,7 +78,7 @@ What the examples have:
 
 | Function | Clause | Status |
 |---|---|---|
-| `VestingValidator.spend` | the beneficiary signed | checked, by `vesting.spend.beneficiary_signed`, the same statement as the clause's |
+| `VestingValidator.spend` | the beneficiary signed | checked, by `vesting.spend.beneficiary_signed_limited`, the same statement as the clause's, only where the context has at most two inputs |
 | `VestingValidator.spend` | something is withdrawn | checked, by `vesting.spend.something_is_withdrawn` |
 | `VestingValidator.spend` | what stays locked is at least what has not vested | open |
 | `VestingValidator.linearVesting` | `ensuring`: between nothing and the amount | checked, by `vesting.schedule.stated_contract_holds` |

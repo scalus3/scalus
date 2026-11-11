@@ -45,11 +45,16 @@ import scala.concurrent.duration.*
   *   - the published scripts' bytes. The validators are compiled here with the tactic's options
   *     (`UplcBlaster.options`): the statements are about the same source.
   *
+  * Each statement of a payout or a spend is stated twice, side by side: of every script context,
+  * under the plain name, and of the contexts within the limits above, under the name with
+  * `Limited`. Both are of two payees: the payees are the contract's parameter, not the context.
+  *
   * What Lean finishes of these: that the optimized validator's spend names its input and is
-  * accepted with its withdrawal, its certificates, and the samples. A statement about a payout, of
-  * the naive validator or the stake validator, has its runs walk the inputs and their values, and
-  * then the outputs and the sums of the payees, and Lean does not finish it: its test is tagged
-  * `Unfinished`, and shows it with a time limit.
+  * accepted with its withdrawal, of the contexts within the limits, its certificates, and the
+  * samples. A statement about a payout, of the naive validator or the stake validator, has its runs
+  * walk the inputs and their values, and then the outputs and the sums of the payees, and Lean does
+  * not finish it: its test is tagged `Unfinished`, and shows it with a time limit. Nor does it
+  * finish a statement of every context, whose runs walk lists of any length.
   *
   * Without Lean, that is without `lake` and a built workspace, the tests pass on the results kept
   * beside this file (see [[LeanProofs]]). The tests tagged `Unfinished` keep nothing: they need
@@ -106,6 +111,14 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         assert(reason.contains("did not finish"), reason)
     }
 
+    test(
+      "only a payee submits a payout, of every script context, not finished by Lean",
+      Unfinished
+    ) {
+        notFinished(p.onlyAPayeeSubmits, 2099)
+        notFinished(p.noOtherKeySpends, 2099)
+    }
+
     test("only a payee submits a payout, not finished by Lean", Unfinished) {
         // An accepted payout spends an input of a payee, and none of another key than a payee's
         // and the contract's, whatever the transaction pays. The validator rejects a payout that
@@ -114,8 +127,17 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // `getLovelace`), and the budget search climbed by spurious counterexamples, each round
         // longer than the one before: 26 s at 1295 steps, 47 s at 1673, 108 s at 2099, and at
         // 3357 it did not finish in 27 minutes (2026-11-07).
-        notFinished(p.onlyAPayeeSubmits, 2099)
-        notFinished(p.noOtherKeySpends, 2099)
+        notFinished(p.onlyAPayeeSubmitsLimited, 2099)
+        notFinished(p.noOtherKeySpendsLimited, 2099)
+    }
+
+    test(
+      "the payees other than the submitter are paid exactly the split, of every script context, " +
+          "not finished by Lean",
+      Unfinished
+    ) {
+        notFinished(p.otherPayeeIsPaidExactlyTheSplit, 1983)
+        notFinished(p.splitIsExactlyHalf, 1983)
     }
 
     test(
@@ -128,8 +150,15 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // outputs and the sums of the payees, and the rejecting program was still in Lean's
         // symbolic run at 1983 steps after 10 minutes (2026-11-07). The negative control: the
         // split is rounded down, so an odd amount locked is not paid out in two exact halves.
-        notFinished(p.otherPayeeIsPaidExactlyTheSplit, 1983)
-        notFinished(p.splitIsExactlyHalf, 1983)
+        notFinished(p.otherPayeeIsPaidExactlyTheSplitLimited, 1983)
+        notFinished(p.splitIsExactlyHalfLimited, 1983)
+    }
+
+    test(
+      "nobody but the payees is paid, of every script context, not finished by Lean",
+      Unfinished
+    ) {
+        notFinished(p.nobodyButThePayeesIsPaid, 1930)
     }
 
     test("nobody but the payees is paid, not finished by Lean", Unfinished) {
@@ -137,14 +166,22 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // rejects such a payout in its walk of the outputs, or of the sums of the payees after
         // it: Lean was still in the symbolic run at about 1900 steps after 5 minutes, in the
         // rejecting form and as written (2026-11-07).
-        notFinished(p.nobodyButThePayeesIsPaid, 1930)
+        notFinished(p.nobodyButThePayeesIsPaidLimited, 1930)
+    }
+
+    test("every payee is paid, of every script context, not finished by Lean", Unfinished) {
+        notFinished(p.everyPayeeIsPaid, 1938)
     }
 
     test("every payee is paid, not finished by Lean", Unfinished) {
         // The validator rejects a payout that leaves a payee out after the sums of the payees:
         // Lean was still in the symbolic run at about 1900 steps after 5 minutes, in the rejecting
         // form and as written (2026-11-07).
-        notFinished(p.everyPayeeIsPaid, 1938)
+        notFinished(p.everyPayeeIsPaidLimited, 1938)
+    }
+
+    test("only ADA is split, of every script context, not finished by Lean", Unfinished) {
+        notFinished(p.onlyAdaIsSplit, 2099)
     }
 
     test("only ADA is split, not finished by Lean", Unfinished) {
@@ -152,7 +189,15 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // reconciles lovelace alone, so its submitter would keep the token. The validator rejects
         // it in its walk of the inputs, as above, with values of two tokens: Lean was still in the
         // symbolic run at 2374 steps after 10 minutes, with the outputs limited too (2026-11-07).
-        notFinished(p.onlyAdaIsSplit, 2099)
+        notFinished(p.onlyAdaIsSplitLimited, 2099)
+    }
+
+    test(
+      "an honest payout is accepted, of every script context, not finished by Lean",
+      Unfinished
+    ) {
+        notFinished(p.honestPayoutIsAccepted, 1910)
+        notFinished(p.everyPayoutIsAccepted, 1910)
     }
 
     test("an honest payout is accepted, not finished by Lean", Unfinished) {
@@ -162,19 +207,35 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // context within the limits: its first counterexample, at 1910 steps after 439 s, was
         // spurious, and it was still in the symbolic run at 2127 (2026-11-07). The negative
         // control: not with any amount to the other payee.
-        notFinished(p.honestPayoutIsAccepted, 1910)
-        notFinished(p.everyPayoutIsAccepted, 1910)
+        notFinished(p.honestPayoutIsAcceptedLimited, 1910)
+        notFinished(p.everyPayoutIsAcceptedLimited, 1910)
     }
 
     // The optimized validator
 
+    test(
+      "the redeemer of a spend names the contract's output, of every script context, not " +
+          "finished by Lean",
+      Unfinished
+    ) {
+        notFinished(p.spendRedeemerNamesItsInput, 1730)
+    }
+
     test("the redeemer of a spend names the contract's output") {
         check(
           VerificationRequest(
-            p.spendRedeemerNamesItsInput,
+            p.spendRedeemerNamesItsInputLimited,
             UplcBlaster(Budget.Auto, lean, spendTime)
           )
         )
+    }
+
+    test(
+      "a contract output is spent only with the stake validator's withdrawal, of every script " +
+          "context, not finished by Lean",
+      Unfinished
+    ) {
+        notFinished(p.spendNeedsItsOwnWithdrawal, 1487)
     }
 
     test(
@@ -192,7 +253,14 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // in the 15 minutes left of 30 (2026-11-09). Stated of every input of the spent
         // reference, the claim searched them all, and at 3200 steps it did not finish in 15
         // minutes.
-        notFinished(p.spendNeedsItsOwnWithdrawal, 1487)
+        notFinished(p.spendNeedsItsOwnWithdrawalLimited, 1487)
+    }
+
+    test(
+      "a spend with its withdrawal is accepted, of every script context, not finished by Lean",
+      Unfinished
+    ) {
+        notFinished(p.spendWithItsWithdrawalIsAccepted, 1431)
     }
 
     test("a spend with its withdrawal is accepted") {
@@ -209,10 +277,18 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // parameter's payees and the outputs, lists of any length here, and the budget cuts.
         check(
           VerificationRequest(
-            p.spendWithItsWithdrawalIsAccepted,
+            p.spendWithItsWithdrawalIsAcceptedLimited,
             UplcBlaster(Budget.Auto, lean, spendTime)
           )
         )
+    }
+
+    test(
+      "the stake validator pays the payees other than the submitter exactly the split, of " +
+          "every script context, not finished by Lean",
+      Unfinished
+    ) {
+        notFinished(p.stakeValidatorPaysExactlyTheSplit, 1965)
     }
 
     test(
@@ -224,13 +300,20 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // is half the contract's lovelace, rounded down. As the naive validator, the stake
         // validator walks the inputs and the outputs first: Lean was still in the symbolic run at
         // about 1900 steps after 5 minutes, in the rejecting form and as written (2026-11-07).
-        notFinished(p.stakeValidatorPaysExactlyTheSplit, 1965)
+        notFinished(p.stakeValidatorPaysExactlyTheSplitLimited, 1965)
+    }
+
+    test(
+      "the stake validator accepts an honest payout, of every script context, not finished by Lean",
+      Unfinished
+    ) {
+        notFinished(p.stakeValidatorAcceptsAnHonestPayout, 1908)
     }
 
     test("the stake validator accepts an honest payout, not finished by Lean", Unfinished) {
         // An accepted run is the whole stake validator, 3652 steps on the sample: Lean was still
         // in the symbolic run at 1908 steps after 10 minutes (2026-11-07).
-        notFinished(p.stakeValidatorAcceptsAnHonestPayout, 1908)
+        notFinished(p.stakeValidatorAcceptsAnHonestPayoutLimited, 1908)
     }
 
     test("the contract's stake credential is registered and deregistered, and not delegated") {
@@ -249,17 +332,29 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         val payees = Constant.Data(PaymentSplitterVerificationTest.samplePayees)
         def holdsOn(statement: Statement, context: Data): Unit =
             assert(holdsAsImplicationOn(statement, payees, Constant.Data(context)), statement.name)
+        // Of every context, and of those within the limits.
         List(
           p.onlyAPayeeSubmits,
+          p.onlyAPayeeSubmitsLimited,
           p.noOtherKeySpends,
+          p.noOtherKeySpendsLimited,
           p.otherPayeeIsPaidExactlyTheSplit,
+          p.otherPayeeIsPaidExactlyTheSplitLimited,
           p.nobodyButThePayeesIsPaid,
+          p.nobodyButThePayeesIsPaidLimited,
           p.everyPayeeIsPaid,
-          p.onlyAdaIsSplit
+          p.everyPayeeIsPaidLimited,
+          p.onlyAdaIsSplit,
+          p.onlyAdaIsSplitLimited
         ).foreach(holdsOn(_, PaymentSplitterVerificationTest.samplePayout))
-        holdsOn(p.spendNeedsItsOwnWithdrawal, PaymentSplitterVerificationTest.sampleSpend)
-        holdsOn(p.spendRedeemerNamesItsInput, PaymentSplitterVerificationTest.sampleSpend)
-        holdsOn(p.stakeValidatorPaysExactlyTheSplit, PaymentSplitterVerificationTest.sampleReward)
+        List(
+          p.spendNeedsItsOwnWithdrawal,
+          p.spendNeedsItsOwnWithdrawalLimited,
+          p.spendRedeemerNamesItsInput,
+          p.spendRedeemerNamesItsInputLimited
+        ).foreach(holdsOn(_, PaymentSplitterVerificationTest.sampleSpend))
+        List(p.stakeValidatorPaysExactlyTheSplit, p.stakeValidatorPaysExactlyTheSplitLimited)
+            .foreach(holdsOn(_, PaymentSplitterVerificationTest.sampleReward))
     }
 
     test("sample payouts are accepted on the Lean machine") {
@@ -274,7 +369,9 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
 /** The statements about [[NaivePaymentSplitterValidator]] and
   * [[OptimizedPaymentSplitterValidator]], by name, declared in `verifier`, and the validators they
   * are about. A statement declared with `refute` is a negative control: it is expected to be
-  * refuted. [[PaymentSplitterVerificationTest]] says why each holds, and checks them.
+  * refuted. A statement of the contexts within limits has the name with `Limited`, and the one
+  * before it, of the plain name, is of every context. [[PaymentSplitterVerificationTest]] says why
+  * each holds, and checks them.
   */
 final class PaymentSplitterProofs(val verifier: Verifier) {
     import PaymentSplitterVerificationTest.*
@@ -306,6 +403,18 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
     val onlyAPayeeSubmits: Statement = verifier.statement(
       "payment_splitter.naive.only_a_payee_submits",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
+          forAllData[ScriptContext](ctx =>
+              succeeds(naive, (payees.toData, ctx.toData)) ==>:
+                  (!isSpending(ctx) || ctx.txInfo.inputs.exists(input =>
+                      isAPayee(payees, input.resolved.address.credential)
+                  ))
+          )
+      )
+    )
+
+    val onlyAPayeeSubmitsLimited: Statement = verifier.statement(
+      "payment_splitter.naive.only_a_payee_submits_limited",
+      forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => twoInputs(ctx))(ctx =>
               succeeds(naive, (payees.toData, ctx.toData)) ==>:
                   (!isSpending(ctx) || ctx.txInfo.inputs.exists(input =>
@@ -318,6 +427,16 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
     val noOtherKeySpends: Statement = verifier.statement(
       "payment_splitter.naive.no_other_key_spends",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
+          forAllData[ScriptContext](ctx =>
+              succeeds(naive, (payees.toData, ctx.toData)) ==>?:
+                  (!isSpending(ctx) || !spendsAnInputOfNeither(payees, ctx, spentCredential(ctx)))
+          )
+      )
+    )
+
+    val noOtherKeySpendsLimited: Statement = verifier.statement(
+      "payment_splitter.naive.no_other_key_spends_limited",
+      forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => twoInputs(ctx))(ctx =>
               succeeds(naive, (payees.toData, ctx.toData)) ==>?:
                   (!isSpending(ctx) || !spendsAnInputOfNeither(payees, ctx, spentCredential(ctx)))
@@ -327,6 +446,16 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
 
     val otherPayeeIsPaidExactlyTheSplit: Statement = verifier.statement(
       "payment_splitter.naive.other_payee_is_paid_exactly_the_split",
+      forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
+          forAllData[ScriptContext](ctx =>
+              succeeds(naive, (payees.toData, ctx.toData)) ==>?: (!isSpending(ctx) ||
+                  !someOtherPayeeIsNotPaidTheSplit(payees, ctx, spentCredential(ctx)))
+          )
+      )
+    )
+
+    val otherPayeeIsPaidExactlyTheSplitLimited: Statement = verifier.statement(
+      "payment_splitter.naive.other_payee_is_paid_exactly_the_split_limited",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
               succeeds(naive, (payees.toData, ctx.toData)) ==>?: (!isSpending(ctx) ||
@@ -338,6 +467,16 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
     val splitIsExactlyHalf: Statement = verifier.refute(
       "payment_splitter.naive.split_is_exactly_half",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
+          forAllData[ScriptContext](ctx =>
+              succeeds(naive, (payees.toData, ctx.toData)) ==>?: (!isSpending(ctx) ||
+                  !someOtherPayeeIsNotPaidExactlyAShare(payees, ctx, spentCredential(ctx)))
+          )
+      )
+    )
+
+    val splitIsExactlyHalfLimited: Statement = verifier.refute(
+      "payment_splitter.naive.split_is_exactly_half_limited",
+      forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
               succeeds(naive, (payees.toData, ctx.toData)) ==>?: (!isSpending(ctx) ||
                   !someOtherPayeeIsNotPaidExactlyAShare(payees, ctx, spentCredential(ctx)))
@@ -347,6 +486,18 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
 
     val nobodyButThePayeesIsPaid: Statement = verifier.statement(
       "payment_splitter.naive.nobody_but_the_payees_is_paid",
+      forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
+          forAllData[ScriptContext](ctx =>
+              succeeds(naive, (payees.toData, ctx.toData)) ==>:
+                  (!isSpending(ctx) || ctx.txInfo.outputs.forall(output =>
+                      isAPayee(payees, output.address.credential)
+                  ))
+          )
+      )
+    )
+
+    val nobodyButThePayeesIsPaidLimited: Statement = verifier.statement(
+      "payment_splitter.naive.nobody_but_the_payees_is_paid_limited",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
               succeeds(naive, (payees.toData, ctx.toData)) ==>:
@@ -360,6 +511,16 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
     val everyPayeeIsPaid: Statement = verifier.statement(
       "payment_splitter.naive.every_payee_is_paid",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
+          forAllData[ScriptContext](ctx =>
+              succeeds(naive, (payees.toData, ctx.toData)) ==>:
+                  (!isSpending(ctx) || payees.forall(payee => isPaid(ctx, payee)))
+          )
+      )
+    )
+
+    val everyPayeeIsPaidLimited: Statement = verifier.statement(
+      "payment_splitter.naive.every_payee_is_paid_limited",
+      forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
               succeeds(naive, (payees.toData, ctx.toData)) ==>:
                   (!isSpending(ctx) || payees.forall(payee => isPaid(ctx, payee)))
@@ -370,6 +531,16 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
     val onlyAdaIsSplit: Statement = verifier.statement(
       "payment_splitter.naive.only_ada_is_split",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
+          forAllData[ScriptContext](ctx =>
+              succeeds(naive, (payees.toData, ctx.toData)) ==>?: (!isSpending(ctx) ||
+                  !spendsAContractInputWithTokens(payees, ctx, spentCredential(ctx)))
+          )
+      )
+    )
+
+    val onlyAdaIsSplitLimited: Statement = verifier.statement(
+      "payment_splitter.naive.only_ada_is_split_limited",
+      forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => twoInputsWithTokens(ctx))(ctx =>
               succeeds(naive, (payees.toData, ctx.toData)) ==>?: (!isSpending(ctx) ||
                   !spendsAContractInputWithTokens(payees, ctx, spentCredential(ctx)))
@@ -379,6 +550,17 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
 
     val honestPayoutIsAccepted: Statement = verifier.statement(
       "payment_splitter.naive.honest_payout_is_accepted",
+      forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
+          forAllData[ScriptContext](ctx =>
+              (isSpending(ctx) && areDifferent(payees) &&
+                  isAPayoutOfTheSplit(payees, ctx, spentCredential(ctx))) ==>:
+                  succeeds(naive, (payees.toData, ctx.toData))
+          )
+      )
+    )
+
+    val honestPayoutIsAcceptedLimited: Statement = verifier.statement(
+      "payment_splitter.naive.honest_payout_is_accepted_limited",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
               (isSpending(ctx) && areDifferent(payees) &&
@@ -391,6 +573,17 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
     val everyPayoutIsAccepted: Statement = verifier.refute(
       "payment_splitter.naive.every_payout_is_accepted",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
+          forAllData[ScriptContext](ctx =>
+              (isSpending(ctx) && areDifferent(payees) &&
+                  isAPayout(payees, ctx, spentCredential(ctx))) ==>:
+                  succeeds(naive, (payees.toData, ctx.toData))
+          )
+      )
+    )
+
+    val everyPayoutIsAcceptedLimited: Statement = verifier.refute(
+      "payment_splitter.naive.every_payout_is_accepted_limited",
+      forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
               (isSpending(ctx) && areDifferent(payees) &&
                   isAPayout(payees, ctx, spentCredential(ctx))) ==>:
@@ -402,6 +595,16 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
     val spendNeedsItsOwnWithdrawal: Statement = verifier.statement(
       "payment_splitter.optimized.spend_needs_its_own_withdrawal",
       forAll[Data](parameter =>
+          forAllData[ScriptContext](ctx =>
+              succeeds(optimized, (parameter, ctx.toData)) ==>?:
+                  (!isSpending(ctx) || isWithdrawnFrom(ctx, namedInput(ctx)))
+          )
+      )
+    )
+
+    val spendNeedsItsOwnWithdrawalLimited: Statement = verifier.statement(
+      "payment_splitter.optimized.spend_needs_its_own_withdrawal_limited",
+      forAll[Data](parameter =>
           forAllDataLimited[ScriptContext](ctx => aSpend(ctx))(ctx =>
               succeeds(optimized, (parameter, ctx.toData)) ==>?:
                   (!isSpending(ctx) || isWithdrawnFrom(ctx, namedInput(ctx)))
@@ -411,6 +614,16 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
 
     val spendWithItsWithdrawalIsAccepted: Statement = verifier.statement(
       "payment_splitter.optimized.spend_with_its_withdrawal_is_accepted",
+      forAll[Data](parameter =>
+          forAllData[ScriptContext](ctx =>
+              (isSpending(ctx) && namesTheSpentInput(ctx) && isWithdrawnFrom(ctx, namedInput(ctx)))
+                  ==>: succeeds(optimized, (parameter, ctx.toData))
+          )
+      )
+    )
+
+    val spendWithItsWithdrawalIsAcceptedLimited: Statement = verifier.statement(
+      "payment_splitter.optimized.spend_with_its_withdrawal_is_accepted_limited",
       forAll[Data](parameter =>
           forAllDataLimited[ScriptContext](ctx => aSpend(ctx))(ctx =>
               (isSpending(ctx) && namesTheSpentInput(ctx) && isWithdrawnFrom(ctx, namedInput(ctx)))
@@ -422,6 +635,16 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
     val spendRedeemerNamesItsInput: Statement = verifier.statement(
       "payment_splitter.optimized.spend_redeemer_names_its_input",
       forAll[Data](parameter =>
+          forAllData[ScriptContext](ctx =>
+              succeeds(optimized, (parameter, ctx.toData)) ==>?:
+                  (!isSpending(ctx) || namesTheSpentInput(ctx))
+          )
+      )
+    )
+
+    val spendRedeemerNamesItsInputLimited: Statement = verifier.statement(
+      "payment_splitter.optimized.spend_redeemer_names_its_input_limited",
+      forAll[Data](parameter =>
           forAllDataLimited[ScriptContext](ctx => aSpend(ctx))(ctx =>
               succeeds(optimized, (parameter, ctx.toData)) ==>?:
                   (!isSpending(ctx) || namesTheSpentInput(ctx))
@@ -432,6 +655,16 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
     val stakeValidatorPaysExactlyTheSplit: Statement = verifier.statement(
       "payment_splitter.optimized.stake_validator_pays_exactly_the_split",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
+          forAllData[ScriptContext](ctx =>
+              succeeds(optimized, (payees.toData, ctx.toData)) ==>: (!isRewarding(ctx) ||
+                  !someOtherPayeeIsNotPaidTheSplit(payees, ctx, rewardedCredential(ctx)))
+          )
+      )
+    )
+
+    val stakeValidatorPaysExactlyTheSplitLimited: Statement = verifier.statement(
+      "payment_splitter.optimized.stake_validator_pays_exactly_the_split_limited",
+      forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
               succeeds(optimized, (payees.toData, ctx.toData)) ==>: (!isRewarding(ctx) ||
                   !someOtherPayeeIsNotPaidTheSplit(payees, ctx, rewardedCredential(ctx)))
@@ -441,6 +674,16 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
 
     val stakeValidatorAcceptsAnHonestPayout: Statement = verifier.statement(
       "payment_splitter.optimized.stake_validator_accepts_an_honest_payout",
+      forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
+          forAllData[ScriptContext](ctx =>
+              (isRewarding(ctx) && areDifferent(payees) && claimsAnHonestPayout(payees, ctx)) ==>:
+                  succeeds(optimized, (payees.toData, ctx.toData))
+          )
+      )
+    )
+
+    val stakeValidatorAcceptsAnHonestPayoutLimited: Statement = verifier.statement(
+      "payment_splitter.optimized.stake_validator_accepts_an_honest_payout_limited",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
               (isRewarding(ctx) && areDifferent(payees) && claimsAnHonestPayout(payees, ctx)) ==>:

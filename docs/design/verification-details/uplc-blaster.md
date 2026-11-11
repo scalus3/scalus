@@ -1356,8 +1356,9 @@ on its ScalaTest layer (`LeanProofsSuite`), so a contract's proofs sit next to i
 Its statements about the validator quantify over real script contexts, `forAllData[ScriptContext]`
 or a `forAllDataLimited` one, never over a transaction built in the statement: a closed sample is
 the only context written out. Each statement over limited contexts has its counterpart over every
-context: proved where the validator rejects before it reads a list of the context, and otherwise
-an `Unfinished` test, which shows what the limits are for.
+context beside it: the one over every context has the plain name, and the limited one the name with
+`Limited`. The counterpart is proved where the validator rejects before it reads a list of the
+context, and otherwise its test is `Unfinished`, which shows what the limits are for.
 
 | About | Statement | Quantified over | Budget | Time |
 |---|---|---|---|---|
@@ -1423,8 +1424,11 @@ What the suite shows about the tactic:
 `scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala` states
 properties of the hashed timelock example, in the library's Lean workspace. Its statements
 quantify over real script contexts, as the vesting suite's do: `forAllData[ScriptContext]`, or a
-`forAllDataLimited` one of at most two signatures, with what a statement is about stated as a
-premise over the typed context (a refund, a reveal, a validity range). The validator reads the
+`forAllDataLimited` one of at most two signatures (`forAllContextsMax2Signatures`), with what a
+statement is about stated as a premise over the typed context (a refund, a reveal, a validity
+range). Each statement about a refund or a reveal is of every context; where Lean does not
+finish it so, it is stated again beside it, of at most two signatures, under the name with
+`Limited`. The validator reads the
 datum, the redeemer, the validity range and the signatures; a statement holds whatever the rest
 of the context is, and of every datum and redeemer that the premise does not exclude. A premise
 reads the context as the validator does, so where the datum is not a `Config` it fails, and does
@@ -1434,25 +1438,28 @@ the statements that it accepts, which are so not vacuous.
 Its source states no contract: the validator is the read of a bound and two or three `require`s
 on each of two branches, and a clause would say them again.
 
-| About | Statement | Quantified over | Budget | Time |
+| About | Statement | Budget | Of every context | Of at most two signatures (`Limited`) |
 |---|---|---|---|---|
-| the validator | an output without a datum cannot be spent | every script context, `forAllData[ScriptContext]` | 600 | 19 s |
-| | nothing but spending is validated | | | 10 s |
-| | a redeemer that is neither action is rejected | | | 11 s |
-| a refund | rejected unless the committer signs; negative control: whoever signs | every context of at most two signatures | 4000 | 20 s; 20 s |
-| | rejected unless its validity range starts at the timeout or later; negative control: after it | | | 22 s; 22 s |
-| | from the timeout on, the committer's is accepted; negative control: at any time | | | 24 s; 20 s |
-| a reveal | rejected unless the receiver signs | | | 21 s |
-| | rejected unless its validity range ends by the timeout | | | 22 s |
-| | of what is not a preimage of the image, rejected | | | 20 s |
-| | up to the timeout, the receiver's of a preimage is accepted | | | 23 s |
-| both | of two spends under one datum, where the refund starts before the reveal ends, one is rejected | two such contexts | | 80 s |
-| | the validator accepts a context where it accepts the one with the closure of either bound of its validity range the other way | every context of at most two signatures | | 39 s; 41 s |
-| samples | a reveal and a refund are accepted, the reveal up to the timeout and the refund from it, and rejected unsigned, late or with another secret | closed, `native_decide`, on a transaction the ledger's types build | | under 1 s each |
+| the validator | an output without a datum cannot be spent | 600 | 19 s | |
+| | nothing but spending is validated | | 10 s | |
+| | a redeemer that is neither action is rejected | | 11 s | |
+| a refund | rejected unless the committer signs; negative control: whoever signs | 4000 | spurious, 66 s; refuted, 34 s | 20 s; 20 s |
+| | rejected unless its validity range starts at the timeout or later; negative control: after it | | 54 s; refuted, 49 s | |
+| | from the timeout on, the committer's is accepted; negative control: at any time | | spurious, 68 s; refuted, 41 s | 24 s; 20 s |
+| a reveal | rejected unless the receiver signs | | spurious, 53 s | 21 s |
+| | rejected unless its validity range ends by the timeout | | 40 s | |
+| | of what is not a preimage of the image, rejected | | spurious, 45 s | 20 s |
+| | up to the timeout, the receiver's of a preimage is accepted | | spurious, 73 s | 23 s |
+| both | of two spends under one datum, where the refund starts before the reveal ends, one is rejected | | 58 s | |
+| | the validator accepts a context where it accepts the one with the closure of either bound of its validity range the other way | | spurious, 191 s; 194 s | 39 s; 41 s |
+| samples | a reveal and a refund are accepted, the reveal up to the timeout and the refund from it, and rejected unsigned, late or with another secret | | closed, `native_decide`, on a transaction the ledger's types build: under 1 s each | |
 
-The times are of single checks with Blaster compiled, in the suite's Lean server (2026-11-06).
-The suite keeps the results of 23 statements, three of them negative controls that are refuted,
-and takes about 8 min with Lean. On its kept results it takes under a minute: a refutation is
+The times are of single checks with Blaster compiled, in the suite's Lean server (2026-11-06);
+those of every context are of a check of each alone (2026-11-10). "Spurious" is Lean's
+counterexample of more signatures than the budget's runs search, on which the statement holds: the
+test of it is tagged `Unfinished`. A statement Lean proves of every context has no statement of
+at most two signatures, which would say less. The suite keeps the results of 25 statements, five
+of them negative controls that are refuted, and takes about 11 min with Lean. On its kept results it takes under a minute: a refutation is
 replayed, and one statement is asked of Lean every time, the second point below.
 
 What the suite shows about the tactic:
@@ -1475,6 +1482,12 @@ What the suite shows about the tactic:
   statements over a context written field by field, with sixteen parts of it any `Data`, did:
   every run ends within the budget, at most two signatures searched, so a larger budget costs
   nothing. The three statements over every context are rejections before the signatures, at 600.
+- **A loop over a list of any length is not followed.** Of every context, a statement that rests
+  on the search of the signatures gets a counterexample of a hundred and more signatures, on which
+  the runs do not end within the budget and the statement holds: it is spurious, at any budget. A
+  statement the validator decides by the time, which it checks before the search, is proved of
+  every context, in about a minute: the two of the time, and that a reveal ends before a refund
+  begins.
 - **`.toData` on an enum case without fields did not lower**: `Action.Timeout.toData` gave
   "Unsupported conversion for `Action$.Timeout` from ProdDataList to DataConstr", in any compiled
   code and not only in a statement
@@ -1482,7 +1495,8 @@ What the suite shows about the tactic:
   `constrData(0, [])` until that was fixed, and now writes `Action.Timeout.toData`.
 
 What it does not show: that a bound of the validity range is inclusive or not, which the
-validator does not read and the ledger decides; a transaction of more than two signatures; and
+validator does not read and the ledger decides; of a transaction of more than two signatures,
+what rests on the search of the signatures; and
 the published script, which `HtlcContract` compiles with other options.
 
 ## What `PaymentSplitterVerificationTest` covers
@@ -1498,6 +1512,11 @@ ten minutes. A claim that reads the context as the validator does, and fails whe
 it, is stated with `==>?:`; a test on the Scalus CEK shows each claim true on the samples the
 validators accept, and a JVM test shows that the samples meet the premises of the statements that
 the validators accept.
+
+Each statement over limited contexts, below, has its counterpart over every script context beside
+it, of the same payees: the one over every context has the plain name, and the limited one the name
+with `Limited`. Lean finishes none of the counterparts, whose runs walk lists of any length: their
+tests are `Unfinished`.
 
 | About | Statement | Quantified over | Budget | Time |
 |---|---|---|---|---|
