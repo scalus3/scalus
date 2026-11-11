@@ -1,10 +1,10 @@
 {
   "environment": {
     "uplc-blaster": {
-      "Blaster": "6c27ff9faa66",
+      "Blaster": "a06919767488",
       "LinearVesting": "cfdfdce352d08b72",
-      "PlutusCore": "2919b66445cd",
-      "ScalusProofs": "99dc026d39db0160",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "5a10c6146b425009",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },
@@ -12,7 +12,7 @@
     "spend_of_an_amount/vested_in_range#1": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "250f0f223c5995c1",
+      "statement": "c4121f6ba1215a11",
       "programs": [
         "182b82e4072ffe81",
         "7a745eeadb1b58dd",
@@ -30,7 +30,7 @@
     "spends/vested_in_range#1": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "f7b606ddfa4f9449",
+      "statement": "52204a6488d1de3d",
       "programs": [
         "7a745eeadb1b58dd",
         "8a5217dfca064606",
@@ -41,7 +41,7 @@
         "kind": "Blaster"
       },
       "counterexample": {
-        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[{"constructor":0,"fields":[{"constructor":0,"fields":[{"bytes":"41"},{"int":14}]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"bytes":"41"}]},{"constructor":1,"fields":[]}]},{"map":[]},{"constructor":0,"fields":[]},{"constructor":1,"fields":[]}]}]}]},{"list":[]},{"list":[]},{"int":11},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":15}]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":13}]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":"41"}]},{"map":[]},{"map":[]},{"bytes":"41"},{"map":[]},{"list":[]},{"constructor":1,"fields":[]},{"constructor":1,"fields":[]}]},{"constructor":17,"fields":[{"int":8946},{"int":22}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"41"},{"int":14}]},{"constructor":0,"fields":[{"constructor":16,"fields":[{"int":2331},{"int":12329},{"int":7176},{"int":-1}]}]}]}]}
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[{"constructor":0,"fields":[{"constructor":0,"fields":[{"bytes":"41"},{"int":14}]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"bytes":"41"}]},{"constructor":1,"fields":[]}]},{"map":[]},{"constructor":0,"fields":[]},{"constructor":1,"fields":[]}]}]}]},{"list":[]},{"list":[]},{"int":11},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":17}]},{"constructor":1,"fields":[]}]},{"constructor":0,"fields":[{"constructor":2,"fields":[]},{"constructor":1,"fields":[]}]}]},{"list":[]},{"map":[]},{"map":[]},{"bytes":""},{"map":[]},{"list":[]},{"constructor":1,"fields":[]},{"constructor":1,"fields":[]}]},{"constructor":16,"fields":[{"int":21638}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"41"},{"int":14}]},{"constructor":0,"fields":[{"constructor":15,"fields":[{"int":19},{"int":18},{"int":20},{"int":-1}]}]}]}]}
       },
       "tests": [
         "the validator would not establish a precondition on the amount"
@@ -62,10 +62,10 @@
       },
       "counterexample": {
         "config.beneficiary.hash": "",
-        "config.duration": 1,
+        "config.duration": 0,
         "config.initialAmount": -1,
-        "config.startTimestamp": 0,
-        "time": -1
+        "config.startTimestamp": 1,
+        "time": 0
       },
       "tests": [
         "the schedule's contract, stated in its body, holds of its compiled program"
@@ -101,11 +101,11 @@
       },
       "counterexample": {
         "config.beneficiary.hash": "",
-        "config.duration": 0,
-        "config.initialAmount": -1,
-        "config.startTimestamp": -4,
-        "earlier": -5,
-        "later": -3
+        "config.duration": 2,
+        "config.initialAmount": -2,
+        "config.startTimestamp": 0,
+        "earlier": -1,
+        "later": 1
       },
       "tests": [
         "the vested amount does not decrease with time"
@@ -176,8 +176,8 @@
       "counterexample": {
         "config.beneficiary.hash": "",
         "config.duration": 0,
-        "config.initialAmount": 1,
-        "config.startTimestamp": -1,
+        "config.initialAmount": 0,
+        "config.startTimestamp": 1,
         "time": 0
       },
       "tests": [
@@ -200,10 +200,10 @@
         "nothing is vested before the start"
       ]
     },
-    "vesting.spend.beneficiary_signed": {
+    "vesting.spend.beneficiary_signed_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "14ef5dfc9d7b013a",
+      "statement": "9a67a5823f8b4d58",
       "programs": [
         "bfe19f251e845f79",
         "06370ae120acc99f"
@@ -213,13 +213,13 @@
         "kind": "Blaster"
       },
       "tests": [
-        "spend's guarantees hold: the signature of spends of two inputs, the amount of any"
+        "spend's first guarantee holds of spends of two inputs: the beneficiary signed"
       ]
     },
     "vesting.spend.something_is_withdrawn": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "9ed9239da9511e53",
+      "statement": "d2494909ff2e8fd2",
       "programs": [
         "874dc86236c2b70d"
       ],
@@ -228,13 +228,13 @@
         "kind": "Blaster"
       },
       "tests": [
-        "spend's guarantees hold: the signature of spends of two inputs, the amount of any"
+        "spend's second guarantee holds of every script context: something is withdrawn"
       ]
     },
     "vesting.validator.no_datum_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "ac92da73bcb3439b",
+      "statement": "ad5b9de6d714606b",
       "programs": [
         "b61cd94f97567fcb",
         "8ab2934a11e0ab68"
@@ -250,7 +250,7 @@
     "vesting.validator.non_positive_amount_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "ac92da73bcb3439b",
+      "statement": "ad5b9de6d714606b",
       "programs": [
         "c7e1c481e8e233d3",
         "8ab2934a11e0ab68"
@@ -266,7 +266,7 @@
     "vesting.validator.only_spending": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "45d2bbb557c655b7",
+      "statement": "a54fa318355975b3",
       "programs": [
         "c1341b222da9d259",
         "8ab2934a11e0ab68"

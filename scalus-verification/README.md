@@ -620,24 +620,27 @@ its search starts at the steps the tests take on the largest values the limits a
 
 ## Pinned dependencies
 
-- `PlutusCore` from `nau/PlutusCoreBlaster` @ `fix/case-scrutinee-smt-blowup`. **Temporary
-  fork.** Switch to upstream `main` once
+- `PlutusCore` from `rssh/PlutusCoreBlaster` @ `case-scrutinee-on-main`. **Temporary fork.**
+  It is
   [input-output-hk/PlutusCoreBlaster#40](https://github.com/input-output-hk/PlutusCoreBlaster/pull/40)
-  merges. Without that fix, `blaster` does not terminate on any program using UPLC `case`,
-  which is every PV11 program Scalus emits.
-- `Blaster` from `input-output-hk/Lean-blaster` @ `main`. Not the
+  brought up to upstream `main` ([nau/PlutusCoreBlaster#1](https://github.com/nau/PlutusCoreBlaster/pull/1),
+  into #40's branch). `main` still selects the branch of a `case` on an integer tag with
+  `Ms[n.toNat]?`, on which `blaster` does not terminate, and every PV11 program Scalus emits uses
+  `case`. Switch to upstream `main` once #40 merges, and to #40's branch once #1 does.
+- `Blaster` from `input-output-hk/Lean-blaster` @ `main` (`a069197`). Not the
   `beta-lambda-cache-optimization` branch: the two have diverged and neither is a superset.
-  `main` carries the `Int.ediv`/`Int.emod` fix these integer targets need.
+  `main` carries the `Int.ediv`/`Int.emod` fix these integer targets need. It needs Z3 5.4.0 or
+  later, which every shell of the flake that has Lean has (`blasterZ3`).
+
+From Lean-blaster `1fe209e` (#155) on, `#blaster` does not return on a function that recurses on
+a sublist bound by an as-pattern
+([Lean-blaster#463](https://github.com/input-output-hk/Lean-blaster/issues/463)). The check that
+a map's keys ascend, which every statement about a script context has, is written with the
+previous key as an argument instead, as CardanoLedgerApiBlaster writes `validSigners`
+(`DataEncoding.leanDefinitions`, and the `ascending` of `LeanTypes`).
 
 Upstream force-pushes. If `lake build` fails with `git exited with code 128`, a pinned rev is
 gone; re-run `lake update` and commit the new `lake-manifest.json`.
-
-Moving to PlutusCoreBlaster `main` waits for Lean-blaster. `main` of PlutusCoreBlaster, which has
-the checker of the Universal Annotation Language, does not build against the Lean-blaster pinned
-here (`6c27ff9`); it builds against Lean-blaster `main` (`983f10f`), which needs Z3 5.3.1 or later.
-From `1fe209e` (#155) on, `#blaster` does not return on a function that recurses on a sublist bound
-by an as-pattern, as the check that a map's keys ascend does (measured 2026-11-10), and every
-statement about a script context has that check.
 
 ## Coverage
 

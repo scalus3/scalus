@@ -1623,15 +1623,16 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("Blaster's error comes back in the failed result") {
-        // For `e >= 0`, `exp2` reaches the bitwise builtins, whose `ByteString` is built on
-        // `BitVec`, which Blaster cannot translate (README, Limitations). When it can, this test
-        // needs another statement Blaster rejects.
+        // For `e >= 0`, `exp2` reaches the bitwise builtins (README, Limitations), and Blaster
+        // stops at the recursor of `Nat.log2` in them: the Lean-blaster pinned before (6c27ff9)
+        // stopped at their `BitVec`. When it translates them, this test needs another statement
+        // Blaster rejects.
         val exp2 = FunctionDef(Math.exp2)
         check(forAll[BigInt](e => callRef(exp2.ref, e)(r => r >= BigInt(0))), 120, Seq(exp2)) match
             case (verifier, _, VerificationResult.Failed(reason)) =>
                 assert(reason.startsWith("Lean reported an error: "), reason)
-                assert(reason.contains("Inductive datatype with instance parameters"), reason)
-                assert(reason.contains("not supported: `BitVec"), reason)
+                assert(reason.contains("translateApp: unexpected application"), reason)
+                assert(reason.contains("Nat.rec"), reason)
                 assert(!reason.contains("Successfully decoded"), reason)
                 assert(verifier.theorems.isEmpty)
             case (_, _, other) => fail(s"expected a failed result, got $other")
@@ -1906,12 +1907,15 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         finally Directories.remove(directory)
     }
 
-    test("a case split that Blaster writes ill-typed is repaired, so the kernel takes it") {
-        // Blaster's optimizer rewrites a branch's binder apart from the condition: `¬ true = b` to
+    test("a case split as Blaster writes it is taken by the kernel, and so is it repaired") {
+        // Blaster's optimizer rewrote a branch's binder apart from the condition: `¬ true = b` to
         // `false = b`, and `¬ (¬ p ∧ ¬ q)` to `p ∨ q`, where `dite'` asks for `¬ c`
-        // (Lean-blaster#154). The kernel rejects such a run, which `#prep_uplc_run` would then
-        // keep as written, for `#blaster` to expand again. The two terms are Blaster's own tests',
-        // as the issue gives them. Where Blaster writes them well typed, the repair is not needed.
+        // (Lean-blaster#154). The kernel rejected such a run, which `#prep_uplc_run` would then
+        // keep as written, for `#blaster` to expand again; `repairedDite` gives it the binders
+        // `dite'` asks for. The two terms are Blaster's own tests', as the issue gives them. The
+        // Lean-blaster pinned before (6c27ff9) wrote both ill-typed. The one pinned now (a069197)
+        // writes them well typed, though the issue is open: the repair changes nothing the kernel
+        // rejects, and is kept for a case split Blaster still writes so.
         val text =
             """import ScalusProofs.Run
               |
@@ -1946,7 +1950,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
                 for name <- List("bool", "deMorgan") do
                     assert(
                       said.contains(
-                        s"$name: written rejected, repaired accepted, mismatched false"
+                        s"$name: written accepted, repaired accepted, mismatched false"
                       ),
                       said
                     )

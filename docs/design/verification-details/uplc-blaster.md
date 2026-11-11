@@ -1217,10 +1217,10 @@ The workspace is `scalus-verification/src/main/lean`: Lean 4.24.0 (`lean-toolcha
 `lakefile.lean`, and a committed `lake-manifest.json`. `ScalusProofs.lean` only imports
 `ScalusProofs.Run`. The checks are generated for each statement and are never stored.
 
-- **PlutusCore** comes from the fork `nau/PlutusCoreBlaster` @ `fix/case-scrutinee-smt-blowup`,
-  until input-output-hk/PlutusCoreBlaster#40 merges. Without the fix, Blaster does not terminate
-  on UPLC `case`, which every PV11 program uses. The fix addresses two problems in the
-  `Frame.CaseScrutinee` handler:
+- **PlutusCore** comes from the fork `rssh/PlutusCoreBlaster` @ `case-scrutinee-on-main`,
+  input-output-hk/PlutusCoreBlaster#40 brought up to `main`, until #40 merges. Without the fix,
+  Blaster does not terminate on UPLC `case`, which every PV11 program uses. The fix addresses two
+  problems in the `Frame.CaseScrutinee` handler, of which `main` has since fixed the first:
   - splitting `Const.Bool` left the decision tree stuck on `Bool.casesOn` for a symbolic value;
   - `Ms[n.toNat]?` is an opaque recursive application for a symbolic tag.
 
@@ -1451,7 +1451,7 @@ on each of two branches, and a clause would say them again.
 | | of what is not a preimage of the image, rejected | | spurious, 45 s | 20 s |
 | | up to the timeout, the receiver's of a preimage is accepted | | spurious, 73 s | 23 s |
 | both | of two spends under one datum, where the refund starts before the reveal ends, one is rejected | | 58 s | |
-| | the validator accepts a context where it accepts the one with the closure of either bound of its validity range the other way | | spurious, 191 s; 194 s | 39 s; 41 s |
+| | the validator accepts a context where it accepts the one with the closure of either bound of its validity range the other way | | spurious, 191 s; 194 s; with Lean-blaster `a069197`, not finished in 5 min (2026-11-11) | 39 s; 41 s |
 | samples | a reveal and a refund are accepted, the reveal up to the timeout and the refund from it, and rejected unsigned, late or with another secret | | closed, `native_decide`, on a transaction the ledger's types build: under 1 s each | |
 
 The times are of single checks with Blaster compiled, in the suite's Lean server (2026-11-06);
@@ -1526,7 +1526,7 @@ tests are `Unfinished`.
 | | the other payee is paid exactly the split; negative control: half | two payees; contexts of two inputs and two outputs at most, values of one token | | not finished (`Unfinished`) |
 | | nobody but the payees is paid; every payee is paid | | | not finished (`Unfinished`) |
 | | an honest payout is accepted; negative control: any payout | | | not finished (`Unfinished`) |
-| the optimized validator | an accepted spend withdraws from the stake credential of the script of the input its redeemer names | any parameter; contexts of two inputs and two withdrawals at most | | not finished (`Unfinished`) |
+| the optimized validator | an accepted spend withdraws from the stake credential of the script of the input its redeemer names | any parameter; contexts of two inputs and two withdrawals at most | 2211, found | within 30 min, with Lean-blaster `a069197` (2026-11-11); not finished with `6c27ff9` |
 | | its redeemer names the spent input | | 1730, found | 490 s |
 | | a spend that names its input, with its withdrawal, is accepted | | 1431, found | 128 to 160 s |
 | | the stake validator pays the other payee exactly the split | as the naive validator's payouts | | not finished (`Unfinished`) |
@@ -1564,7 +1564,9 @@ What the suite shows about the tactic:
   by spurious counterexamples, 11 s at 728 steps, 16 s at 856, 38 s at 1115, 230 s at 1487 and
   582 s at 1661, and at 1743 it did not finish in the 15 minutes left of 30 (2026-11-09): the
   claim and the validator read the input and look its script up each, and the time grew far
-  faster than the budget past 1100 steps. Before the solver's characters in a counterexample were
+  faster than the budget past 1100 steps. With Lean-blaster `a069197` the same search goes on, by
+  1791, 1965 and 2095 steps, to 2211, where it proves the statement within the 30 minutes
+  (2026-11-11). Before the solver's characters in a counterexample were
   counted as Lean's own, the search doubled the budget at 1661, to 3322.
 - **A liveness statement wants the budget of its longest accepted run.** That a spend with its
   withdrawal is accepted is stated as written, and Lean runs the validator on every context: its

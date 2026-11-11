@@ -218,3 +218,24 @@ Language ("What comes next"), whose consumers have that library.
    ([statements as Lean modules](lean-export.md)), over the variables the tactic quantifies:
    fields and `Data`, not yet the types here. A statement over a typed variable passes `toData x`
    to its programs, with `wellFormed x` as a premise. Proposed.
+3. **The ledger's validity in a check.** `UplcBlaster`'s check restricts a context variable `x0`
+   to the encodings of its type only. A statement of valid contexts would add the library's
+   predicate as a premise of the check, `match IsData.fromData x0 with | some c =>
+   validSpendingContext c | none => false` (`validMintingContext` and the others alike), so that
+   Lean's counterexamples are transactions the ledger accepts and a statement may rest on what
+   only a valid context has, as the balance of the transaction. It needs:
+   - CardanoLedgerApiBlaster in the workspace the check runs in. It builds against the revisions
+     of Blaster and PlutusCore pinned there (2026-11-11), and Blaster translates all of
+     `validSpendingContext` as a premise of such a check: the one pinned before, 6c27ff9, did not
+     translate its `isBalanced`, whose `merge` recurses on two lists. A check that holds took 35 s
+     with it; one Lean refutes without it did not finish in 15 minutes with it, as the solver has
+     to build a balanced transaction;
+   - a quantifier, or an option of `forAllData`, that says the contexts are valid. Its premise is
+     a Lean predicate beside the type's, not a program Lean runs, so no budget cuts it;
+   - the replay of a counterexample to check validity too, so that a context the premise
+     excludes is not reported as a refutation: by Lean's predicate evaluated on the values, as
+     Lean evaluates a closed statement, or by one written in Scala, which is then a second
+     reading of the ledger's rules to keep in agreement.
+
+   Validity bounds no list: the signatories are ascending, of any number. A statement that walks
+   a list still needs its limits (`forAllDataLimited`). Proposed.

@@ -580,13 +580,22 @@ object LeanTypes {
                       s"  | (${pattern.mkString(", ")}) :: rest => " +
                       s"${conjunction(entryChecks.flatten)} && $id.entriesWellFormed rest"
                 )
+            // The keys ascend: each is checked against the previous one, an argument, on the tail
+            // of its entry. Recursion on a sublist bound by an as-pattern,
+            // `(a, _) :: tail@((b, _) :: _) => … tail`, Lean-blaster does not return on from
+            // `1fe209e` on (Lean-blaster#463).
             if sorted then
+                walk(
+                  s"$id.ascendingFrom",
+                  s"def $id.ascendingFrom (previous : ${keys.leanType}) : $list → Bool\n" +
+                      "  | [] => true\n" +
+                      s"  | (k, _) :: rest => decide (previous < k) && $id.ascendingFrom k rest"
+                )
                 walk(
                   s"$id.ascending",
                   s"def $id.ascending : $list → Bool\n" +
                       "  | [] => true\n" +
-                      "  | [_] => true\n" +
-                      s"  | (a, _) :: tail@((b, _) :: _) => decide (a < b) && $id.ascending tail"
+                      s"  | (k, _) :: rest => $id.ascendingFrom k rest"
                 )
             val checks: List[String => String] =
                 Option

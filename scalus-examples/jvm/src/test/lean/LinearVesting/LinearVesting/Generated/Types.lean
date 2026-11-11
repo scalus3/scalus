@@ -204,10 +204,13 @@ def SortedMap_ByteString_Integer.fromData : List (Data × Data) → Option (List
   | [] => some []
   | (dk, dv) :: rest => (match (scalusBytes? dk) with | some k => (match (scalusInteger? dv) with | some v => (match SortedMap_ByteString_Integer.fromData rest with | some entries => some ((k, v) :: entries) | none => none) | none => none) | none => none)
 
+def SortedMap_ByteString_Integer.ascendingFrom (previous : ByteString) : List (ByteString × Integer) → Bool
+  | [] => true
+  | (k, _) :: rest => decide (previous < k) && SortedMap_ByteString_Integer.ascendingFrom k rest
+
 def SortedMap_ByteString_Integer.ascending : List (ByteString × Integer) → Bool
   | [] => true
-  | [_] => true
-  | (a, _) :: tail@((b, _) :: _) => decide (a < b) && SortedMap_ByteString_Integer.ascending tail
+  | (k, _) :: rest => SortedMap_ByteString_Integer.ascendingFrom k rest
 
 def SortedMap_ByteString_SortedMap_ByteString_Integer.toData : List (ByteString × (List (ByteString × Integer))) → List (Data × Data)
   | [] => []
@@ -221,10 +224,13 @@ def SortedMap_ByteString_SortedMap_ByteString_Integer.entriesWellFormed : List (
   | [] => true
   | (_, v) :: rest => (SortedMap_ByteString_Integer.ascending v) && SortedMap_ByteString_SortedMap_ByteString_Integer.entriesWellFormed rest
 
+def SortedMap_ByteString_SortedMap_ByteString_Integer.ascendingFrom (previous : ByteString) : List (ByteString × (List (ByteString × Integer))) → Bool
+  | [] => true
+  | (k, _) :: rest => decide (previous < k) && SortedMap_ByteString_SortedMap_ByteString_Integer.ascendingFrom k rest
+
 def SortedMap_ByteString_SortedMap_ByteString_Integer.ascending : List (ByteString × (List (ByteString × Integer))) → Bool
   | [] => true
-  | [_] => true
-  | (a, _) :: tail@((b, _) :: _) => decide (a < b) && SortedMap_ByteString_SortedMap_ByteString_Integer.ascending tail
+  | (k, _) :: rest => SortedMap_ByteString_SortedMap_ByteString_Integer.ascendingFrom k rest
 
 structure Value where
   toSortedMap : (List (ByteString × (List (ByteString × Integer))))
@@ -789,10 +795,13 @@ def SortedMap_ByteString_Data.fromData : List (Data × Data) → Option (List (B
   | [] => some []
   | (dk, dv) :: rest => (match (scalusBytes? dk) with | some k => (match (some dv) with | some v => (match SortedMap_ByteString_Data.fromData rest with | some entries => some ((k, v) :: entries) | none => none) | none => none) | none => none)
 
+def SortedMap_ByteString_Data.ascendingFrom (previous : ByteString) : List (ByteString × Data) → Bool
+  | [] => true
+  | (k, _) :: rest => decide (previous < k) && SortedMap_ByteString_Data.ascendingFrom k rest
+
 def SortedMap_ByteString_Data.ascending : List (ByteString × Data) → Bool
   | [] => true
-  | [_] => true
-  | (a, _) :: tail@((b, _) :: _) => decide (a < b) && SortedMap_ByteString_Data.ascending tail
+  | (k, _) :: rest => SortedMap_ByteString_Data.ascendingFrom k rest
 
 inductive Vote where
   | No

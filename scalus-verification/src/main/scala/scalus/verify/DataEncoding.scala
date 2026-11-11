@@ -323,17 +323,28 @@ object DataEncoding {
 
     /** The Lean definitions that [[DataEncoding.leanPredicate]] uses, each on one line. They name
       * PlutusCore's `Data` as `Data`.
+      *
+      * That the keys of a map ascend is checked with the previous key as an argument, on the tail
+      * of each entry. Written as recursion on a sublist bound by an as-pattern,
+      * `(Data.B a, _) :: tail@((Data.B b, _) :: _) => … tail`, Lean-blaster does not return on it
+      * from `1fe209e` on (Lean-blaster#463).
       */
     val leanDefinitions: String = List(
       "def scalusIsI : Data → Bool | Data.I _ => true | _ => false",
       "def scalusIsB : Data → Bool | Data.B _ => true | _ => false",
       "def scalusIsBool : Data → Bool | Data.Constr t [] => t == 0 || t == 1 | _ => false",
-      "def scalusAscendingBytes : List (Data × Data) → Bool | [] => true | [(Data.B _, _)] => true " +
-          "| (Data.B a, _) :: tail@((Data.B b, _) :: _) => decide (a < b) && " +
-          "scalusAscendingBytes tail | _ => false",
+      "def scalusAscendingBytesFrom (previous : PlutusCore.ByteString.ByteString) : " +
+          "List (Data × Data) → Bool " +
+          "| [] => true | (Data.B b, _) :: rest => decide (previous < b) && " +
+          "scalusAscendingBytesFrom b rest | _ => false",
+      "def scalusAscendingBytes : List (Data × Data) → Bool | [] => true " +
+          "| (Data.B a, _) :: rest => scalusAscendingBytesFrom a rest | _ => false",
+      "def scalusAscendingIntegersFrom (previous : PlutusCore.Integer.Integer) : " +
+          "List (Data × Data) → Bool " +
+          "| [] => true | (Data.I b, _) :: rest => decide (previous < b) && " +
+          "scalusAscendingIntegersFrom b rest | _ => false",
       "def scalusAscendingIntegers : List (Data × Data) → Bool | [] => true " +
-          "| [(Data.I _, _)] => true | (Data.I a, _) :: tail@((Data.I b, _) :: _) => " +
-          "decide (a < b) && scalusAscendingIntegers tail | _ => false"
+          "| (Data.I a, _) :: rest => scalusAscendingIntegersFrom a rest | _ => false"
     ).mkString("\n\n")
 
     /** The Lean predicate on the entries of a map, a `List (Data × Data)`. */

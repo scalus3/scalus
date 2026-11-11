@@ -282,6 +282,9 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
         )
         assert(walks.size == 1 && walks.head.startsWith("def scalusAll_"), walks)
         assert(!DataEncoding.leanDefinitions.contains("scalusAll"), DataEncoding.leanDefinitions)
+        // No recursion on a sublist bound by an as-pattern, on which Lean-blaster does not return
+        // (Lean-blaster#463).
+        assert(!DataEncoding.leanDefinitions.contains("@("), DataEncoding.leanDefinitions)
         // Types that repeat each other are defined once each, in one block, whichever is met first.
         val bothWays = DataEncoding
             .leanRecursions(List(DataEncoding.of[EncodingTree], DataEncoding.of[EncodingForest]))
