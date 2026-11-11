@@ -61,6 +61,41 @@ class LeanLayoutTest extends AnyFunSuite {
         } finally IO.delete(root)
     }
 
+    test("verify selects tests by name, by pattern, and by a class's simple name") {
+        val names = Seq(
+          "scalus.examples.htlc.HtlcVerificationTest",
+          "scalus.examples.htlc.HtlcVerificationSupportTest",
+          "scalus.examples.vesting.VestingVerificationTest"
+        )
+        def select(patterns: String*) = LeanLayout.selectTests(patterns, names)
+        assert(
+          select("HtlcVerificationTest") ==
+              (Seq("scalus.examples.htlc.HtlcVerificationTest"), Nil)
+        )
+        assert(
+          select("scalus.examples.vesting.VestingVerificationTest") ==
+              (Seq("scalus.examples.vesting.VestingVerificationTest"), Nil)
+        )
+        assert(
+          select("*VerificationTest") ==
+              (Seq(
+                "scalus.examples.htlc.HtlcVerificationTest",
+                "scalus.examples.vesting.VestingVerificationTest"
+              ),
+              Nil)
+        )
+        assert(select("Htlc*") == (names.take(2).sorted, Nil))
+        // A quote that the shell left on a name is not part of it.
+        assert(
+          select("*HtlcVerificationTest\"") ==
+              (Seq("scalus.examples.htlc.HtlcVerificationTest"), Nil)
+        )
+        // A name that selects nothing is said.
+        assert(select("Vesting", "Htlc") == (Nil, Seq("Vesting", "Htlc")))
+        // A pattern with a `.` is a test's whole name, not a simple one.
+        assert(select("htlc.HtlcVerificationTest") == (Nil, Seq("htlc.HtlcVerificationTest")))
+    }
+
     test("verify runs the suites it is given, without the tests tagged Unfinished") {
         assert(
           LeanLayout.verifyArguments(Seq("a.HtlcTest", "b.VestingTest")) ==

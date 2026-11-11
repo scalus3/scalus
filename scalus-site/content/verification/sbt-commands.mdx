@@ -15,14 +15,17 @@ The tasks that write a Lean workspace run one at a time.
 
 | Task                 | What it does                                                                                           | Needs Lean |
 | -------------------- | ------------------------------------------------------------------------------------------------------ | ---------- |
-| `verify [tests]`     | `leanBuild`, then the suites of proofs with Lean required, then `leanProve` where there are proofs by hand | yes        |
+| `verify [tests]`     | `leanBuild`, then the verification tests (the suites of proofs) with Lean required | yes        |
 | `leanInit`           | creates the workspace where it is missing, and brings Scalus's Lean library in `.scalus/` up to date    | no         |
 | `leanBuild`          | `leanInit`, then `lake build` in the workspace                                                         | yes        |
 | `leanProve`          | `leanInit`, then `lake build <Package>Proofs`: the generated statements and your proofs                | yes        |
 | `leanExport [tests]` | runs the tests, writing every named statement proved into `<Package>/Generated`                        | no         |
 | `ualExport [tests]`  | runs the tests, writing the statements as Universal Annotation Language documents                      | no         |
 
-`[tests]` are test names or patterns, as `testOnly` takes them: `verify *HtlcProofsTest`.
+`[tests]` name tests: by their class (`htlc.HtlcProofsTest`), by its simple name
+(`HtlcProofsTest`), or by a pattern with `*` (`*ProofsTest`). For `verify`, a name that selects no
+test is an error, so a typo cannot pass a run that checked nothing; `leanExport` and `ualExport`
+take the names as `testOnly` does.
 `leanExport`, `leanProve` and `ualExport` are for a workspace with Lean of your own: see
 [Mixing UPLC and Lean Proofs](/docs/verification/advanced/lean-proofs).
 
@@ -30,20 +33,21 @@ The tasks that write a Lean workspace run one at a time.
 
 ```bash copy
 sbt verify                                         # every suite of proofs of the project
-sbt "verify *HtlcProofsTest *VestingProofsTest"    # the suites named
+sbt "verify HtlcProofsTest *VestingProofsTest"     # the suites named
 sbt contracts/verify                               # one project of a multi-project build
 ```
 
-`verify` runs every proof of the project, in three steps:
+`verify` runs the verification tests of the project:
 
 1. **`leanBuild`.** The first build of a workspace takes minutes. Later ones take seconds.
 2. **The suites of proofs.** Without arguments, these are the project's tests that extend
    `LeanProofsSuite`; with arguments, the tests named. They run with **Lean required**: a statement
    that cannot be checked here fails the task, where a plain `sbt test` would cancel its test. The
    tests tagged `Unfinished` are left out.
-3. **`leanProve`**, where the workspace has a Lean module under `<Package>/Proofs`. A workspace
-   without proofs by hand has nothing the checks of step 2 did not prove already, so the step is
-   skipped.
+
+Only in the [advanced use](/docs/verification/advanced/lean-proofs), where you keep Lean proofs of
+your own under `<Package>/Proofs` of the workspace, does `verify` also build them (`leanProve`), so
+that a proof that no longer holds fails the run. Without such files there is no third step.
 
 `verify` uses the kept results. A statement whose kept result still agrees with the code is not
 asked of Lean again, so a second `verify` after a small change only proves what the change
