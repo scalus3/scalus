@@ -260,21 +260,28 @@ final class LeanProofs private (
             ) &&
             LeanProofs.isBuilt(workspace)
 
+    /** Whether the build requires Lean of this run ([[LeanProofs.requireLeanResource]]), as the
+      * plugin's `verify` does.
+      */
+    private lazy val requiredByBuild: Boolean = LeanProofs.requiredByBuild(LeanProofs.resources)
+
     /** Says that nothing is checked where Lean cannot run here ([[notChecked]]). With the
-      * `SCALUS_REQUIRE_LEAN` environment variable set, as in the Lean-Proofs workflow, a missing
-      * Lean is a failure, so the proofs cannot pass by not running.
+      * `SCALUS_REQUIRE_LEAN` environment variable set, as in the Lean-Proofs workflow, or where the
+      * build requires Lean, as the plugin's `verify` does, a missing Lean is a failure, so the
+      * proofs cannot pass by not running.
       */
     def requireLean(): Unit =
         if !leanAvailable then
             val missing = s"requires lake and a built Lean workspace in $workspace: " +
                 "run `lake build` there, the sbt task leanBuild"
-            if sys.env.contains("SCALUS_REQUIRE_LEAN") then failed(missing)
+            if sys.env.contains("SCALUS_REQUIRE_LEAN") || requiredByBuild then failed(missing)
             else notChecked(missing)
 
     /** How the kept results are used: as the environment variable `SCALUS_KEPT_RESULTS` says,
       * `use`, `recalculate`, `frozen`, or `off` for not at all. Without it, a run that requires
-      * Lean recalculates, as the Lean-Proofs workflow does; one that has Lean uses what is kept;
-      * and one without Lean, as ci-jvm, takes what is kept and asks nothing.
+      * Lean by `SCALUS_REQUIRE_LEAN` recalculates, as the Lean-Proofs workflow does; one that has
+      * Lean, or whose build requires it, as `verify`, uses what is kept, and asks Lean what
+      * changed; and one without Lean, as ci-jvm, takes what is kept and asks nothing.
       */
     lazy val keptMode: Option[KeptResults.Mode] =
         if kept.isEmpty then None
@@ -291,7 +298,7 @@ final class LeanProofs private (
                 case None =>
                     if sys.env.contains("SCALUS_REQUIRE_LEAN") then
                         Some(KeptResults.Mode.Recalculate)
-                    else if leanAvailable then Some(KeptResults.Mode.Use)
+                    else if leanAvailable || requiredByBuild then Some(KeptResults.Mode.Use)
                     else Some(KeptResults.Mode.Frozen)
 
     /** The kept results, used in the way of [[keptMode]], by the test that runs. */
@@ -942,9 +949,19 @@ object LeanProofs {
     /** The resource by which a build says the same: the plugin's `leanExport` writes it. */
     val leanExportResource = "scalus/verify/lean/export"
 
-    /** What the environment variable `variable` says, or else the resource `resource` on the class
-      * path of these proofs, as a path: none where neither says anything.
+    /** The resource by which a build says that the run requires Lean: a statement that cannot be
+      * checked here fails, as under `SCALUS_REQUIRE_LEAN`, and is not left unchecked. The kept
+      * results are used, and what changed is asked of Lean. The plugin's `verify` writes it for the
+      * run of the tests it starts.
       */
+    val requireLeanResource = "scalus/verify/lean/require"
+
+    /** Whether the build requires Lean of the run whose class path `loader` reads
+      * ([[requireLeanResource]]).
+      */
+    def requiredByBuild(loader: ClassLoader): Boolean =
+        loader.getResource(requireLeanResource) != null
+
     /** The class loader the resources of a build are read with: that of the tests that run, as for
       * the workspace ([[projectWorkspace]]), where there is one.
       */
@@ -956,6 +973,9 @@ object LeanProofs {
       */
     private[uplcblaster] val typesModule = "Types"
 
+    /** What the environment variable `variable` says, or else the resource `resource` on the class
+      * path of these proofs, as a path: none where neither says anything.
+      */
     private def exportRoot(variable: String, resource: String): Option[Path] =
         sys.env
             .get(variable)

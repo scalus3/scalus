@@ -1,5 +1,8 @@
 package scalus.verify.lean
 
+import com.github.plokhotnyuk.jsoniter_scala.core.*
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, StandardCopyOption}
 import scala.jdk.CollectionConverters.*
@@ -18,8 +21,12 @@ import scala.util.Using
   * contracts/src/test/lean/Htlc/  a workspace: lakefile.lean, lean-toolchain, Htlc.lean, Htlc/
   * }}}
   * A workspace is created where its directory has no lakefile, and is the project's from then on:
-  * nothing in it is written again. Its lakefile says where the library is, and the library there is
-  * brought up to date on every call, as it is Scalus's.
+  * nothing in it is written again, but the manifest where it has none. Its lakefile says where the
+  * library is, and the library there is brought up to date on every call, as it is Scalus's.
+  *
+  * A workspace that is created has the manifest Lake writes on its first build, so it is the same
+  * before the build as after, for the kept results of its proofs. Whether to commit it is the
+  * project's: a checkout that does not have it gets it as its tests run.
   */
 object LeanWorkspaceTool {
 
@@ -103,6 +110,7 @@ object LeanWorkspaceTool {
             val written = List(
               lakefile -> lakefileText(name, path),
               directory.resolve("lean-toolchain") -> s"${LeanWorkspace.toolchain(library)}\n",
+              directory.resolve(manifestFile) -> manifestText(name, path),
               directory.resolve(s"$name.lean") -> moduleText(name),
               directory.resolve(".gitignore") -> "/.lake\n"
             ).filter((file, text) => writeIfAbsent(file, text)).map(_._1)
@@ -119,6 +127,14 @@ object LeanWorkspaceTool {
                     val ours = library.getParent != null &&
                         library.getParent.getFileName.toString == sharedDirectory
                     val unpacked = if ours then unpack(library) else Nil
+                    // A workspace of ours that Lake has not built yet has no manifest: it gets the
+                    // one Lake would write, as a workspace that is created does.
+                    val manifest = directory.resolve(manifestFile)
+                    val path = directory.relativize(library).toString.replace('\\', '/')
+                    val pinned =
+                        if ours && writeIfAbsent(manifest, manifestText(name, path)) then
+                            List(manifest)
+                        else Nil
                     // The directories of the modules its libraries are made of: Lake does not build
                     // without them, and a checkout does not have them while they are empty.
                     val text = Files.readString(lakefile)
@@ -126,7 +142,12 @@ object LeanWorkspaceTool {
                         Files.createDirectories(directory.resolve(name))
                     if text.contains(s".submodules `$name.${LeanWorkspace.GeneratedDirectory}") then
                         proofDirectories(directory, name)
-                    Outcome(directory, false, unpacked, disagreements(directory, library))
+                    Outcome(
+                      directory,
+                      false,
+                      pinned ::: unpacked,
+                      disagreements(directory, library)
+                    )
     }
 
     /** Makes the directories of the statements Scalus writes and of the proofs written by hand,
@@ -286,6 +307,93 @@ object LeanWorkspaceTool {
                                 Some(s"its manifest does not pin $name: run `lake update` in it")
                     }
             lean ::: revisions
+
+    /** The manifest Lake reads and writes in a workspace. */
+    private val manifestFile = "lake-manifest.json"
+
+    /** A package of a Lake manifest, with every field Lake writes, to write a manifest from the
+      * library's.
+      */
+    private final case class LakePackage(
+        url: Option[String],
+        `type`: String,
+        subDir: Option[String],
+        scope: Option[String],
+        rev: Option[String],
+        name: String,
+        manifestFile: Option[String],
+        inputRev: Option[String],
+        inherited: Option[Boolean],
+        dir: Option[String],
+        configFile: Option[String]
+    )
+
+    private final case class LakeManifest(version: String, packages: List[LakePackage])
+    private given JsonValueCodec[LakeManifest] = JsonCodecMaker.make
+
+    /** The manifest of the workspace `name` that requires the library from `library`, its path from
+      * the workspace, as Lake writes it on the first build: the library by its path, then the
+      * packages the library's manifest pins, at its revisions, inherited from it.
+      *
+      * So a workspace that is created is the workspace Lake would build, and what a kept result
+      * rests on is the same in it before the build as after ([[LeanWorkspace.environment]]): a
+      * checkout that does not have the workspace takes the kept results of its proofs, where no
+      * Lean runs.
+      */
+    private[lean] def manifestText(name: String, library: String): String =
+        manifestText(resource(manifestFile), name, library)
+
+    /** [[manifestText]], from the library's manifest `libraryManifest`. */
+    private[lean] def manifestText(
+        libraryManifest: Array[Byte],
+        name: String,
+        library: String
+    ): String = {
+        val read = readFromArray[LakeManifest](libraryManifest)
+        def string(value: String): String =
+            "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        def field(key: String, value: String): String = s"${string(key)}: $value"
+        def optional(key: String, value: Option[String]): Option[String] =
+            value.map(v => field(key, string(v)))
+        val path = LakePackage(
+          url = None,
+          `type` = "path",
+          subDir = None,
+          scope = Some(""),
+          rev = None,
+          name = libraryName,
+          manifestFile = Some(manifestFile),
+          inputRev = None,
+          inherited = Some(false),
+          dir = Some(library),
+          configFile = Some("lakefile.lean")
+        )
+        val inherited = read.packages.map(_.copy(inherited = Some(true)))
+        def packageText(p: LakePackage): String = {
+            val fields =
+                optional("url", p.url).toList ++
+                    List(field("type", string(p.`type`))) ++
+                    (if p.`type` == "git" then List(field("subDir", p.subDir.fold("null")(string)))
+                     else Nil) ++
+                    optional("scope", p.scope) ++
+                    optional("rev", p.rev) ++
+                    List(field("name", string(p.name))) ++
+                    optional("manifestFile", p.manifestFile) ++
+                    optional("inputRev", p.inputRev) ++
+                    p.inherited.map(i => field("inherited", i.toString)) ++
+                    optional("dir", p.dir) ++
+                    optional("configFile", p.configFile)
+            fields.mkString("{", ",\n   ", "}")
+        }
+        val packages = (path :: inherited).map(packageText).mkString("[", ",\n  ", "]")
+        List(
+          field("version", string(read.version)),
+          field("packagesDir", string(s"$library/.lake/packages")),
+          field("packages", packages),
+          field("name", string(name)),
+          field("lakeDir", string(".lake"))
+        ).mkString("{", ",\n ", "}\n")
+    }
 
     private def lakefileText(name: String, library: String): String =
         s"""import Lake

@@ -369,6 +369,16 @@ it after its last test. Without them a test that asks Lean is canceled, as in ci
 suite that keeps its results passes on them (below). With the
 `SCALUS_REQUIRE_LEAN` environment variable set, as in the Lean-Proofs workflow, they fail instead.
 
+`verify` of the sbt plugin runs suites with Lean required as well, and uses what is kept, so it
+asks Lean only what changed:
+
+```bash
+sbt "scalusExamplesJVM/verify scalus.examples.htlc.HtlcVerificationTest"
+```
+
+In this build the examples depend on this module as a project, so `verify` builds no workspace
+for them: build the library's and `LinearVesting`'s with `lake build` first, as above.
+
 ### `LeanProofs` and a test framework
 
 `LeanProofs` runs the statements of a verifier, and asks for no test framework. Statements are
@@ -517,22 +527,28 @@ contracts/src/test/lean/Htlc/   a workspace: lakefile.lean, lean-toolchain, Htlc
   it is not of the default target. Lake does not build a library without its directories, and a
   checkout does not have them while they are empty: `init` makes them.
 - It is created where the directory has no lakefile, and is the project's from then on: nothing
-  in it is written again. Every call says where its `lean-toolchain` or the revisions its
-  manifest pins are not the library's.
+  in it is written again, but a manifest where it has none. Every call says where its
+  `lean-toolchain` or the revisions its manifest pins are not the library's.
 - The library is Scalus's: every call brings it up to the version in the build, where the
   workspace's lakefile requires it from, and writes only the files that changed. Only a library
   in a `.scalus` is written. A workspace that requires it from another path, as `LinearVesting`
   here does, is only looked at.
-- Lake writes the workspace's `lake-manifest.json` on its first build, with the revisions the
-  library's manifest pins. Commit it with the workspace.
+- It is created with the `lake-manifest.json` that Lake writes on its first build: the library by
+  its path, and the revisions the library's manifest pins. So what a kept result rests on, of
+  Lean's side, is the same in it before the build as after, and a checkout that does not have
+  the workspace, and creates it, takes the results kept where it was built. Whether to commit it
+  is the project's.
 
 A project has one workspace, and its build has it: with the Scalus sbt plugin, the setting
-`leanWorkspace`, `src/test/lean/<Project>` unless the build says another. `sbt leanInit` creates
-it. Once it is there, the plugin tells the project's tests, by a resource on their class path,
-and `LeanProofs.projectWorkspace` is that directory, made ready: `init` is called, and it fails
-where the workspace does not agree with the library. So a suite names no workspace, the suites
-of a project have the same one, and it does not matter where sbt runs the tests. A project
-without a workspace is told nothing, and its tests create none.
+`leanWorkspace`, `src/test/lean/<Project>` unless the build says another. The plugin tells the
+project's tests, by a resource on their class path, where the project has `scalus-verification`
+among its test dependencies, whether the workspace is there or not, and
+`LeanProofs.projectWorkspace` is that directory, made ready: `init` is called, which creates it
+where it is missing, and it fails where the workspace does not agree with the library. So a suite
+names no workspace, the suites of a project have the same one, it does not matter where sbt runs
+the tests, and the first suite of proofs that runs creates the workspace. `sbt leanInit` creates it
+without running a test. The examples here have this module as a project, not as a jar, and are
+told nothing: their suites take the library's workspace.
 
 That needs neither Lean nor the network. So a fresh checkout has the library, which is not
 committed, before a suite asks what is kept for it, and its kept results stand where no Lean
@@ -543,21 +559,30 @@ which does the same for that directory. A directory that is not absolute is take
 working directory.
 
 What does need Lean and the network is the build of the workspace, which is not part of `test`.
-Two tasks of the plugin do the work:
+Tasks of the plugin do the work:
 
 ```
 sbt leanInit     # make the workspace ready, as a suite does
 sbt leanBuild    # leanInit, then `lake build` in the workspace
 sbt leanProve    # leanInit, then `lake build <Name>Proofs`: the statements, and the proofs by hand
+sbt verify       # leanBuild, the suites of proofs with Lean required, then leanProve
 ```
+
+`verify` runs the project's suites of proofs, the tests that extend `LeanProofsSuite`, or the tests
+it is given, as `testOnly` takes them, and leaves out those tagged `Unfinished`. It tells them that
+Lean is required by a resource on their class path (`LeanProofs.requireLeanResource`), as the
+exports are told: a statement that cannot be checked fails, and is not canceled. Unlike
+`SCALUS_REQUIRE_LEAN`, it uses the kept results, and asks Lean only what changed;
+`SCALUS_KEPT_RESULTS=recalculate` asks it everything. It runs `leanProve` where the workspace has a
+Lean module under `<Name>/Proofs`, and not otherwise.
 
 - The first `leanBuild` clones and builds Blaster and PlutusCore, which takes minutes. Until
   then a suite that would ask Lean is canceled, and says to run it.
 - `leanBuild` does not build a workspace that does not agree with the library, and says what
   differs: after a Scalus upgrade that moves the library's Lean or its packages, run
   `lake update` in the workspace.
-- Both tasks pass over a project without `scalus-verification` among its test dependencies, so
-  they can be run for a whole build, and they run one at a time.
+- The tasks pass over a project without `scalus-verification` among its test dependencies, so
+  they can be run for a whole build, and those that write a workspace run one at a time.
 
 Without sbt, the same is `scalus.verify.lean.LeanWorkspaceTool init <directory>` and
 `lake build` there.

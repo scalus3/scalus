@@ -56,8 +56,13 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
             assert(lakefile.contains("""packagesDir := "../.scalus/ScalusProofs/.lake/packages""""))
             assert(text(workspace.resolve("Htlc.lean")).startsWith("import ScalusProofs.Run\n"))
             assert(text(workspace.resolve(".gitignore")) == "/.lake\n")
-            // Lake writes the manifest, with the revisions the library's manifest pins.
-            assert(!Files.exists(workspace.resolve("lake-manifest.json")))
+            // The manifest Lake writes on the first build, with the revisions the library's
+            // manifest pins: the workspace is the same before the build as after.
+            assert(LeanWorkspace.pinned(workspace) == LeanWorkspace.pinned(sources))
+            assert(
+              LeanWorkspace.required(workspace) ==
+                  Map("ScalusProofs" -> library(root).toAbsolutePath.normalize)
+            )
 
             // The library is the one in Scalus's sources, file by file, so a check in the
             // workspace rests on the same Lean as one in the sources.
@@ -80,6 +85,48 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
             assert(text(root.resolve(".scalus").resolve(".gitignore")) == "*\n")
             assert(outcome.written.toSet.contains(workspace.resolve("lakefile.lean")))
             assert(outcome.written.toSet.contains(unpacked.resolve("ScalusProofs/Run.lean")))
+        }
+    }
+
+    test("a created workspace has the manifest Lake writes on the first build") {
+        // The vesting example's workspace requires the library in these sources, and its manifest
+        // is the one Lake wrote. The same manifest, but for the spaces between its tokens.
+        val vesting =
+            LeanProofs.inSources("scalus-examples", "jvm", "src", "test", "lean", "LinearVesting")
+        val written = LeanWorkspaceTool.manifestText(
+          Files.readAllBytes(sources.resolve("lake-manifest.json")),
+          "LinearVesting",
+          "../../../../../../scalus-verification/src/main/lean"
+        )
+        def tokens(json: String): String = json.replaceAll("\\s+", "")
+        assert(tokens(written) == tokens(text(vesting.resolve("lake-manifest.json"))))
+    }
+
+    test("a created workspace rests on the Lean side a built one rests on") {
+        // What a kept result rests on, of Lean's side: a checkout that does not have the workspace
+        // creates it, and takes the results kept where it was built.
+        inDirectory { root =>
+            val workspace = root.resolve("Htlc")
+            LeanWorkspaceTool.init(workspace)
+            val created = LeanWorkspace.environment(workspace)
+            val built = LeanWorkspace.environment(sources)
+            assert(created.keySet == built.keySet + "Htlc", created)
+            built.foreach((part, hash) => assert(created(part) == hash, part))
+        }
+    }
+
+    test("a workspace of the project's without a manifest gets the one Lake would write") {
+        inDirectory { root =>
+            val workspace = root.resolve("Htlc")
+            LeanWorkspaceTool.init(workspace)
+            val manifest = workspace.resolve("lake-manifest.json")
+            val first = text(manifest)
+            Files.delete(manifest)
+            val again = LeanWorkspaceTool.init(workspace)
+            assert(!again.created)
+            assert(again.written == List(manifest))
+            assert(again.notes.isEmpty)
+            assert(text(manifest) == first)
         }
     }
 
