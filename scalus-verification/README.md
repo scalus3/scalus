@@ -687,14 +687,17 @@ for the reasons.
    evidence for that model is that it passes the plutus-conformance corpus.
 4. **`Value` and array builtins are out of scope.** Targets must compile with
    `valueBuiltins = false`; the model has no CIP-153 or CIP-138 builtins.
-5. **Functions reading single bytes or reaching the CIP-121/122 bitwise builtins cannot be
-   proved generically.** Blaster cannot translate `BitVec`, whose width is a value index rather
-   than a type parameter. The model reads a byte through a `Char`, whose value is a `BitVec 32`,
-   and the bitwise builtins use `BitVec` directly. Any property quantifying over a symbolic input
-   whose CEK trace reaches `indexByteString`, `shiftByteString`, `integerToByteString` or
-   `byteStringToInteger` fails to translate, at every budget. Comparing, appending and measuring
-   byte strings, as `Data` values need, translate. This is why `Math.exp2` is proved only on its
-   `exp < 0` early return. `encodeUtf8` and `decodeUtf8` go through a character's `UInt32`
+5. **Functions that build or take apart a byte string by its bytes, or reach the CIP-121/122
+   bitwise builtins, cannot be proved generically.** Blaster cannot translate `BitVec`, whose
+   width is a value index rather than a type parameter. The model reads a byte through a `Char`,
+   whose value is a `BitVec 32`, and the bitwise builtins use `BitVec` directly. A property
+   quantifying over a symbolic byte string whose CEK trace reaches `sliceByteString`,
+   `indexByteString`, `consByteString`, `integerToByteString`, `shiftByteString` or
+   `complementByteString` fails to translate, at every budget (measured 2026-11-11, with
+   Lean-blaster `a069197` and Z3 5.4.0). `byteStringToInteger` translates, though a statement
+   about its value can come back inconclusive: the solver's byte strings have characters above
+   255 (see 6). Comparing, appending and measuring byte strings, as `Data` values need,
+   translate. This is why `Math.exp2` is proved only on its `exp < 0` early return. `encodeUtf8` and `decodeUtf8` go through a character's `UInt32`
    value too. A statement with variables whose programs apply them is refused when it is
    lowered (see 6). Appending and comparing strings translate.
 6. **The solver's strings are not Plutus's.** A `String` variable ranges over the solver's
