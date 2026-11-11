@@ -34,10 +34,11 @@
       };
       uplc = plutus.packages.${system}.uplc;
 
-      # Z3 5.4.0, for every shell that has Lean. Lean-blaster `main`, which Scalus pins at
-      # a069197, asks for 5.4.0 or later since #464: it sets `smt.case_split_relevant_first`,
-      # which 5.3.1 does not have, and the Z3 simplifier `recfun-finder`, without which Z3 5.x
-      # finds no counterexample of a recursive predicate (Z3Prover/z3#10825).
+      # Z3 5.4.0, for the shells that run Lean, `ci-lean` in CI rather than `ci`. Lean-blaster
+      # `main`, which Scalus pins at a069197, asks for 5.4.0 or later since #464: it sets
+      # `smt.case_split_relevant_first`, which 5.3.1 does not have, and the Z3 simplifier
+      # `recfun-finder`, without which Z3 5.x finds no counterexample of a recursive predicate
+      # (Z3Prover/z3#10825).
       # PlutusCoreBlaster and IOG's CardanoLedgerApiBlaster `main` require that Blaster. The
       # `beta-lambda-cache-optimization` branch, which the USDCx workspace pins, needs 5.3.1 or
       # later (Lean-blaster 88588c5). nixpkgs 26.05 has 4.16.0 and unstable 5.1.0, so it is built
@@ -188,7 +189,7 @@
       # cardano-cli = cardano-node-flake.packages.${system}.cardano-cli;
     in
     {
-      devShells = {
+      devShells = rec {
         default =
           let
             jdk = pkgs.openjdk25;
@@ -395,12 +396,11 @@
               libsodium
               secp256k1
               blst
-              # Lean 4 + Z3 for the Lean-Proofs workflow, which builds the Lean workspace and runs
-              # the scalus-verification proofs through sbt. Without a built workspace, as in
-              # ci-jvm, the tests that run Lean are canceled. Z3 is built from source
-              # (`blasterZ3`), once, and kept in the Nix cache of the workflows.
+              # Lean 4 + Z3. Without a built workspace, as in ci-jvm, the tests that run Lean are
+              # canceled. The Lean-Proofs workflow, which builds the workspace and runs the proofs,
+              # uses `ci-lean`, whose Z3 is the one the pinned Blaster needs.
               elan
-              blasterZ3
+              z3
             ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.chromium ];
             shellHook = ''
               unlink plutus-conformance 2>/dev/null || true
@@ -415,6 +415,13 @@
             # Use the browser pinned by flake.lock, independently of the host PATH.
             CHROME_BIN = "${pkgs.chromium}/bin/chromium";
           });
+        # `ci` with the Z3 the pinned Lean-blaster needs (`blasterZ3`), for the Lean-Proofs
+        # workflow. It is built from source, so it is not in `ci`: every other workflow would build
+        # it first, where the Nix cache has not kept it, and run out of time.
+        ci-lean = ci.overrideAttrs (old: {
+          nativeBuildInputs =
+            [ blasterZ3 ] ++ builtins.filter (p: (p.pname or "") != "z3") old.nativeBuildInputs;
+        });
         ci-secp =
           let
             jdk = pkgs.openjdk11;
