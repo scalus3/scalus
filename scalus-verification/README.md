@@ -573,7 +573,9 @@ sbt verify       # leanBuild, the suites of proofs with Lean required, then lean
 ```
 
 `verify` runs the project's suites of proofs, the tests that extend `LeanProofsSuite`, or the tests
-it is given, as `testOnly` takes them, and leaves out those tagged `Unfinished`. It tells them that
+it is given, by their class, their class's simple name or a pattern with `*`, and leaves out those
+tagged `Unfinished`. A name that selects no test is an error: `testOnly` would run none, and the
+task pass having checked nothing. It tells them that
 Lean is required by a resource on their class path (`LeanProofs.requireLeanResource`), as the
 exports are told: a statement that cannot be checked fails, and is not canceled. Unlike
 `SCALUS_REQUIRE_LEAN`, it uses the kept results, and asks Lean only what changed;
