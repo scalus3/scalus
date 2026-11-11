@@ -400,8 +400,9 @@ object ScalusSbtPlugin extends AutoPlugin {
             loadLeanTool(cl) match {
                 case None =>
                     log.info(
-                      s"leanInit: $project has no scalus-verification among its test " +
-                          "dependencies, and gets no Lean workspace"
+                      s"leanInit: $project has no scalus-verification jar among its test " +
+                          "dependencies, and gets no Lean workspace of the plugin's: its suites " +
+                          "name their own"
                     )
                     None
                 case Some(toolClass) =>
@@ -617,15 +618,23 @@ object ScalusSbtPlugin extends AutoPlugin {
       * workspace with none has nothing that the checks of the suites did not prove already.
       */
     lazy val proofsByHandTask: Def.Initialize[Task[Unit]] = Def.taskDyn {
-        val workspace = leanWorkspace.value
+        val ready = leanReady.value
         val log = streams.value.log
-        if (LeanLayout.hasProofsByHand(workspace)) Def.task(leanProve.value)
-        else {
-            log.info(
-              s"verify: no proofs written by hand under " +
-                  s"${LeanLayout.proofsDirectory(workspace)}, so leanProve is not run"
-            )
-            Def.task(())
+        ready match {
+            // A project without scalus-verification as a jar has no workspace of the plugin's:
+            // its suites name their own.
+            case None => Def.task(())
+            case Some((workspace, _)) =>
+                // Lean proofs of the project's own, the advanced use: most projects have none,
+                // and their `verify` is the suites alone.
+                if (LeanLayout.hasProofsByHand(workspace)) Def.task(leanProve.value)
+                else {
+                    log.debug(
+                      s"verify: no Lean proofs under ${LeanLayout.proofsDirectory(workspace)}, " +
+                          "so leanProve is not run"
+                    )
+                    Def.task(())
+                }
         }
     }
 
@@ -641,9 +650,19 @@ object ScalusSbtPlugin extends AutoPlugin {
             .taskDyn {
                 val _ = leanBuild.value
                 val discovered = proofSuites.value
+                val defined = (Test / definedTestNames).value
                 val project = name.value
                 val log = streams.value.log
-                val selected = if (tests.nonEmpty) tests else discovered
+                // A name that selects no test would have `testOnly` run none, and the task pass
+                // having checked nothing: it is an error.
+                val (named, unmatched) = LeanLayout.selectTests(tests, defined)
+                if (unmatched.nonEmpty)
+                    sys.error(
+                      s"verify: no test of $project is ${unmatched.mkString(", ")}. Name a test " +
+                          "by its class, its simple name, or a pattern with *. The suites of " +
+                          s"proofs: ${if (discovered.isEmpty) "none" else discovered.mkString(", ")}"
+                    )
+                val selected = if (tests.nonEmpty) named else discovered
                 if (selected.isEmpty) {
                     log.warn(
                       s"verify: $project has no suites of proofs: no test extends " +

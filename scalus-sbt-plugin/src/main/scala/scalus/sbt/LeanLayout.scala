@@ -54,6 +54,25 @@ object LeanLayout {
         has(proofsDirectory(workspace))
     }
 
+    /** The tests of `names` that `patterns` select, as `verify` takes them, and the patterns that
+      * select none. A pattern is a test's name, with `*` for any characters, as `testOnly` takes it;
+      * one without a `.` also selects the tests whose class has it as its simple name, so
+      * `HtlcVerificationTest` selects `scalus.examples.htlc.HtlcVerificationTest`. A quote around a
+      * pattern, which a shell or sbt's client can leave on it, is not part of it.
+      */
+    def selectTests(patterns: Seq[String], names: Seq[String]): (Seq[String], Seq[String]) = {
+        def matches(raw: String, name: String): Boolean = {
+            // No test's name has a quote: one is the shell's, which reached sbt with the name.
+            val pattern = raw.stripPrefix("\"").stripSuffix("\"")
+            val regex = pattern.split("\\*", -1).map(java.util.regex.Pattern.quote).mkString(".*")
+            name.matches(regex) ||
+            (!pattern.contains(".") && name.substring(name.lastIndexOf('.') + 1).matches(regex))
+        }
+        val selected = names.filter(name => patterns.exists(matches(_, name))).distinct.sorted
+        val unmatched = patterns.filterNot(pattern => names.exists(matches(pattern, _)))
+        (selected, unmatched)
+    }
+
     /** The arguments of `testOnly` for `verify`: the suites `suites`, without the tests tagged
       * [[UnfinishedTag]], which wait for their time limit.
       */
