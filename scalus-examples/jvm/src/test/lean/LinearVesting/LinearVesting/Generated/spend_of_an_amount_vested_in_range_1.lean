@@ -35,9 +35,13 @@ def scalusIsB : Data → Bool | Data.B _ => true | _ => false
 
 def scalusIsBool : Data → Bool | Data.Constr t [] => t == 0 || t == 1 | _ => false
 
-def scalusAscendingBytes : List (Data × Data) → Bool | [] => true | [(Data.B _, _)] => true | (Data.B a, _) :: tail@((Data.B b, _) :: _) => decide (a < b) && scalusAscendingBytes tail | _ => false
+def scalusAscendingBytesFrom (previous : PlutusCore.ByteString.ByteString) : List (Data × Data) → Bool | [] => true | (Data.B b, _) :: rest => decide (previous < b) && scalusAscendingBytesFrom b rest | _ => false
 
-def scalusAscendingIntegers : List (Data × Data) → Bool | [] => true | [(Data.I _, _)] => true | (Data.I a, _) :: tail@((Data.I b, _) :: _) => decide (a < b) && scalusAscendingIntegers tail | _ => false
+def scalusAscendingBytes : List (Data × Data) → Bool | [] => true | (Data.B a, _) :: rest => scalusAscendingBytesFrom a rest | _ => false
+
+def scalusAscendingIntegersFrom (previous : PlutusCore.Integer.Integer) : List (Data × Data) → Bool | [] => true | (Data.I b, _) :: rest => decide (previous < b) && scalusAscendingIntegersFrom b rest | _ => false
+
+def scalusAscendingIntegers : List (Data × Data) → Bool | [] => true | (Data.I a, _) :: rest => scalusAscendingIntegersFrom a rest | _ => false
 
 def scalusAllPairs_40dd2b2fc5848d71 : List (Data × Data) → Bool | [] => true | (k, v) :: rest => scalusIsB k && scalusIsI v && scalusAllPairs_40dd2b2fc5848d71 rest
 

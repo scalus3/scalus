@@ -1,33 +1,49 @@
 {
   "environment": {
     "uplc-blaster": {
-      "Blaster": "6c27ff9faa66",
-      "PlutusCore": "2919b66445cd",
-      "ScalusProofs": "99dc026d39db0160",
+      "Blaster": "a06919767488",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "5a10c6146b425009",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },
   "results": {
-    "payment_splitter.optimized.spend_redeemer_names_its_input": {
+    "payment_splitter.optimized.spend_needs_its_own_withdrawal_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "d5e117c510336f61",
+      "statement": "7c25d55fe600c2eb",
+      "programs": [
+        "34ffe59b867843e0",
+        "a782eadd71f22250"
+      ],
+      "notes": {
+        "budget": "2211",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "a contract output is spent only with the stake validator's withdrawal"
+      ]
+    },
+    "payment_splitter.optimized.spend_redeemer_names_its_input_limited": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "7c25d55fe600c2eb",
       "programs": [
         "4a4ac80d6c9d71b4",
         "a782eadd71f22250"
       ],
       "notes": {
-        "budget": "1730",
+        "budget": "1015",
         "kind": "Blaster"
       },
       "tests": [
         "the redeemer of a spend names the contract's output"
       ]
     },
-    "payment_splitter.optimized.spend_with_its_withdrawal_is_accepted": {
+    "payment_splitter.optimized.spend_with_its_withdrawal_is_accepted_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "c9c917090575abda",
+      "statement": "d9bca5b2694f8bdf",
       "programs": [
         "4ebd98e18bb7130f",
         "986cdb759d2d34e8",
@@ -44,7 +60,7 @@
     "payment_splitter.optimized.stake_is_never_delegated": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "246bb843e4a6f614",
+      "statement": "a83ca112d1c00a1f",
       "programs": [
         "cd32853d61131d79",
         "23a14d9f2aad58b6",
@@ -61,7 +77,7 @@
     "payment_splitter.optimized.stake_registration_is_accepted": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "86a8390ec5802b91",
+      "statement": "833bcc8853b8965c",
       "programs": [
         "7cda037ae8799580",
         "5133f79019e7bec4"

@@ -1,9 +1,9 @@
 {
   "environment": {
     "uplc-blaster": {
-      "Blaster": "6c27ff9faa66",
-      "PlutusCore": "2919b66445cd",
-      "ScalusProofs": "99dc026d39db0160",
+      "Blaster": "a06919767488",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "5a10c6146b425009",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },
@@ -32,7 +32,7 @@
     "one_shot_mint.deployed.only_the_seed_mints.two_of_each": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "df23c361f5f7fed1",
+      "statement": "b17d33d4e2489a95",
       "programs": [
         "9297d02ce7e2bd0c",
         "f3894016802b60f0",
@@ -51,7 +51,7 @@
     "one_shot_mint.deployed.only_the_seed_mints_as_read.two_of_each": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "2c24e5c2ec18d2c8",
+      "statement": "6f5f27af2863e9d9",
       "programs": [
         "20a89054e5c55b72",
         "c7589d03e6091c00"
@@ -74,7 +74,7 @@
         "3e98557b2aa2392a"
       ],
       "notes": {
-        "budget": "1743",
+        "budget": "2132",
         "kind": "Blaster"
       },
       "counterexample": {
@@ -89,7 +89,7 @@
         "m.policy": "41",
         "m.quantity": -1,
         "m.secondId": "",
-        "m.secondIdx": 1,
+        "m.secondIdx": 0,
         "m.secondQuantity": 0,
         "m.secondToken": "",
         "m.seedId": "213021",
@@ -131,9 +131,9 @@
         "kind": "Blaster"
       },
       "counterexample": {
-        "m.amount": 2,
+        "m.amount": 3,
         "m.firstId": "213321",
-        "m.firstIdx": 1,
+        "m.firstIdx": 0,
         "m.firstQuantity": 0,
         "m.firstToken": "",
         "m.name": "213421",
@@ -141,14 +141,14 @@
         "m.ownSymbol": "41",
         "m.policy": "41",
         "m.quantity": 0,
-        "m.secondId": "213321",
-        "m.secondIdx": 0,
+        "m.secondId": "",
+        "m.secondIdx": 1,
         "m.secondQuantity": 0,
         "m.secondToken": "",
         "m.seedId": "213321",
         "m.seedIdx": 0,
         "m.token": "213421",
-        "m.twoInputs": true,
+        "m.twoInputs": false,
         "m.twoPolicies": false
       },
       "tests": [

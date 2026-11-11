@@ -49,11 +49,11 @@ import scala.concurrent.duration.*
   * under the plain name, and of the contexts within the limits above, under the name with
   * `Limited`. Both are of two payees: the payees are the contract's parameter, not the context.
   *
-  * What Lean finishes of these: that the optimized validator's spend names its input and is
-  * accepted with its withdrawal, of the contexts within the limits, its certificates, and the
-  * samples. A statement about a payout, of the naive validator or the stake validator, has its runs
-  * walk the inputs and their values, and then the outputs and the sums of the payees, and Lean does
-  * not finish it: its test is tagged `Unfinished`, and shows it with a time limit. Nor does it
+  * What Lean finishes of these: that the optimized validator's spend names its input, needs its own
+  * withdrawal, and is accepted with it, of the contexts within the limits, its certificates, and
+  * the samples. A statement about a payout, of the naive validator or the stake validator, has its
+  * runs walk the inputs and their values, and then the outputs and the sums of the payees, and Lean
+  * does not finish it: its test is tagged `Unfinished`, and shows it with a time limit. Nor does it
   * finish a statement of every context, whose runs walk lists of any length.
   *
   * Without Lean, that is without `lake` and a built workspace, the tests pass on the results kept
@@ -238,22 +238,25 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         notFinished(p.spendNeedsItsOwnWithdrawal, 1487)
     }
 
-    test(
-      "a contract output is spent only with the stake validator's withdrawal, not finished by Lean",
-      Unfinished
-    ) {
+    test("a contract output is spent only with the stake validator's withdrawal") {
         // The spending endpoint checks nothing of the payout itself: the withdrawal makes the
         // ledger run the stake validator, which does. An accepted spend withdraws from the stake
         // credential of the script of the input its redeemer names, whatever the parameter and
         // the outputs are; and that input is the one of the output it spends, the test above. The
         // rejecting program runs the claim and then the validator, each of which reads the named
-        // input and looks its script up in the withdrawals, and the search for its budget climbed
-        // by spurious counterexamples, each round longer than the one before: 11 s at 728 steps,
-        // 16 s at 856, 38 s at 1115, 230 s at 1487, 582 s at 1661, and at 1743 it did not finish
-        // in the 15 minutes left of 30 (2026-11-09). Stated of every input of the spent
-        // reference, the claim searched them all, and at 3200 steps it did not finish in 15
-        // minutes.
-        notFinished(p.spendNeedsItsOwnWithdrawalLimited, 1487)
+        // input and looks its script up in the withdrawals, and the search for its budget climbs
+        // by spurious counterexamples: by 728, 1115, 1487, 1661, 1791, 1965 and 2095 steps to
+        // 2211, where it is proved, within the time limit (Lean-blaster a069197, 2026-11-11).
+        // With Lean-blaster 6c27ff9 each round took longer than the one before, 230 s at 1487 and
+        // 582 s at 1661, and at 1743 it did not finish in the 15 minutes left of 30. Stated of
+        // every input of the spent reference, the claim searched them all, and at 3200 steps it
+        // did not finish in 15 minutes.
+        check(
+          VerificationRequest(
+            p.spendNeedsItsOwnWithdrawalLimited,
+            UplcBlaster(Budget.Auto, lean, spendTime)
+          )
+        )
     }
 
     test(

@@ -1033,9 +1033,9 @@ beside the suite's source, as `<Suite>.proofs.json`.
 {
   "environment": {
     "uplc-blaster": {
-      "Blaster": "6c27ff9faa66",
-      "PlutusCore": "2919b66445cd",
-      "ScalusProofs": "eb9642f1ddd4f46e",
+      "Blaster": "a06919767488",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "5a10c6146b425009",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },

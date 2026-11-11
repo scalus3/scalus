@@ -443,9 +443,18 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
           "every script context, not finished by Lean",
       Unfinished
     ) {
-        // An accepted run searches the signatures. Each takes Lean about three minutes.
-        spurious(closureOfTheLowerBoundDoesNotMatter)
-        spurious(closureOfTheUpperBoundDoesNotMatter)
+        // An accepted run searches the signatures, of a list of any length: the statement is
+        // neither proved nor refuted. With Lean-blaster 6c27ff9 Lean's counterexample was a
+        // list longer than the budget's runs search, in about three minutes each; with a069197
+        // the solver does not finish in the time limit (2026-11-11).
+        List(closureOfTheLowerBoundDoesNotMatter, closureOfTheUpperBoundDoesNotMatter).foreach {
+            statement =>
+                val reason = inconclusive(
+                  statement,
+                  UplcBlaster(Budget.LeanSteps(budget), lean, unfinishedTime)
+                )
+                assert(reason.contains("did not finish"), reason)
+        }
     }
 
     private val closureOfTheLowerBoundDoesNotMatterLimited = verifier.statement(

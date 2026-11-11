@@ -1,17 +1,17 @@
 {
   "environment": {
     "uplc-blaster": {
-      "Blaster": "6c27ff9faa66",
-      "PlutusCore": "2919b66445cd",
-      "ScalusProofs": "99dc026d39db0160",
+      "Blaster": "a06919767488",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "5a10c6146b425009",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },
   "results": {
-    "htlc.bounds.closure_of_the_lower_bound_does_not_matter": {
+    "htlc.bounds.closure_of_the_lower_bound_does_not_matter_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "4ce811555f682455",
+      "statement": "28aab9af0eb4851c",
       "programs": [
         "cefee615a836301b",
         "a437510eae69b165",
@@ -22,13 +22,13 @@
         "kind": "Blaster"
       },
       "tests": [
-        "whether a bound of the validity range is inclusive does not matter to the validator"
+        "whether a bound of the validity range is inclusive does not matter to the validator, of two signatures at most"
       ]
     },
-    "htlc.bounds.closure_of_the_upper_bound_does_not_matter": {
+    "htlc.bounds.closure_of_the_upper_bound_does_not_matter_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "4ce811555f682455",
+      "statement": "28aab9af0eb4851c",
       "programs": [
         "cefee615a836301b",
         "bbca8bd9d95c93a8",
@@ -39,13 +39,13 @@
         "kind": "Blaster"
       },
       "tests": [
-        "whether a bound of the validity range is inclusive does not matter to the validator"
+        "whether a bound of the validity range is inclusive does not matter to the validator, of two signatures at most"
       ]
     },
     "htlc.context.only_spending_is_validated": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "45d2bbb557c655b7",
+      "statement": "a54fa318355975b3",
       "programs": [
         "c1341b222da9d259",
         "c13ac1fff0ffbd6d"
@@ -61,7 +61,7 @@
     "htlc.context.output_without_a_datum_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "ac92da73bcb3439b",
+      "statement": "ad5b9de6d714606b",
       "programs": [
         "b61cd94f97567fcb",
         "c13ac1fff0ffbd6d"
@@ -77,7 +77,7 @@
     "htlc.context.redeemer_of_neither_action_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "2204c0ff8035ef8f",
+      "statement": "2024eb204ab0d811",
       "programs": [
         "11c308ef2b48a8da",
         "1df2560259dd4a86",
@@ -94,7 +94,26 @@
     "htlc.refund.committer_refunds_at_any_time": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "167c8f96d53bddb5",
+      "statement": "4b4ad791d3964b84",
+      "programs": [
+        "e7259a666ab0e6dc",
+        "c13ac1fff0ffbd6d"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":13},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":0,"fields":[]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":2,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":"41"}]},{"map":[]},{"map":[]},{"bytes":""},{"map":[]},{"list":[]},{"constructor":1,"fields":[]},{"constructor":1,"fields":[]}]},{"constructor":0,"fields":[]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":""},{"int":17}]},{"constructor":0,"fields":[{"constructor":16,"fields":[{"bytes":"41"}]}]}]}]}
+      },
+      "tests": [
+        "from the timeout on, the committer refunds, of two signatures at most"
+      ]
+    },
+    "htlc.refund.committer_refunds_at_any_time_limited": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "c721f085d6a1cc16",
       "programs": [
         "9b566473462b2c1c",
         "cefee615a836301b",
@@ -105,16 +124,16 @@
         "kind": "Blaster"
       },
       "counterexample": {
-        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":12},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":21238}]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":8855}]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":"41"}]},{"map":[]},{"map":[]},{"bytes":""},{"map":[]},{"list":[]},{"constructor":0,"fields":[{"int":17}]},{"constructor":0,"fields":[{"int":18}]}]},{"constructor":0,"fields":[{"int":34}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":""},{"int":14}]},{"constructor":0,"fields":[{"constructor":15,"fields":[{"bytes":"41"}]}]}]}]}
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":13},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":2,"fields":[]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":2,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":"41"}]},{"map":[]},{"map":[]},{"bytes":""},{"map":[]},{"list":[]},{"constructor":0,"fields":[{"int":19}]},{"constructor":1,"fields":[]}]},{"constructor":0,"fields":[]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"41"},{"int":18}]},{"constructor":0,"fields":[{"constructor":17,"fields":[{"bytes":"41"}]}]}]}]}
       },
       "tests": [
-        "from the timeout on, the committer refunds"
+        "from the timeout on, the committer refunds, of two signatures at most"
       ]
     },
-    "htlc.refund.committer_refunds_from_the_timeout": {
+    "htlc.refund.committer_refunds_from_the_timeout_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "167c8f96d53bddb5",
+      "statement": "c721f085d6a1cc16",
       "programs": [
         "2105aa1347f8d427",
         "cefee615a836301b",
@@ -125,24 +144,23 @@
         "kind": "Blaster"
       },
       "tests": [
-        "from the timeout on, the committer refunds"
+        "from the timeout on, the committer refunds, of two signatures at most"
       ]
     },
     "htlc.refund.rejected_at_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "28e2ff1af7d5299d",
+      "statement": "ad5b9de6d714606b",
       "programs": [
-        "adf1c6dec052dc9d",
-        "cefee615a836301b",
-        "3670e02de259108d"
+        "945a546acf3fe8a6",
+        "c13ac1fff0ffbd6d"
       ],
       "notes": {
         "budget": "4000",
         "kind": "Blaster"
       },
       "counterexample": {
-        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":14},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":0}]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":31891}]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":""},{"bytes":"41"}]},{"map":[]},{"map":[]},{"bytes":"41"},{"map":[]},{"list":[]},{"constructor":1,"fields":[]},{"constructor":0,"fields":[{"int":18}]}]},{"constructor":0,"fields":[{"int":28},{"int":27}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"41"},{"int":17}]},{"constructor":0,"fields":[{"constructor":16,"fields":[{"bytes":""},{"int":21},{"int":22},{"int":0}]}]}]}]}
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":14},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":22302}]},{"constructor":1,"fields":[]}]},{"constructor":0,"fields":[{"constructor":2,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":""}]},{"map":[]},{"map":[]},{"bytes":""},{"map":[]},{"list":[]},{"constructor":1,"fields":[]},{"constructor":1,"fields":[]}]},{"constructor":0,"fields":[{"int":18}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":""},{"int":16}]},{"constructor":0,"fields":[{"constructor":15,"fields":[{"bytes":""},{"int":20},{"int":19},{"int":22302}]}]}]}]}
       },
       "tests": [
         "a refund is rejected unless its validity range starts at the timeout or later"
@@ -151,11 +169,10 @@
     "htlc.refund.rejected_before_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "28e2ff1af7d5299d",
+      "statement": "ad5b9de6d714606b",
       "programs": [
-        "16bfc9744b596daf",
-        "cefee615a836301b",
-        "3670e02de259108d"
+        "414ea6fa95079dd0",
+        "c13ac1fff0ffbd6d"
       ],
       "notes": {
         "budget": "4000",
@@ -165,10 +182,10 @@
         "a refund is rejected unless its validity range starts at the timeout or later"
       ]
     },
-    "htlc.refund.rejected_unless_the_committer_signs": {
+    "htlc.refund.rejected_unless_the_committer_signs_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "28e2ff1af7d5299d",
+      "statement": "4b38e1215b57fe5f",
       "programs": [
         "539b834ba15003bc",
         "cefee615a836301b",
@@ -179,13 +196,32 @@
         "kind": "Blaster"
       },
       "tests": [
-        "nobody but the committer refunds"
+        "nobody but the committer refunds, of two signatures at most"
       ]
     },
     "htlc.refund.rejected_whoever_signs": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "28e2ff1af7d5299d",
+      "statement": "ad5b9de6d714606b",
+      "programs": [
+        "dabc9168a607db26",
+        "c13ac1fff0ffbd6d"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":14},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":7719}]},{"constructor":1,"fields":[]}]},{"constructor":0,"fields":[{"constructor":2,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":"213021"}]},{"map":[]},{"map":[]},{"bytes":"213021"},{"map":[]},{"list":[]},{"constructor":1,"fields":[]},{"constructor":1,"fields":[]}]},{"constructor":0,"fields":[{"int":20}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"213021"},{"int":16}]},{"constructor":0,"fields":[{"constructor":15,"fields":[{"bytes":"213021"},{"int":19},{"int":18},{"int":-21238}]}]}]}]}
+      },
+      "tests": [
+        "nobody but the committer refunds, of two signatures at most"
+      ]
+    },
+    "htlc.refund.rejected_whoever_signs_limited": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "4b38e1215b57fe5f",
       "programs": [
         "a130bad1bf6aced1",
         "cefee615a836301b",
@@ -196,16 +232,16 @@
         "kind": "Blaster"
       },
       "counterexample": {
-        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":14},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":20537}]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":281}]},{"constructor":1,"fields":[]}]}]},{"list":[{"bytes":""},{"bytes":"41"}]},{"map":[]},{"map":[]},{"bytes":""},{"map":[]},{"list":[]},{"constructor":0,"fields":[{"int":18}]},{"constructor":1,"fields":[]}]},{"constructor":0,"fields":[{"int":26}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":""},{"int":17}]},{"constructor":0,"fields":[{"constructor":16,"fields":[{"bytes":""},{"int":25},{"int":30},{"int":-1142}]}]}]}]}
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":14},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":31593}]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":2,"fields":[]},{"constructor":1,"fields":[]}]}]},{"list":[{"bytes":"41"}]},{"map":[]},{"map":[]},{"bytes":"41"},{"map":[]},{"list":[]},{"constructor":1,"fields":[]},{"constructor":1,"fields":[]}]},{"constructor":0,"fields":[]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"41"},{"int":17}]},{"constructor":0,"fields":[{"constructor":16,"fields":[{"bytes":"41"},{"int":19},{"int":18},{"int":-4378}]}]}]}]}
       },
       "tests": [
-        "nobody but the committer refunds"
+        "nobody but the committer refunds, of two signatures at most"
       ]
     },
-    "htlc.reveal.receiver_reveals_up_to_the_timeout": {
+    "htlc.reveal.receiver_reveals_up_to_the_timeout_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "167c8f96d53bddb5",
+      "statement": "c721f085d6a1cc16",
       "programs": [
         "7d2bb0bf33846daa",
         "cefee615a836301b",
@@ -216,17 +252,16 @@
         "kind": "Blaster"
       },
       "tests": [
-        "up to the timeout, the receiver reveals any preimage of the image"
+        "up to the timeout, the receiver reveals any preimage of the image, of two signatures at most"
       ]
     },
     "htlc.reveal.rejected_after_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "28e2ff1af7d5299d",
+      "statement": "ad5b9de6d714606b",
       "programs": [
-        "4f479bc206444917",
-        "cefee615a836301b",
-        "3670e02de259108d"
+        "8fb116b45b869209",
+        "c13ac1fff0ffbd6d"
       ],
       "notes": {
         "budget": "4000",
@@ -236,10 +271,10 @@
         "a reveal is rejected unless its validity range ends by the timeout"
       ]
     },
-    "htlc.reveal.rejected_unless_the_receiver_signs": {
+    "htlc.reveal.rejected_unless_the_receiver_signs_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "28e2ff1af7d5299d",
+      "statement": "4b38e1215b57fe5f",
       "programs": [
         "e9d8813f1bbddf0e",
         "cefee615a836301b",
@@ -250,13 +285,13 @@
         "kind": "Blaster"
       },
       "tests": [
-        "nobody but the receiver reveals"
+        "nobody but the receiver reveals, of two signatures at most"
       ]
     },
-    "htlc.reveal.rejected_without_a_preimage": {
+    "htlc.reveal.rejected_without_a_preimage_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "28e2ff1af7d5299d",
+      "statement": "4b38e1215b57fe5f",
       "programs": [
         "4adce67a1786db06",
         "cefee615a836301b",
@@ -267,18 +302,17 @@
         "kind": "Blaster"
       },
       "tests": [
-        "a reveal of what is not a preimage of the image is rejected"
+        "a reveal of what is not a preimage of the image is rejected, of two signatures at most"
       ]
     },
     "htlc.reveal_and_refund.reveal_ends_before_refund_begins": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "065023beb76dff74",
+      "statement": "5f3dacab323690dd",
       "programs": [
-        "4b85447f3db674bb",
-        "34da43e6edaf8271",
-        "b369ea5873971224",
-        "3670e02de259108d"
+        "e0f58d1d697c24b7",
+        "d87e6644d15027e0",
+        "73def3184937c0a0"
       ],
       "notes": {
         "budget": "4000",

@@ -81,6 +81,9 @@ class LeanTypesTest extends AnyFunSuite with LeanProofsSuite {
           text
         )
         assert(text.contains("def SortedMap_ByteString_Integer.ascending"), text)
+        // With the previous key as an argument: Lean-blaster does not return on recursion on a
+        // sublist bound by an as-pattern (Lean-blaster#463).
+        assert(!text.contains("@("), text)
         val codec = types.codec(LeanTypes.typeOf[TypedChoice]).getOrElse(fail("no codec"))
         assert(codec.wellFormed.map(_("c")).contains("(TypedChoice.wellFormed c)"))
         // A type is declared once, however many types hold it.

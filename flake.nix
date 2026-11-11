@@ -34,22 +34,22 @@
       };
       uplc = plutus.packages.${system}.uplc;
 
-      # Z3 5.3.1, for the `lean-z3-5` shell. Lean-blaster's `beta-lambda-cache-optimization`
-      # branch, which IOG's CardanoLedgerApiBlaster pins, sets the Z3 simplifier
-      # `recfun-finder` and needs 5.3.1 or later (Lean-blaster 88588c5). Blaster `main`, which
-      # Scalus pins, stays on nixpkgs' Z3 in the other shells: with Z3 5.x and without
-      # `recfun-finder` it finds no counterexample of a recursive predicate (Z3Prover/z3#10825),
-      # so its refutations end undetermined. When the beta branch reaches `main`, the shells move
-      # to this Z3 together with the pin. nixpkgs 26.05 has 4.16.0 and unstable 5.1.0, so it is
-      # built here from the release's source, as nixpkgs builds Z3. Blaster runs the `z3`
-      # executable only: no Python bindings.
+      # Z3 5.4.0, for every shell that has Lean. Lean-blaster `main`, which Scalus pins at
+      # a069197, asks for 5.4.0 or later since #464: it sets `smt.case_split_relevant_first`,
+      # which 5.3.1 does not have, and the Z3 simplifier `recfun-finder`, without which Z3 5.x
+      # finds no counterexample of a recursive predicate (Z3Prover/z3#10825).
+      # PlutusCoreBlaster and IOG's CardanoLedgerApiBlaster `main` require that Blaster. The
+      # `beta-lambda-cache-optimization` branch, which the USDCx workspace pins, needs 5.3.1 or
+      # later (Lean-blaster 88588c5). nixpkgs 26.05 has 4.16.0 and unstable 5.1.0, so it is built
+      # here from the release's source, as nixpkgs builds Z3. Blaster runs the `z3` executable
+      # only: no Python bindings.
       blasterZ3 = (pkgs.z3.override { pythonBindings = false; }).overrideAttrs (finalAttrs: old: {
-        version = "5.3.1";
+        version = "5.4.0";
         src = pkgs.fetchFromGitHub {
           owner = "Z3Prover";
           repo = "z3";
           rev = "z3-${finalAttrs.version}";
-          hash = "sha256-WjVLuYMWHrwFQMTwLxt8r+QaSSPi33LTuxL/sCKKzPU=";
+          hash = "sha256-rKoZyPQsbuxIsxOp8D4b33EcZ5iM5InnQWl0/4I7AFM=";
         };
         # nixpkgs' patch of `z3.pc.cmake.in` does not apply since Z3 rewrote that file
         # (Z3Prover/z3#10734). This does what it did: Nix's install directories are absolute,
@@ -261,7 +261,7 @@
               # Lean 4 + Z3, as in the `lean` shell, so UplcBlasterTest can run its proofs
               # (after `lake build` in scalus-verification/src/main/lean).
               elan
-              z3
+              blasterZ3
               # cardano-cli
             ];
             shellHook = ''
@@ -282,18 +282,18 @@
           };
         # Lean 4 + Z3 for the scalus-verification module. `elan` fetches the exact
         # toolchain named in scalus-verification/src/main/lean/lean-toolchain (v4.24.0).
-        # Blaster `main`, which Scalus pins, documents Z3 4.15.2; nixpkgs 26.05 ships 4.16.0, which works.
+        # The revision of Blaster `main` Scalus pins needs Z3 5.4.0 or later (see `blasterZ3`).
         lean = pkgs.mkShell {
           buildInputs = [ pkgs.bashInteractive ];
           packages = with pkgs; [
             elan
-            z3
+            blasterZ3
             git
           ];
         };
-        # Lean 4 + Z3 5.3.1, for a Lean workspace whose Blaster needs it (see `blasterZ3`): the
-        # USDCx example's (scalus-examples/jvm/src/test/lean/UsdcxMintingPolicy) and IOG's
-        # CardanoLedgerApiBlaster. No CI job uses it, so CI does not build this Z3.
+        # The `lean` shell under the name the USDCx example's workspace
+        # (scalus-examples/jvm/src/test/lean/UsdcxMintingPolicy) and its documents give, from when
+        # only it had Z3 5.x.
         lean-z3-5 = pkgs.mkShell {
           buildInputs = [ pkgs.bashInteractive ];
           packages = [
@@ -397,9 +397,10 @@
               blst
               # Lean 4 + Z3 for the Lean-Proofs workflow, which builds the Lean workspace and runs
               # the scalus-verification proofs through sbt. Without a built workspace, as in
-              # ci-jvm, the tests that run Lean are canceled.
+              # ci-jvm, the tests that run Lean are canceled. Z3 is built from source
+              # (`blasterZ3`), once, and kept in the Nix cache of the workflows.
               elan
-              z3
+              blasterZ3
             ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.chromium ];
             shellHook = ''
               unlink plutus-conformance 2>/dev/null || true
