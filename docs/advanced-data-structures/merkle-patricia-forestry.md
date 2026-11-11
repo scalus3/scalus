@@ -1,0 +1,200 @@
+Source: https://scalus.org/docs/advanced-data-structures/merkle-patricia-forestry
+
+# Merkle Patricia Forestry
+
+A radix-16 Patricia trie with path compression, where branch nodes use a binary Merkle tree of depth 4 to reduce proof size. Supports insert, delete, update, membership, and non-membership proofs.
+
+Scalus provides two variants: the standard **MPF** (Aiken-compatible) and the **Fused MPF** (8–12% cheaper on-chain, Scalus-only).
+
+**Best for:** General key-value storage on Cardano — DEX order books, token registries, on-chain key-value stores.
+
+## Merkle Patricia Forestry
+
+Patricia is an acronym for "Practical Algorithm To Retrieve Information Coded In Alphanumeric", created by Donald R. Morrison in 1968. He invented prefix tries with path compression.
+
+### Prefix Trie — What It Is
+Every key is a 256-bit number, represented as a row of 64 hex nibbles (each nibble is 0–F):
+
+```
+key_A: 3  A  7  0  F  2  ...  (64 nibbles = 256 bits)
+```
+
+This is the "address" of the value in a conceptual 16⁶⁴ = 2²⁵⁶ address space. Stack two keys and read columns left to right:
+
+```
+key_A: 3  A  7  0  F  2  ...
+key_B: 3  A  7  0  F  8  ...
+```
+
+The first 5 nibbles (`3 A 7 0 F`) are identical — that's the **common prefix**. At column 5 they diverge: A goes to slot 2, B goes to slot 8.
+
+Instead of storing all 2²⁵⁶ slots, you store only the divergence points:
+
+```
+root
+└─ skip "3A70F" (common prefix)
+   ├─ [2] → leaf(key_A, value_A)
+   └─ [8] → leaf(key_B, value_B)
+```
+
+Add a third key that diverges earlier:
+
+```
+key_A: 3  A  7  0  F  2  ...
+key_B: 3  A  7  0  F  8  ...
+key_C: 3  A  1  ...
+```
+
+Now the common prefix is only `3 A`. At column 2, C diverges (nibble 1) from A and B (nibble 7):
+
+```
+root
+└─ skip "3A"                          ← skip node (encodes 2 nibbles)
+   ├─ [1] → leaf(key_C, value_C)     ← branch: nibble 1 selects child
+   └─ [7] → skip "0F"                ← branch: nibble 7 selects child, then skip node
+              ├─ [2] → leaf(key_A)   ← branch: nibble 2 selects child
+              └─ [8] → leaf(key_B)   ← branch: nibble 8 selects child
+```
+
+A **skip node** encodes a shared prefix — many nibbles at once (0, 1, 10, 30+, any length). This is the Patricia compression: you don't need 5 separate nodes for `3, A, 7, 0, F` — one skip node labeled `"3A70F"` does the job.
+
+A **branch node** has up to 16 children (one per nibble 0–F). It encodes exactly 4 bits of the key — the nibble that selects which child to follow.
+
+Not all 256 bits of the key go through branch nodes. With, say, 3 branch nodes on a path, only 12 bits are branched; the remaining 244 bits are encoded in skip prefixes. Every path from root to leaf consumes all 256 bits.
+
+Each node stores a hash:
+
+- **Leaf hash** = `blake2b(suffix_nibbles ++ blake2b(value))`
+- **Branch hash** = `blake2b(skip_nibbles ++ merkle_root_of_16_children)`
+
+The root hash is a single 32-byte commitment to the entire 2²⁵⁶ address space. Most of the space is empty (hash = 0x00...00), and the sparse Merkle tree of 16 children efficiently hashes away all the empty slots.
+
+### The Forestry Optimization
+
+In Ethereum's original MPT (radix-16, formalized in the Yellow Paper by Gavin Wood, 2014), branch nodes store 16 child hashes as a flat list. To prove membership, you provide all 15 sibling hashes at each branch step — that's 15 × 32 = 480 bytes per step.
+
+The [Merkle Patricia Forestry](https://github.com/aiken-lang/merkle-patricia-forestry) (Aiken team) applies a sparse Merkle tree technique: arrange the 16 children as a **binary tree of depth 4** (since 2⁴ = 16). Now a proof needs only **log₂(16) = 4 sibling hashes** per step — that's 4 × 32 = 128 bytes instead of 480. A ~73% reduction in proof size, at the cost of ~30% more CPU for verification.
+
+### Proofs
+
+To prove key_A is in the trie, you walk root → leaf and at each branch collect the sibling hashes needed to reconstruct the root. The verifier replays the hash computation and checks it matches the known root.
+
+- **Membership proof:** provide the path from root to the existing leaf. The verifier recomputes hashes and confirms they match the root.
+- **Non-membership proof:** provide the path to the point where the key *would* be, showing that the slot is empty or the skip prefix doesn't match. This is why MPT supports non-membership proofs while plain Merkle trees do not.
+
+### Cost
+
+- **Verification:** ~5–15 blake2b calls per proof step
+- **Proof size:** ~200–800 bytes (Data-encoded)
+- **Proof size does not grow** with collection size (max 2²⁵⁶ entries)
+
+## Fused Merkle Patricia Forestry
+
+The `FusedMerklePatriciaForestry` is a Scalus-specific optimization. The trie structure is the same — radix-16 with skip compression and the Forestry binary tree of depth 4. The difference is in **how proofs and hashes are encoded**.
+
+### Proof Encoding: Flat ByteString Instead of Plutus Data
+
+In the standard (Aiken-compatible) variant, proofs are `List[ProofStep]` encoded as Plutus Data with CBOR serialization overhead per step.
+
+In the fused variant, proofs are packed into a single flat `ByteString` with fixed-size fields:
+
+- **Branch step**: 130 bytes — `0x00 | skip[1] | neighbors[128]`
+- **Fork step**: 68 bytes — `0x01 | skip[1] | nibble[1] | prefixLen[1] | halfLeft[32] | halfRight[32]`
+- **Leaf step**: 66 bytes — `0x02 | skip[1] | key[32] | value[32]`
+
+No CBOR, no Data deserialization — just flat byte parsing on-chain.
+
+### Hashing: combine3
+
+The standard variant hashes a branch as `blake2b(nibbles_as_bytes ++ merkle_root_of_16_children)` where `merkle_root_of_16_children` is `blake2b(halfLeft ++ halfRight)` — two nested blake2b calls (the 16 children are first reduced to two halves via a binary Merkle tree of depth 3).
+
+The fused variant hashes a branch as `blake2b(skip_count ++ halfLeft ++ halfRight)` — a single blake2b call instead of two, saving one hash per branch step.
+
+### Trade-offs: Standard vs Fused
+
+| | **Standard MPF** | **Fused MPF** |
+|---|---|---|
+| Proof encoding | Plutus Data (CBOR) | Flat ByteString |
+| Proof size | ~200–800 bytes | ~100–500 bytes |
+| CPU cost | Baseline | ~8–12% less |
+| Aiken-compatible | Yes | No |
+
+Use the standard variant when you need to share Merkle roots with Aiken contracts. Use the fused variant for maximum on-chain efficiency in Scalus-only deployments.
+
+## Example: Key-Value Set Validator (Standard MPF)
+
+The [SetBenchMpf16oValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchMpf16oValidator.scala) demonstrates insert and delete operations with the Aiken-compatible MPF variant.
+
+**On-chain** — insert or delete a key-value pair:
+
+```scala
+import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry
+import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.*
+
+val state = datum.getOrFail("No datum").to[SetBenchDatum]
+val trie = MerklePatriciaForestry(state.root)
+
+// Insert returns a new trie with updated root
+val newTrie = trie.insert(key, value, proofData.to[Proof])
+
+// Delete returns a new trie with the key removed
+val newTrie = trie.delete(key, value, proofData.to[Proof])
+
+// Verify the continuing output has the new root
+require(outDatum.root === newTrie.root, "Wrong root")
+```
+
+**Off-chain** — build the trie and generate proofs:
+
+```scala
+import scalus.crypto.trie.MerklePatriciaForestry
+
+// Build the trie from key-value pairs
+var trie = MerklePatriciaForestry.empty
+for (key, value) <- elements do
+  trie = trie.insert(blake2b_256(key), blake2b_256(value))
+
+// Generate proofs
+val membershipProof = trie.proveMembership(keyHash)
+val nonMembershipProof = trie.proveNonMembership(keyHash)
+```
+
+## Example: Key-Value Set Validator (Fused MPF)
+
+The [SetBenchMpf16bValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchMpf16bValidator.scala) uses the Fused MPF variant for ~8–12% lower on-chain cost. The API is the same — only the proof encoding differs.
+
+**On-chain** — the fused variant uses `ByteString` proofs instead of `Proof`:
+
+```scala
+import scalus.cardano.onchain.plutus.crypto.trie.FusedMerklePatriciaForestry
+import scalus.cardano.onchain.plutus.crypto.trie.FusedMerklePatriciaForestry.*
+
+val trie = FusedMerklePatriciaForestry(state.root)
+
+// Same API as standard MPF, but proofs are flat ByteStrings
+val newTrie = trie.insert(key, value, unBData(proofData))
+val newTrie = trie.delete(key, value, unBData(proofData))
+```
+
+**Off-chain** — the fused variant generates binary proofs:
+
+```scala
+import scalus.crypto.trie.FusedMerklePatriciaForestry
+
+var trie = FusedMerklePatriciaForestry.empty
+for (key, value) <- elements do
+  trie = trie.insert(blake2b_256(key), blake2b_256(value))
+
+val proof = trie.proveMembership(keyHash)  // returns ByteString, not List[ProofStep]
+```
+
+See also:
+- [SetBenchMpf16bLightValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchMpf16bLightValidator.scala) — minimal validator for fair Scalus-vs-Aiken cost comparison
+- [CollectionMembershipBudgetTest](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/test/scala/scalus/examples/setbench/CollectionMembershipBudgetTest.scala) — budget analysis comparing MPF variants at different collection sizes
+- [AikenMpfCompatibilityTest](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala) — verifies Scalus MPF proofs are compatible with Aiken's implementation
+
+## Related
+
+- [Merkle Trees](/docs/advanced-data-structures/merkle-tree) — simpler static and append-only variants
+- [Bilinear Accumulators](/docs/advanced-data-structures/bilinear-accumulators) — constant proof size but ~35× more CPU
+- [Benchmarking Authenticated Collections](https://lantr.io/blog/scalus-authenticated-collections-benchmarks/) — detailed CPU, memory, and fee comparisons between MPF variants

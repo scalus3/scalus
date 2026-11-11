@@ -1,0 +1,156 @@
+Source: https://scalus.org/docs/transactions/payment-methods
+
+# Payment Methods: Send ADA and Native Tokens
+
+TxBuilder provides several methods for creating transaction outputs with different levels of control. This guide covers the various ways to send ADA and native tokens.
+
+## How to Make Simple ADA Payment
+
+The most basic payment sends ADA to an address without any datum:
+
+```scala copy
+TxBuilder(env)
+  .spend(utxo)
+  .payTo(recipientAddress, Value.ada(10))  // Send 10 ADA
+  .build(changeTo = changeAddress)
+```
+
+## Sending Native Tokens on Cardano
+
+Send native tokens along with ADA:
+
+```scala copy
+import scalus.cardano.ledger.{AssetName, PolicyId, MultiAsset, Value}
+import scalus.uplc.builtin.ByteString.hex
+import scala.collection.immutable.SortedMap
+
+val policyId = PolicyId(hex"...")
+val assetName = AssetName(hex"...")
+
+val tokenValue = Value.asset(
+  policyId,
+  assetName,
+  amount = 100L,           // 100 tokens
+  lovelace = Coin.ada(2)   // Plus 2 ADA
+)
+
+TxBuilder(env)
+  .spend(utxo)
+  .payTo(recipientAddress, tokenValue)
+  .build(changeTo = changeAddress)
+```
+
+  TxBuilder automatically ensures outputs meet the minimum ADA requirement based on the protocol parameters.
+
+## Payment with Inline Datum
+
+Send funds to a script address with an inline datum:
+
+```scala copy
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.ToData
+
+case class MyDatum(owner: PubKeyHash, amount: Long) derives ToData
+
+val datum = MyDatum(ownerPubKeyHash, 1000)
+
+TxBuilder(env)
+  .spend(utxo)
+  .payTo(scriptAddress, Value.ada(10), datum)  // Datum is inlined
+  .build(changeTo = changeAddress)
+```
+
+The datum is automatically serialized to `Data` and included inline in the output.
+
+## Payment with Datum Hash
+
+Send funds with a datum hash and attach the datum to the witness set:
+
+```scala copy
+val datum = MyDatum(ownerPubKeyHash, 1000)
+
+TxBuilder(env)
+  .spend(utxo)
+  .attach(datum.toData)  // Add datum to witness set
+  .payTo(scriptAddress, Value.ada(10), datumHash)
+  .build(changeTo = changeAddress)
+```
+
+The `attach()` method computes the datum hash and stores the datum for inclusion in the witness set.
+
+Use a precomputed datum hash:
+
+```scala copy
+import scalus.cardano.ledger.DataHash
+import scalus.uplc.builtin.Builtins.{blake2b_256, serialiseData}
+
+val datum = MyDatum(ownerPubKeyHash, 1000)
+val datumHash = DataHash.fromByteString(
+  blake2b_256(serialiseData(datum.toData))
+)
+
+TxBuilder(env)
+  .spend(utxo)
+  .attach(datum.toData)
+  .payTo(scriptAddress, Value.ada(10), datumHash)
+  .build(changeTo = changeAddress)
+```
+
+## Multiple Payments
+
+Chain multiple `payTo()` calls to create multiple outputs:
+
+```scala copy
+TxBuilder(env)
+  .spend(utxo)
+  .payTo(recipient1, Value.ada(5))
+  .payTo(recipient2, Value.ada(3))
+  .payTo(recipient3, Value.ada(2))
+  .build(changeTo = changeAddress)
+```
+
+Each call creates a separate UTxO at the recipient address.
+
+## Custom Transaction Output
+
+For full control, use the `output()` method with a complete `TransactionOutput`:
+
+```scala copy
+import scalus.cardano.ledger.{Output, DatumOption, Script}
+
+val customOutput = Output(
+  address = recipientAddress,
+  value = Value.ada(10),
+  datumOption = Some(DatumOption.Inline(myDatum.toData)),
+  scriptRef = Some(Script.PlutusV3(myScript))  // Attach reference script
+)
+
+TxBuilder(env)
+  .spend(utxo)
+  .output(customOutput)
+  .build(changeTo = changeAddress)
+```
+
+This gives you complete control over all output fields, including attaching reference scripts.
+
+## Token Change Handling
+
+When spending UTxOs with tokens, TxBuilder automatically returns unused tokens to the change address:
+
+```scala copy
+// UTxO contains 10 ADA + 1000 tokens
+val utxoWithTokens: Utxo = // ...
+
+TxBuilder(env)
+  .spend(utxoWithTokens)
+  .payTo(recipient, Value.ada(5))  // Only send ADA
+  .build(changeTo = changeAddress) // Tokens automatically returned here
+```
+
+The change output will contain the remaining ADA and all 1000 tokens.
+
+## Next Steps
+
+- **[Spending UTxOs](/docs/transactions/spending-utxos)** - Learn about input selection and spending from scripts
+- **[Minting & Burning](/docs/transactions/minting-burning-assets)** - Create and destroy native tokens
+- **[Validator Interactions](/docs/transactions/validator-interactions)** - Work with Plutus scripts

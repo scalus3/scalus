@@ -1,0 +1,463 @@
+<!DOCTYPE html><html data-pathToRoot="../../../" data-rawLocation="scalus/uplc/internal/TermTraversal$" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>TermTraversal</title><link rel="shortcut icon" type="image/x-icon" href="../../../favicon.ico"></link><script type="text/javascript" src="../../../scripts/theme.js"></script><script type="text/javascript" src="../../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../../styles/searchbar.css"></link><link rel="stylesheet" href="../../../styles/social-links.css"></link><link rel="stylesheet" href="../../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../../styles/content-contributors.css"></link><script type="text/javascript" src="../../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../../scripts/data.js" defer="true"></script><script>var pathToRoot = "../../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.5.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../../index.html">Scalus</a>/<a href="../../../scalus.html">scalus</a>/<a href="../../uplc.html">scalus.uplc</a>/<a href="../internal.html">scalus.uplc.internal</a>/<a href="TermTraversal$.html">TermTraversal</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon ob"></span></span>
+ <h1 class="h600 single">TermTraversal</h1>
+</div>
+<div class="fqname body-large">
+ <span>scalus.uplc.internal.TermTraversal</span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="TermTraversal$.html" t="n" class="documentableName ">TermTraversal</a>
+ </div>
+</div>
+<div class="cover">
+ <div class="doc">
+  <p>One shared walk over UPLC <a href="../Term.html">Term</a>.</p>
+  <p>Spec: docs/superpowers/specs/2026-10-27-term-traversal-design.md. Rule IDs such as <code>[TT-1]</code> refer to it.</p>
+  <p>Child order <code>[TT-1]</code>: <code>LamAbs</code> body; <code>Apply</code> function, then argument; <code>Force</code> body; <code>Delay</code> body; <code>Constr</code> arguments in order; <code>Case</code> scrutinee, then branches in order.</p>
+  <p>Whole-tree combinators (<code>visit</code>, <code>foreach</code>, <code>exists</code>, <code>foldLeft</code>, <code>transformUp</code>, <code>transformDown</code>, <code>freeVars</code>) recurse on the JVM stack, one frame per tree level, like the hand-written walks they replace. An explicit stack measured 1.5 to 2.2 times slower, so stack safety is deferred (spec, <code>[TT-14]</code>). They allocate nothing per visited node, except for the nodes a rewrite rebuilds <code>[TT-16]</code>.</p>
+  <p>Rewrites keep identity: when nothing below a node changed, the node itself is returned (<code>eq</code>) <code>[TT-12]</code>. Identity-keyed caches in the optimizer passes depend on that.</p>
+  <p>The combinators are <code>inline</code> with <code>inline</code> callbacks <code>[TT-19]</code>. Each call site gets its own local recursive function with the callback body in it, so there is no megamorphic <code>Function1</code> call per node. For example, <code>t.exists(p)</code> expands to:</p>
+  <div class="snippet mono-small-block">
+   <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>def go(n: Term): Boolean =  ||
+</span><span line-number="2" class=""><span class="tooltip-container"></span>go(t)
+</span></code></pre>
+   <div class="buttons"></div>
+  </div>
+  <p>The combinators are extension methods on <code>Term</code>. Import the ones a file uses by name, for example <code>import scalus.uplc.internal.TermTraversal.{exists, mapChildren}</code>. They are not members of the public <code>Term</code> type. <code>freeVars</code> is a plain method, <code>TermTraversal.freeVars(t)</code>, because <code>TermAnalysis</code> already provides a <code>freeVars</code> extension.</p>
+ </div>
+ <section id="attributes">
+  <h2 class="h500">Attributes</h2>
+  <dl class="attributes">
+   <dt class="body-small">Graph</dt>
+   <dd class="body-medium">
+    <div id="inheritance-diagram" class="diagram-class showGraph">
+     <button type="button" class="label-only-button" onclick="zoomOut()">Reset zoom</button><button type="button" class="label-only-button" onclick="hideGraph()">Hide graph</button><button type="button" class="label-only-button" onclick="showGraph()">Show graph</button>
+     <svg id="graph"></svg>
+     <script type="text/dot" id="dot"> digraph g {
+ node0 [id=node0, label="<span style=\"color: #FFFFFF;\">object <a href=\"TermTraversal$.html\" t=\"n\">TermTraversal</a></span>", class="object vertex"];
+node1 [id=node1, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Object</span></span>", class="class vertex"];
+node2 [id=node2, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Any</span></span>", class="class vertex"];
+node3 [id=node3, label="<span style=\"color: #FFFFFF;\">trait <span data-unresolved-link=\"\" t=\"n\">Matchable</span></span>", class="trait vertex"];
+
+
+ node0 -> node1;
+node1 -> node2;
+node1 -> node3;
+node3 -> node2;
+
+}
+</script>
+    </div>
+   </dd>
+   <dt class="body-small">Supertypes</dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <div>
+      class <span data-unresolved-link="" t="n">Object</span>
+     </div>
+     <div>
+      trait <span data-unresolved-link="" t="n">Matchable</span>
+     </div>
+     <div>
+      class <span data-unresolved-link="" t="n">Any</span>
+     </div>
+     <span></span>
+    </div>
+   </dd>
+   <dt class="body-small">Self type</dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <span></span>
+     <div>
+      <a href="TermTraversal$.html" t="n">TermTraversal</a>.<span t="k">type</span>
+     </div>
+    </div>
+   </dd>
+  </dl>
+ </section>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div>
+  <input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Concrete-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete methods</h4>
+        </div>
+        <div class="documentableElement" id="freeVars-fffff541">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#freeVars-fffff541" t="n" class="documentableName ">freeVars</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">t</span>: <a href="../Term.html" t="t">Term</a>): <span data-unresolved-link="" t="t">Set</span>[<span data-unresolved-link="" t="t">String</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>The names of the variables that occur free in <code>t</code>.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>The names of the variables that occur free in <code>t</code>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Extensions">
+     <div data-togglable="Extensions" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Extensions" class="h400">Extensions</h3>
+      </div>
+      <section id="Extensions">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Extensions</h4>
+        </div>
+        <div>
+         <span class="groupHeader"><span t="k">extension </span>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">t</span>: <a href="../Term.html" t="t">Term</a>)</span>
+         <div class="documentableElement" id="exists-a42" data-f-keywords="inline">
+          <div class="documentableElement-expander">
+           <button class="icon-button ar show-content"></button>
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#exists-a42" t="n" class="documentableName ">exists</a>(<span t="k"></span><span t="k">inline </span><span data-unresolved-link="" t="n">p</span>: <a href="../Term.html" t="t">Term</a><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Boolean</span>): <span data-unresolved-link="" t="t">Boolean</span>
+            </div>
+           </div>
+          </div>
+          <div class="docs">
+           <span class="modifiers"></span>
+           <div>
+            <div class="originInfo"></div>
+            <div class="memberDocumentation">
+             <div class="documentableBrief doc">
+              <p>True if <code>p</code> holds for some node of <code>t</code>. Tests nodes in pre-order and stops at the first match <code>[TT-7]</code> <code>[TT-21]</code>.</p>
+             </div>
+             <div class="cover">
+              <div class="doc">
+               <p>True if <code>p</code> holds for some node of <code>t</code>. Tests nodes in pre-order and stops at the first match <code>[TT-7]</code> <code>[TT-21]</code>.</p>
+              </div>
+              <h2 class="h200">Attributes</h2>
+              <dl class="attributes attributes-small"></dl>
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="foldLeft-fffff634" data-f-keywords="inline">
+          <div class="documentableElement-expander">
+           <button class="icon-button ar show-content"></button>
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#foldLeft-fffff634" t="n" class="documentableName ">foldLeft</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">z</span>: <span t="t">A</span>)(<span t="k"></span><span t="k">inline </span><span data-unresolved-link="" t="n">f</span>: (<span t="t">A</span>, <a href="../Term.html" t="t">Term</a>)<span t="k"> =&gt; </span><span t="t">A</span>): <span data-unresolved-link="" t="t">A</span>
+            </div>
+           </div>
+          </div>
+          <div class="docs">
+           <span class="modifiers"></span>
+           <div>
+            <div class="originInfo"></div>
+            <div class="memberDocumentation">
+             <div class="documentableBrief doc">
+              <p>Folds <code>f</code> over the nodes of <code>t</code> in pre-order <code>[TT-8]</code>.</p>
+             </div>
+             <div class="cover">
+              <div class="doc">
+               <p>Folds <code>f</code> over the nodes of <code>t</code> in pre-order <code>[TT-8]</code>.</p>
+              </div>
+              <h2 class="h200">Attributes</h2>
+              <dl class="attributes attributes-small"></dl>
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="foreach-1aa" data-f-keywords="inline">
+          <div class="documentableElement-expander">
+           <button class="icon-button ar show-content"></button>
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#foreach-1aa" t="n" class="documentableName ">foreach</a>(<span t="k"></span><span t="k">inline </span><span data-unresolved-link="" t="n">f</span>: <a href="../Term.html" t="t">Term</a><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Unit</span>): <span data-unresolved-link="" t="t">Unit</span>
+            </div>
+           </div>
+          </div>
+          <div class="docs">
+           <span class="modifiers"></span>
+           <div>
+            <div class="originInfo"></div>
+            <div class="memberDocumentation">
+             <div class="documentableBrief doc">
+              <p>Calls <code>f</code> on every node of <code>t</code> in pre-order <code>[TT-6]</code>.</p>
+             </div>
+             <div class="cover">
+              <div class="doc">
+               <p>Calls <code>f</code> on every node of <code>t</code> in pre-order <code>[TT-6]</code>.</p>
+              </div>
+              <h2 class="h200">Attributes</h2>
+              <dl class="attributes attributes-small"></dl>
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="foreachChild-1aa" data-f-keywords="inline">
+          <div class="documentableElement-expander">
+           <button class="icon-button ar show-content"></button>
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#foreachChild-1aa" t="n" class="documentableName ">foreachChild</a>(<span t="k"></span><span t="k">inline </span><span data-unresolved-link="" t="n">f</span>: <a href="../Term.html" t="t">Term</a><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Unit</span>): <span data-unresolved-link="" t="t">Unit</span>
+            </div>
+           </div>
+          </div>
+          <div class="docs">
+           <span class="modifiers"></span>
+           <div>
+            <div class="originInfo"></div>
+            <div class="memberDocumentation">
+             <div class="documentableBrief doc">
+              <p>Calls <code>f</code> on each child of <code>t</code>, in child order <code>[TT-1]</code>. Allocates nothing <code>[TT-18]</code>.</p>
+             </div>
+             <div class="cover">
+              <div class="doc">
+               <p>Calls <code>f</code> on each child of <code>t</code>, in child order <code>[TT-1]</code>. Allocates nothing <code>[TT-18]</code>.</p>
+              </div>
+              <h2 class="h200">Attributes</h2>
+              <dl class="attributes attributes-small"></dl>
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="foreachChildIndexed-fffff46b" data-f-keywords="inline">
+          <div class="documentableElement-expander">
+           <button class="icon-button ar show-content"></button>
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#foreachChildIndexed-fffff46b" t="n" class="documentableName ">foreachChildIndexed</a>(<span t="k"></span><span t="k">inline </span><span data-unresolved-link="" t="n">f</span>: (<a href="../Term.html" t="t">Term</a>, <span data-unresolved-link="" t="t">Int</span>)<span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Unit</span>): <span data-unresolved-link="" t="t">Unit</span>
+            </div>
+           </div>
+          </div>
+          <div class="docs">
+           <span class="modifiers"></span>
+           <div>
+            <div class="originInfo"></div>
+            <div class="memberDocumentation">
+             <div class="documentableBrief doc">
+              <p>Like <a href="TermTraversal$.html#foreachChild-1aa">foreachChild</a>, and also passes the child index, numbered as in <a href="TermTraversal$.html#mapChildrenIndexed-fffff632">mapChildrenIndexed</a> <code>[TT-2]</code>.</p>
+             </div>
+             <div class="cover">
+              <div class="doc">
+               <p>Like <a href="TermTraversal$.html#foreachChild-1aa">foreachChild</a>, and also passes the child index, numbered as in <a href="TermTraversal$.html#mapChildrenIndexed-fffff632">mapChildrenIndexed</a> <code>[TT-2]</code>.</p>
+              </div>
+              <h2 class="h200">Attributes</h2>
+              <dl class="attributes attributes-small"></dl>
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="mapChildren-fffff831" data-f-keywords="inline">
+          <div class="documentableElement-expander">
+           <button class="icon-button ar show-content"></button>
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#mapChildren-fffff831" t="n" class="documentableName ">mapChildren</a>(<span t="k"></span><span t="k">inline </span><span data-unresolved-link="" t="n">f</span>: <a href="../Term.html" t="t">Term</a><span t="k"> =&gt; </span><a href="../Term.html" t="t">Term</a>): <a href="../Term.html" t="t">Term</a>
+            </div>
+           </div>
+          </div>
+          <div class="docs">
+           <span class="modifiers"></span>
+           <div>
+            <div class="originInfo"></div>
+            <div class="memberDocumentation">
+             <div class="documentableBrief doc">
+              <p>Replaces each child of <code>t</code> by <code>f(child)</code>, in child order <code>[TT-1]</code>.</p>
+             </div>
+             <div class="cover">
+              <div class="doc">
+               <p>Replaces each child of <code>t</code> by <code>f(child)</code>, in child order <code>[TT-1]</code>.</p>
+               <p>Returns <code>t</code> itself when every result is <code>eq</code> to its child <code>[TT-12]</code>. Allocates a new argument or branch list only when an element changed <code>[TT-13]</code>.</p>
+              </div>
+              <h2 class="h200">Attributes</h2>
+              <dl class="attributes attributes-small"></dl>
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="mapChildrenIndexed-fffff632" data-f-keywords="inline">
+          <div class="documentableElement-expander">
+           <button class="icon-button ar show-content"></button>
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#mapChildrenIndexed-fffff632" t="n" class="documentableName ">mapChildrenIndexed</a>(<span t="k"></span><span t="k">inline </span><span data-unresolved-link="" t="n">f</span>: (<a href="../Term.html" t="t">Term</a>, <span data-unresolved-link="" t="t">Int</span>)<span t="k"> =&gt; </span><a href="../Term.html" t="t">Term</a>): <a href="../Term.html" t="t">Term</a>
+            </div>
+           </div>
+          </div>
+          <div class="docs">
+           <span class="modifiers"></span>
+           <div>
+            <div class="originInfo"></div>
+            <div class="memberDocumentation">
+             <div class="documentableBrief doc">
+              <p>Like <a href="TermTraversal$.html#mapChildren-fffff831">mapChildren</a>, and also passes the child index <code>[TT-2]</code>: <code>Apply</code> 0 = function, 1 = argument; <code>Case</code> 0 = scrutinee, 1..n = branches; <code>Constr</code> 0..n-1 = arguments; one-child nodes 0.</p>
+             </div>
+             <div class="cover">
+              <div class="doc">
+               <p>Like <a href="TermTraversal$.html#mapChildren-fffff831">mapChildren</a>, and also passes the child index <code>[TT-2]</code>: <code>Apply</code> 0 = function, 1 = argument; <code>Case</code> 0 = scrutinee, 1..n = branches; <code>Constr</code> 0..n-1 = arguments; one-child nodes 0.</p>
+              </div>
+              <h2 class="h200">Attributes</h2>
+              <dl class="attributes attributes-small"></dl>
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="nodeCount-e34">
+          <div class="documentableElement-expander">
+           <button class="icon-button ar show-content"></button>
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#nodeCount-e34" t="n" class="documentableName ">nodeCount</a>: <span data-unresolved-link="" t="t">Int</span>
+            </div>
+           </div>
+          </div>
+          <div class="docs">
+           <span class="modifiers"></span>
+           <div>
+            <div class="originInfo"></div>
+            <div class="memberDocumentation">
+             <div class="documentableBrief doc">
+              <p>The number of nodes in <code>t</code>. Every node counts 1, a leaf too, whatever its size: <code>[f x]</code> has 3 nodes, and so does <code>[f (con bytestring #...1 KB...)]</code>.</p>
+             </div>
+             <div class="cover">
+              <div class="doc">
+               <p>The number of nodes in <code>t</code>. Every node counts 1, a leaf too, whatever its size: <code>[f x]</code> has 3 nodes, and so does <code>[f (con bytestring #...1 KB...)]</code>.</p>
+              </div>
+              <h2 class="h200">Attributes</h2>
+              <dl class="attributes attributes-small"></dl>
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="transformDown-fffff831" data-f-keywords="inline">
+          <div class="documentableElement-expander">
+           <button class="icon-button ar show-content"></button>
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#transformDown-fffff831" t="n" class="documentableName ">transformDown</a>(<span t="k"></span><span t="k">inline </span><span data-unresolved-link="" t="n">f</span>: <a href="../Term.html" t="t">Term</a><span t="k"> =&gt; </span><a href="../Term.html" t="t">Term</a>): <a href="../Term.html" t="t">Term</a>
+            </div>
+           </div>
+          </div>
+          <div class="docs">
+           <span class="modifiers"></span>
+           <div>
+            <div class="originInfo"></div>
+            <div class="memberDocumentation">
+             <div class="documentableBrief doc">
+              <p>Top-down rewrite: calls <code>f</code> on a node, then rewrites the children of the result <code>[TT-10]</code>. Calls <code>f</code> once per node and does not call it again on its own result <code>[TT-11]</code>. Returns <code>t</code> itself when nothing changed <code>[TT-12]</code>.</p>
+             </div>
+             <div class="cover">
+              <div class="doc">
+               <p>Top-down rewrite: calls <code>f</code> on a node, then rewrites the children of the result <code>[TT-10]</code>. Calls <code>f</code> once per node and does not call it again on its own result <code>[TT-11]</code>. Returns <code>t</code> itself when nothing changed <code>[TT-12]</code>.</p>
+              </div>
+              <h2 class="h200">Attributes</h2>
+              <dl class="attributes attributes-small"></dl>
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="transformUp-fffff831" data-f-keywords="inline">
+          <div class="documentableElement-expander">
+           <button class="icon-button ar show-content"></button>
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#transformUp-fffff831" t="n" class="documentableName ">transformUp</a>(<span t="k"></span><span t="k">inline </span><span data-unresolved-link="" t="n">f</span>: <a href="../Term.html" t="t">Term</a><span t="k"> =&gt; </span><a href="../Term.html" t="t">Term</a>): <a href="../Term.html" t="t">Term</a>
+            </div>
+           </div>
+          </div>
+          <div class="docs">
+           <span class="modifiers"></span>
+           <div>
+            <div class="originInfo"></div>
+            <div class="memberDocumentation">
+             <div class="documentableBrief doc">
+              <p>Bottom-up rewrite: rewrites all children of a node, then calls <code>f</code> on the rebuilt node <code>[TT-9]</code>. Calls <code>f</code> once per node <code>[TT-11]</code>. Returns <code>t</code> itself when nothing changed <code>[TT-12]</code>.</p>
+             </div>
+             <div class="cover">
+              <div class="doc">
+               <p>Bottom-up rewrite: rewrites all children of a node, then calls <code>f</code> on the rebuilt node <code>[TT-9]</code>. Calls <code>f</code> once per node <code>[TT-11]</code>. Returns <code>t</code> itself when nothing changed <code>[TT-12]</code>.</p>
+              </div>
+              <h2 class="h200">Attributes</h2>
+              <dl class="attributes attributes-small"></dl>
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="visit-fffffc7f" data-f-keywords="inline">
+          <div class="documentableElement-expander">
+           <button class="icon-button ar show-content"></button>
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"><span t="k">inline </span></span><span class="kind"><span t="k">def </span></span><a href="TermTraversal$.html#visit-fffffc7f" t="n" class="documentableName ">visit</a>(<span t="k"></span><span t="k">inline </span><span data-unresolved-link="" t="n">enter</span>: <a href="../Term.html" t="t">Term</a><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Boolean</span>)(<span t="k"></span><span t="k">inline </span><span data-unresolved-link="" t="n">exit</span>: <a href="../Term.html" t="t">Term</a><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Unit</span>): <span data-unresolved-link="" t="t">Unit</span>
+            </div>
+           </div>
+          </div>
+          <div class="docs">
+           <span class="modifiers"></span>
+           <div>
+            <div class="originInfo"></div>
+            <div class="memberDocumentation">
+             <div class="documentableBrief doc">
+              <p>Walks <code>t</code> in pre-order.</p>
+             </div>
+             <div class="cover">
+              <div class="doc">
+               <p>Walks <code>t</code> in pre-order.</p>
+               <p>Calls <code>enter</code> on a node before its children <code>[TT-3]</code>. When <code>enter</code> returns <code>false</code>, the children of that node are skipped <code>[TT-4]</code>. Calls <code>exit</code> once on every entered node, after all its children <code>[TT-5]</code>. A pass can keep scope state in <code>enter</code>/<code>exit</code>, for example push a binder on <code>LamAbs</code> enter and pop it on exit.</p>
+              </div>
+              <h2 class="h200">Attributes</h2>
+              <dl class="attributes attributes-small"></dl>
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#attributes">Attributes</a></li><li><a href="#members-list">Members list</a><ul><li><a href="#Value-members">Value members</a><ul><li><a href="#Concrete-methods">Concrete methods</a></li></ul></li><li><a href="#Extensions">Extensions</a><ul><li><a href="#Extensions">Extensions</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

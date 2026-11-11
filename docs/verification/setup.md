@@ -1,0 +1,130 @@
+Source: https://scalus.org/docs/verification/setup
+
+# Setup
+
+Proofs run as ScalaTest suites of your project. They need Lean and Z3 on the machine, two test
+dependencies, and a Lean workspace, which the Scalus sbt plugin creates for you.
+
+## Prerequisites
+
+| Tool                                         | What it is for                                      | Version                                                                     |
+| -------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------- |
+| JDK and sbt                                  | as for any Scalus project                           |                                                                             |
+| Git                                          | Lake, Lean's build tool, clones Blaster and PlutusCore | any                                                                      |
+| [elan](https://github.com/leanprover/elan)   | installs Lean 4 and Lake                            | elan fetches the toolchain that the workspace's `lean-toolchain` names (Lean 4.24.0 today) |
+| [Z3](https://github.com/Z3Prover/z3)         | the SMT solver that Blaster calls                   | 5.4.0 or later: the Blaster that Scalus pins needs it                       |
+
+```bash copy
+# Lean 4: elan installs the toolchain that a workspace asks for, on first use
+curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh
+```
+
+For Z3, install a 5.4.0 or later binary from the
+[Z3 releases](https://github.com/Z3Prover/z3/releases) and put it on the `PATH`. Package managers
+often have an older Z3: check `z3 --version`.
+
+`lake` and `z3` must be on the `PATH` of the shell that starts sbt:
+
+```bash
+lake --version
+z3 --version
+```
+
+  **Working on Scalus itself?** `nix develop` in the Scalus repository provides elan and Z3, and
+  so does its smaller `lean` shell: `nix develop .#lean`.
+
+## Add the Dependencies
+
+Proofs are tests, so both artifacts are test dependencies. The project also needs the Scalus
+compiler plugin, as any Scalus project does: it compiles the tests of your statements to UPLC.
+
+```scala filename="build.sbt" copy
+libraryDependencies ++= Seq(
+  "org.scalus" %% "scalus-verification" % "<scalus-version>" % Test,
+  "org.scalus" %% "scalus-verification-scalatest" % "<scalus-version>" % Test
+)
+```
+
+- `scalus-verification` has the statements (`scalus.verify.Props`), the verifier and the
+  `UplcBlaster` tactic. It asks for no test framework.
+- `scalus-verification-scalatest` has `LeanProofsSuite`, which runs the statements of a ScalaTest
+  suite, and the `Unfinished` tag for tests that Lean does not finish.
+
+## Enable the sbt Plugin
+
+The [Scalus sbt plugin](/docs/dapp-development/sbt-plugin) creates the Lean workspace, builds it,
+and runs the proofs.
+
+```scala filename="project/plugins.sbt" copy
+addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "<scalus-version>")
+```
+
+```scala filename="build.sbt" copy
+lazy val contracts = (project in file("."))
+    .enablePlugins(ScalusSbtPlugin)
+```
+
+## The Lean Workspace
+
+Checks run in a Lean workspace of the project. You do not have to create it: the first suite of
+proofs that runs does, and `sbt verify` also builds it.
+
+```bash copy
+sbt verify
+```
+
+The first run takes several minutes and needs the network: Lake clones and compiles Blaster and
+PlutusCore. Later runs build it in seconds. `verify` runs two tasks you can also run on their own:
+
+- **`sbt leanInit`** creates the workspace, `src/test/lean/<Project>`, where it does not exist,
+  and unpacks Scalus's Lean library from the `scalus-verification` jar into `.scalus/` at the root
+  of the repository. It needs neither Lean nor the network.
+- **`sbt leanBuild`** runs `lake build` in the workspace.
+
+```text
+my-contracts/
+├── .scalus/                        Scalus's Lean library and the packages Lake builds for it;
+│   └── ScalusProofs/               git-ignored by its own .gitignore
+└── src/test/lean/MyContracts/      the workspace
+    ├── lakefile.lean
+    ├── lean-toolchain
+    ├── lake-manifest.json          the revisions of Blaster and PlutusCore
+    ├── MyContracts.lean            the root module: what a check imports
+    └── .gitignore                  /.lake
+```
+
+You have these files automatically: whatever runs first, `sbt verify`, `sbt test` or
+`sbt leanInit`, creates the workspace where it is missing. Creating it needs neither Lean nor the
+network, and it is created with the `lake-manifest.json` that the first build would write. So
+**committing it is up to you.** A checkout without it creates the same workspace, and a run
+without Lean still takes the [kept results](/docs/verification/lean-workspace#what-persists-the-kept-results).
+Commit it when you change it, for example to add Lean of your own. Never commit `.lake/` or
+`.scalus/`: their `.gitignore` files already leave them out.
+
+The workspace's directory names its Lean package: the project's name, in words with capitals
+(`my-contracts` is `MyContracts`). To use another directory, set `leanWorkspace`:
+
+```scala filename="build.sbt"
+leanWorkspace := baseDirectory.value / "src" / "test" / "lean" / "Htlc"
+```
+
+The workspace also has two empty directories, `MyContracts/Generated` and `MyContracts/Proofs`.
+They are for statements exported to Lean and proofs written by hand: see
+[Mixing UPLC and Lean Proofs](/docs/verification/advanced/lean-proofs).
+
+Once the workspace exists, the plugin tells the project's tests where it is, through a resource
+on their class path. A suite never names its workspace, and all the suites of a project share it.
+
+- `leanInit` never rewrites a workspace that has a `lakefile.lean`: from then on it is yours. Each
+  run brings the library in `.scalus/` up to date with the Scalus version of the build.
+- After a Scalus upgrade that moves the library to another Lean or other package revisions,
+  `leanBuild` refuses to build and says what differs. Run `lake update` in the workspace, then
+  build again.
+- A project without `scalus-verification` among its test dependencies is skipped, so you can run
+  these tasks across a whole multi-project build.
+
+  **Without the sbt plugin**, make the workspace ready with
+  `scalus.verify.lean.LeanWorkspaceTool init <directory>`, run `lake build` there, and name it in
+  each suite: override `leanWorkspace` of `LeanProofsSuite` with `LeanProofs.ready(directory)`.
+
+Next: [write your first proof](/docs/verification/first-proof).

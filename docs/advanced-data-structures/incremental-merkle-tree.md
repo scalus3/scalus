@@ -1,0 +1,160 @@
+Source: https://scalus.org/docs/advanced-data-structures/incremental-merkle-tree
+
+# Incremental Merkle Tree
+
+A fixed-depth binary tree filled left-to-right, with empty slots initialized to a null hash. Supports append (sequential insertion) and membership verification.
+
+**Best for:** Append-only sets managed by an oracle — price feeds, event logs, audit trails.
+
+## How It Works
+
+The idea of append-only hash tree commitments was explored by Peter Todd in his [merkle-mountain-range](https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md) work for OpenTimestamps (2012–2016). A different, fixed-depth variant became widely known through **Zcash** (2016, [Zerocash paper by Ben-Sasson et al., 2014](https://eprint.iacr.org/2014/349)): the Sapling and Orchard shielded pools use incremental Merkle trees of depth 32 to commit to note hashes. Our implementation follows the Zcash approach.
+
+Imagine a tree of N = 2^D leaves. At the leaf level, each cell contains either `hash(0)` or `hash(data)`. When you append a new leaf, you replace the leftmost `hash(0)` with `hash(data)`, then recompute all hashes on the path to the root. The proof is the sibling hashes along that path.
+
+```
+Before append (3 elements, depth=3):
+
+            root
+          ┌──┴──┐
+         A      B=H(E|0₂)
+       ┌─┴─┐    ┌─┴──┐
+       C   D    E    0₂
+      ┌┴┐ ┌┴┐  ┌┴┐  ┌┴┐
+      d₁ d₂ d₃ 0  0  0  0  0
+
+Append d₄ → replace leftmost 0:
+
+            root'
+          ┌──┴──┐
+         A      B'=H(E'|0₂)
+       ┌─┴─┐    ┌──┴──┐
+       C   D    E'    0₂
+      ┌┴┐ ┌┴┐  ┌─┴─┐  ┌┴┐
+      d₁ d₂ d₃ 0  d₄  0  0  0
+
+Recompute:  E'=H(d₄|0), B'=H(E'|0₂), root'=H(A|B')
+Proof for d₄:  [0, 0₂, A]
+```
+
+## Cost
+
+- **Membership verification:** log₂(N) + 1 blake2b calls
+- **Append:** 2 × log₂(N) + 2 blake2b calls
+- **Proof size:** 32–33 × ceil(log₂(N)) bytes
+
+On-chain costs scale linearly with tree depth D. Each extra depth level adds ~2M CPU steps for verification and ~3.4M steps for append.
+
+## Limitations
+
+- **Append only** — elements cannot be deleted or updated
+- **Membership only** — cannot prove non-membership
+- **Fixed depth** — maximum capacity is 2^D elements (chosen at construction time)
+
+## Frontier Merkle Tree
+
+An off-chain facade for the Incremental Merkle Tree that stores only the "frontier" — the rightmost path of hashes — instead of all N leaves. This allows it to support up to 2²⁵⁶ leaves without storing the full history.
+
+**Best for:** High-volume append-only use cases where storing all elements off-chain is impractical — oracle feeds with millions of data points.
+
+### How It Works
+
+```
+Full IMT stores all nodes (O(N) memory):
+
+            root
+          ┌──┴──┐
+         A      B
+       ┌─┴─┐    ┌─┴──┐
+       C   D    E    0₂
+      ┌┴┐ ┌┴┐  ┌┴┐  ┌┴┐
+      d₁ d₂ d₃ d₄  0  0  0  0
+
+Frontier stores only the rightmost hashes (O(depth) memory):
+
+            root
+          ┌──┴──┐
+         A      ●  ← frontier[2] = B
+                ┌─┴──┐
+                ●    0₂  ← frontier[1] = E
+               ┌┴┐
+               ●  0  ← frontier[0] = d₄
+                ↑
+            next append goes here
+
+Stored:  frontier = [d₄, E, B]  (3 hashes, not 8 leaves)
+         left_siblings = [A]     (frozen left subtree roots)
+
+To append d₅:
+  1. E' = H(d₄ | d₅)        ← combine frontier[0] with new leaf
+  2. B' = H(E' | 0₂)        ← combine up using pre-computed null hashes
+  3. root' = H(A | B')       ← A was stored as frozen left sibling
+  4. Update frontier: [d₅, E', B']
+```
+
+The `FrontierMerkleTree` stores only D sibling hashes, requiring O(D) memory instead of O(N). For D=20 that's just 20 × 32 = 640 bytes regardless of how many millions of elements have been appended.
+
+### On-Chain Cost
+
+The on-chain verifier is **identical** to the Incremental Merkle Tree — the validator doesn't care how the proof was generated. All cost savings are off-chain.
+
+The off-chain build time is higher (12s vs 2s for 1M elements) because the frontier tree recomputes intermediate hashes rather than looking them up in a stored structure, but for an oracle that appends one data point per block this is negligible.
+
+## Example: Oracle-Managed Set Validator
+
+The [SetBenchImtValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchImtValidator.scala) demonstrates an oracle-managed append-only set. The oracle appends new elements, and users prove membership to deposit or withdraw.
+
+**On-chain** — append a new element (oracle action):
+
+```scala
+import scalus.cardano.onchain.plutus.crypto.tree.IncrementalMerkleTree
+
+val state = datum.getOrFail("No datum").to[ImtDatum]
+
+// Oracle appends a new key to the tree
+val newRoot = IncrementalMerkleTree.append(
+  state.root,   // current root hash
+  state.size,   // number of elements already in the tree
+  state.depth,  // fixed tree depth (e.g. 15 for up to 32K elements)
+  key,           // new element to append
+  siblings       // proof: sibling hashes along the path
+)
+```
+
+**On-chain** — verify membership (user action):
+
+```scala
+// User proves their key is in the tree to deposit or withdraw
+IncrementalMerkleTree.verifyMembership(
+  state.root,    // current root hash
+  key,            // element to verify
+  state.depth,   // tree depth
+  siblings        // membership proof
+)
+```
+
+**Off-chain** — build the tree and generate proofs:
+
+```scala
+import scalus.crypto.tree.IncrementalMerkleTree
+
+// Build a tree of depth 15 (capacity: 2^15 = 32,768 elements)
+var tree = IncrementalMerkleTree.empty(depth = 15)
+
+// Append elements one by one
+for (key, _) <- elements do
+  tree = tree.append(blake2b_256(key))
+
+// Generate proofs
+val membershipProof = tree.proveMembership(elementHash)
+val appendProof = tree.proveAppend(newElementHash)
+```
+
+See also: [SetBenchEmulatorTest](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala) for full emulator-based benchmarks measuring real transaction fees and execution units.
+
+## Related
+
+- [Merkle Tree](/docs/advanced-data-structures/merkle-tree) — static variant for immutable sets
+- [Merkle Patricia Forestry](/docs/advanced-data-structures/merkle-patricia-forestry) — general key-value with insert/delete/non-membership proofs
+- [Bilinear Accumulators](/docs/advanced-data-structures/bilinear-accumulators) — constant proof size but ~35× more CPU
+- [Benchmarking Authenticated Collections](https://lantr.io/blog/scalus-authenticated-collections-benchmarks/) — IMT vs FusedMPF-16 fee comparisons

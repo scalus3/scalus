@@ -1,0 +1,2980 @@
+<!DOCTYPE html><html data-pathToRoot="../../" data-rawLocation="scalus/cardano/txbuilder" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>scalus.cardano.txbuilder</title><link rel="shortcut icon" type="image/x-icon" href="../../favicon.ico"></link><script type="text/javascript" src="../../scripts/theme.js"></script><script type="text/javascript" src="../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../styles/nord-light.css"></link><link rel="stylesheet" href="../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../styles/searchbar.css"></link><link rel="stylesheet" href="../../styles/social-links.css"></link><link rel="stylesheet" href="../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../styles/fontawesome.css"></link><script type="text/javascript" src="../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../styles/apistyles.css"></link><script>var pathToRoot = "../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../index.html">Scalus</a>/<a href="../../scalus.html">scalus</a>/<a href="../cardano.html">scalus.cardano</a>/<a href="txbuilder.html">scalus.cardano.txbuilder</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon pa"></span></span>
+ <h1 class="h600 single">scalus.cardano.txbuilder</h1>
+</div>
+<div class="fqname body-large">
+ <span></span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">package </span></span><a href="txbuilder.html" t="n" class="documentableName ">scalus.cardano.txbuilder</a>
+ </div>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Type-members">
+     <div data-togglable="Type members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Type members" class="h400">Type members</h3>
+      </div>
+      <section id="Classlikes">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Classlikes</h4>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/Change$.html" t="n" class="documentableName ">Change</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Utilities for handling change outputs in transaction balancing.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Utilities for handling change outputs in transaction balancing.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/Change$.html" t="n">Change</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/Datum$.html" t="n" class="documentableName ">Datum</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/Datum.html">trait</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/Datum$.html" t="n">Datum</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="sealed">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">sealed </span></span><span class="kind"><span t="k">trait </span></span><a href="txbuilder/Datum.html" t="n" class="documentableName ">Datum</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Datums in UTxOs can be stored in two forms: inline datums or datum hashes. When there's a hash, we need to provide a datum corresponding to this hash, which can be done by either providing the value literally, or using a reference input where it is stored inline. The latter is not supported, since we haven't seen it in the wild - you can work with the datum of a reference/other input directly. Please open an issue if you need it.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Datums in UTxOs can be stored in two forms: inline datums or datum hashes. When there's a hash, we need to provide a datum corresponding to this hash, which can be done by either providing the value literally, or using a reference input where it is stored inline. The latter is not supported, since we haven't seen it in the wild - you can work with the datum of a reference/other input directly. Please open an issue if you need it.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/Datum$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 object <a href="txbuilder/Datum$$DatumInlined$.html" t="n">DatumInlined</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/Datum$$DatumValue.html" t="n">DatumValue</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="txbuilder/DelayedDatumSpec.html" t="n" class="documentableName ">DelayedDatumSpec</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">outputIndex</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">datumBuilder</span>: <a href="ledger/Transaction.html" t="t">Transaction</a><span t="k"> =&gt; </span><a href="../uplc/builtin/Data.html" t="t">Data</a>, <span t="k"></span><span data-unresolved-link="" t="n">step</span>: <a href="txbuilder/TransactionBuilderStep.html" t="t">TransactionBuilderStep</a>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Inline datum whose value is computed from the final transaction.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Inline datum whose value is computed from the final transaction.</p>
+              <p>Registered when <a href="txbuilder/TransactionBuilderStep$$SendWithDatumBuilder.html">TransactionBuilderStep.SendWithDatumBuilder</a> is processed. After all steps are processed, <a href="txbuilder/TransactionBuilder$.html#replaceDelayedDatums-fffffe94">TransactionBuilder.replaceDelayedDatums</a> invokes the builder and patches the placeholder output at <code>outputIndex</code>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="txbuilder/DelayedRedeemerSpec.html" t="n" class="documentableName ">DelayedRedeemerSpec</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">purpose</span>: <a href="txbuilder/RedeemerPurpose.html" t="t">RedeemerPurpose</a>, <span t="k"></span><span data-unresolved-link="" t="n">redeemerBuilder</span>: <a href="ledger/Transaction.html" t="t">Transaction</a><span t="k"> =&gt; </span><a href="../uplc/builtin/Data.html" t="t">Data</a>, <span t="k"></span><span data-unresolved-link="" t="n">step</span>: <a href="txbuilder/TransactionBuilderStep.html" t="t">TransactionBuilderStep</a>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Redeemer whose value is computed from the final transaction.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Redeemer whose value is computed from the final transaction.</p>
+              <p>Registered when a spend/mint step receives a <code>Transaction =&gt; Data</code> builder. After all steps are processed, <a href="txbuilder/TransactionBuilder$.html#replaceDelayedRedeemers-fffff575">TransactionBuilder.replaceDelayedRedeemers</a> invokes the builder with the sorted <a href="ledger/Transaction.html">scalus.cardano.ledger.Transaction</a> and patches the placeholder.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="txbuilder/DetachedRedeemer.html" t="n" class="documentableName ">DetachedRedeemer</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">datum</span>: <a href="../uplc/builtin/Data.html" t="t">Data</a>, <span t="k"></span><span data-unresolved-link="" t="n">purpose</span>: <a href="txbuilder/RedeemerPurpose.html" t="t">RedeemerPurpose</a>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Redeemer that was detached from a transaction. Contains just enough info for it to be re-attached again, if a transaction needs a redeemer for some action.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Redeemer that was detached from a transaction. Contains just enough info for it to be re-attached again, if a transaction needs a redeemer for some action.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="txbuilder/EditableTransaction.html" t="n" class="documentableName ">EditableTransaction</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">transaction</span>: <a href="ledger/Transaction.html" t="t">Transaction</a>, <span t="k"></span><span data-unresolved-link="" t="n">redeemers</span>: <span data-unresolved-link="" t="t">Vector</span>[<a href="txbuilder/DetachedRedeemer.html" t="t">DetachedRedeemer</a>])
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A transaction with redeemers detached.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A transaction with redeemers detached.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="txbuilder/NativeScriptWitness.html" t="n" class="documentableName ">NativeScriptWitness</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">scriptSource</span>: <a href="txbuilder/ScriptSource.html" t="t">ScriptSource</a>[<a href="ledger/Script$$Native.html" t="t">Native</a>])<span t="k"> extends </span><a href="txbuilder/SpendWitness.html" t="t">SpendWitness</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Witnesses for native scripts.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Witnesses for native scripts.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/NativeScriptWitness$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 trait <a href="txbuilder/SpendWitness.html" t="n">SpendWitness</a>
+                </div>
+                <div>
+                 trait <a href="txbuilder/Witness.html" t="n">Witness</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/NativeScriptWitness$.html" t="n" class="documentableName ">NativeScriptWitness</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/NativeScriptWitness.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/NativeScriptWitness$.html" t="n">NativeScriptWitness</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/PubKeyWitness$.html" t="n" class="documentableName ">PubKeyWitness</a><span t="k"> extends </span><a href="txbuilder/SpendWitness.html" t="t">SpendWitness</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Use this value to indicate there will be a signature. The corresponding verification key hash will be tracked automatically in the context.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Use this value to indicate there will be a signature. The corresponding verification key hash will be tracked automatically in the context.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Singleton</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 trait <a href="txbuilder/SpendWitness.html" t="n">SpendWitness</a>
+                </div>
+                <div>
+                 trait <a href="txbuilder/Witness.html" t="n">Witness</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/PubKeyWitness$.html" t="n">PubKeyWitness</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="txbuilder/RedeemerIndexingInternalError.html" t="n" class="documentableName ">RedeemerIndexingInternalError</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">detachedRedeemer</span>: <a href="txbuilder/DetachedRedeemer.html" t="t">DetachedRedeemer</a>, <span t="k"></span><span data-unresolved-link="" t="n">steps</span>: <span data-unresolved-link="" t="t">Seq</span>[<a href="txbuilder/TransactionBuilderStep.html" t="t">TransactionBuilderStep</a>])
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Internal error indicating a redeemer could not be attached to any transaction component.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Internal error indicating a redeemer could not be attached to any transaction component.</p>
+              <p>This error occurs when a detached redeemer's purpose does not match any input, mint, withdrawal, certificate, vote, or proposal in the transaction. This typically indicates an internal inconsistency in the transaction builder - a redeemer was tracked but its corresponding transaction component was removed or never added.</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               detachedRedeemer
+              </dt>
+              <dd class="body-medium">
+               <p>the redeemer that could not be attached, containing its data and purpose</p>
+              </dd>
+              <dt class="body-small">
+               steps
+              </dt>
+              <dd class="body-medium">
+               <p>the sequence of transaction builder steps that were processed</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/RedeemerManagement$.html" t="n" class="documentableName ">RedeemerManagement</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/RedeemerManagement$.html" t="n">RedeemerManagement</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="sealed">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">sealed </span></span><span class="kind"><span t="k">trait </span></span><a href="txbuilder/RedeemerPurpose.html" t="n" class="documentableName ">RedeemerPurpose</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Contains a value that a redeemer corresponds to. Allows finding a redeemer index, given a transaction contains the value.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Contains a value that a redeemer corresponds to. Allows finding a redeemer index, given a transaction contains the value.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/RedeemerPurpose$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 class <a href="txbuilder/RedeemerPurpose$$ForCert.html" t="n">ForCert</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/RedeemerPurpose$$ForMint.html" t="n">ForMint</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/RedeemerPurpose$$ForPropose.html" t="n">ForPropose</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/RedeemerPurpose$$ForReward.html" t="n">ForReward</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/RedeemerPurpose$$ForSpend.html" t="n">ForSpend</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/RedeemerPurpose$$ForVote.html" t="n">ForVote</a>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/RedeemerPurpose$.html" t="n" class="documentableName ">RedeemerPurpose</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/RedeemerPurpose.html">trait</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/RedeemerPurpose$.html" t="n">RedeemerPurpose</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="txbuilder/ResolvedTxInput.html" t="n" class="documentableName ">ResolvedTxInput</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="sealed">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">sealed </span></span><span class="kind"><span t="k">trait </span></span><a href="txbuilder/ScriptSource.html" t="n" class="documentableName ">ScriptSource</a>[<span t="k">+</span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><a href="ledger/Script.html" t="t">Script</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Specifies how the transaction should find the source code for the script.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Specifies how the transaction should find the source code for the script.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/ScriptSource$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 object <a href="txbuilder/ScriptSource$$NativeScriptAttached$.html" t="n">NativeScriptAttached</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/ScriptSource$$NativeScriptValue.html" t="n">NativeScriptValue</a>
+                </div>
+                <div>
+                 object <a href="txbuilder/ScriptSource$$PlutusScriptAttached$.html" t="n">PlutusScriptAttached</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/ScriptSource$$PlutusScriptValue.html" t="n">PlutusScriptValue</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/ScriptSource$.html" t="n" class="documentableName ">ScriptSource</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/ScriptSource.html">trait</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/ScriptSource$.html" t="n">ScriptSource</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="txbuilder/SomeBuildError.html" t="n" class="documentableName ">SomeBuildError</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>These are the sum type for any errors that may occur during different phases and that can be returned thrown by a higher-level TxBuilder</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>These are the sum type for any errors that may occur during different phases and that can be returned thrown by a higher-level TxBuilder</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="txbuilder/SpendWitness.html" t="n" class="documentableName ">SpendWitness</a><span t="k"> extends </span><a href="txbuilder/Witness.html" t="t">Witness</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="txbuilder/Witness.html" t="n">Witness</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 class <a href="txbuilder/NativeScriptWitness.html" t="n">NativeScriptWitness</a>
+                </div>
+                <div>
+                 object <a href="txbuilder/PubKeyWitness$.html" t="n">PubKeyWitness</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/ThreeArgumentPlutusScriptWitness.html" t="n">ThreeArgumentPlutusScriptWitness</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="sealed">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">sealed </span></span><span class="kind"><span t="k">trait </span></span><a href="txbuilder/StepError.html" t="n" class="documentableName ">StepError</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Base trait for errors that occur during transaction building step processing.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Base trait for errors that occur during transaction building step processing.</p>
+              <p>Each error captures the specific <a href="txbuilder/TransactionBuilderStep.html">TransactionBuilderStep</a> that caused the failure, allowing users to identify which operation in their transaction building sequence failed. The <code>explain</code> method provides a human-readable description of the error.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               See also
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <p><a href="txbuilder/TransactionBuilder$.html#build-a1b">TransactionBuilder.build</a> for the main entry point that may return these errors</p>
+                </div>
+                <div>
+                 <p><a href="txbuilder/SomeBuildError$$SomeStepError.html">SomeBuildError.SomeStepError</a> for how step errors are wrapped in the build result</p>
+                </div>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/StepError$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 class <a href="txbuilder/StepError$$AttachedScriptNotFound.html" t="n">AttachedScriptNotFound</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$ByronAddressesNotSupported.html" t="n">ByronAddressesNotSupported</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$CollateralNotPubKey.html" t="n">CollateralNotPubKey</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$CurrentTreasuryValueAlreadySet.html" t="n">CurrentTreasuryValueAlreadySet</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$DatumComputationFailed.html" t="n">DatumComputationFailed</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$DatumIsMissing.html" t="n">DatumIsMissing</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$DatumValueForUtxoWithInlineDatum.html" t="n">DatumValueForUtxoWithInlineDatum</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$DatumWitnessNotProvided.html" t="n">DatumWitnessNotProvided</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$DeferredResolutionFailed.html" t="n">DeferredResolutionFailed</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$DonationAlreadySet.html" t="n">DonationAlreadySet</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$FeeAlreadySet.html" t="n">FeeAlreadySet</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$IncorrectDatumHash.html" t="n">IncorrectDatumHash</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$IncorrectScriptHash.html" t="n">IncorrectScriptHash</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$InputAlreadyExists.html" t="n">InputAlreadyExists</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$RedeemerComputationFailed.html" t="n">RedeemerComputationFailed</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$RedeemerIndexingError.html" t="n">RedeemerIndexingError</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$ResolvedUtxosIncoherence.html" t="n">ResolvedUtxosIncoherence</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$ScriptResolutionError.html" t="n">ScriptResolutionError</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$UnexpectedDeferredStep.html" t="n">UnexpectedDeferredStep</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$UnneededDeregisterWitness.html" t="n">UnneededDeregisterWitness</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$UnneededProposalPolicyWitness.html" t="n">UnneededProposalPolicyWitness</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$UnneededSpoVoteWitness.html" t="n">UnneededSpoVoteWitness</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$UnsupportedPlutusVersion.html" t="n">UnsupportedPlutusVersion</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$ValidityEndSlotAlreadySet.html" t="n">ValidityEndSlotAlreadySet</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$ValidityStartSlotAlreadySet.html" t="n">ValidityStartSlotAlreadySet</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$WrongCredentialType.html" t="n">WrongCredentialType</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$WrongNetworkId.html" t="n">WrongNetworkId</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/StepError$$WrongOutputType.html" t="n">WrongOutputType</a>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/StepError$.html" t="n" class="documentableName ">StepError</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/StepError.html">trait</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/StepError$.html" t="n">StepError</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="txbuilder/ThreeArgumentPlutusScriptWitness.html" t="n" class="documentableName ">ThreeArgumentPlutusScriptWitness</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">scriptSource</span>: <a href="txbuilder/ScriptSource.html" t="t">ScriptSource</a>[<a href="ledger/PlutusScript.html" t="t">PlutusScript</a>], <span t="k"></span><span data-unresolved-link="" t="n">redeemerBuilder</span>: <a href="ledger/Transaction.html" t="t">Transaction</a><span t="k"> =&gt; </span><a href="../uplc/builtin/Data.html" t="t">Data</a>, <span t="k"></span><span data-unresolved-link="" t="n">datum</span>: <a href="txbuilder/Datum.html" t="t">Datum</a>)<span t="k"> extends </span><a href="txbuilder/SpendWitness.html" t="t">SpendWitness</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/ThreeArgumentPlutusScriptWitness$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 trait <a href="txbuilder/SpendWitness.html" t="n">SpendWitness</a>
+                </div>
+                <div>
+                 trait <a href="txbuilder/Witness.html" t="n">Witness</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/ThreeArgumentPlutusScriptWitness$.html" t="n" class="documentableName ">ThreeArgumentPlutusScriptWitness</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/ThreeArgumentPlutusScriptWitness.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/ThreeArgumentPlutusScriptWitness$.html" t="n">ThreeArgumentPlutusScriptWitness</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/TransactionBuilder$.html" t="n" class="documentableName ">TransactionBuilder</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/TransactionBuilder$.html" t="n">TransactionBuilder</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/TransactionBuilderStep$.html" t="n" class="documentableName ">TransactionBuilderStep</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Steps to build the transaction:</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Steps to build the transaction:</p>
+              <ul>
+               <li>generally non-commutative, so the order matters</li>
+               <li>some are additive (e.g. <a href="txbuilder/TransactionBuilderStep$$Mint.html">Mint</a>), some are not, e.g., (<a href="txbuilder/TransactionBuilderStep$$Spend.html">Spend</a>)</li>
+              </ul>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/TransactionBuilderStep.html">trait</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/TransactionBuilderStep$.html" t="n">TransactionBuilderStep</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="sealed">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">sealed </span></span><span class="kind"><span t="k">trait </span></span><a href="txbuilder/TransactionBuilderStep.html" t="n" class="documentableName ">TransactionBuilderStep</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/TransactionBuilderStep$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$AddCollateral.html" t="n">AddCollateral</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$Deferred.html" t="n">Deferred</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$Donate.html" t="n">Donate</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$Fee.html" t="n">Fee</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$IssueCertificate.html" t="n">IssueCertificate</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$Mint.html" t="n">Mint</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$ModifyAuxiliaryData.html" t="n">ModifyAuxiliaryData</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$ReferenceOutput.html" t="n">ReferenceOutput</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$RequireSignature.html" t="n">RequireSignature</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$Send.html" t="n">Send</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$SendWithDatumBuilder.html" t="n">SendWithDatumBuilder</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$SetCollateralReturn.html" t="n">SetCollateralReturn</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$SetCurrentTreasuryValue.html" t="n">SetCurrentTreasuryValue</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$Spend.html" t="n">Spend</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$SubmitProposal.html" t="n">SubmitProposal</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$SubmitVotingProcedure.html" t="n">SubmitVotingProcedure</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$UpdatePool.html" t="n">UpdatePool</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$ValidityEndSlot.html" t="n">ValidityEndSlot</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$ValidityStartSlot.html" t="n">ValidityStartSlot</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TransactionBuilderStep$$WithdrawRewards.html" t="n">WithdrawRewards</a>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/TransactionConversion$.html" t="n" class="documentableName ">TransactionConversion</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/TransactionConversion$.html" t="n">TransactionConversion</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/TransactionEditor$.html" t="n" class="documentableName ">TransactionEditor</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/TransactionEditor$.html" t="n">TransactionEditor</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="txbuilder/TransactionSigner.html" t="n" class="documentableName ">TransactionSigner</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">keys</span>: <span data-unresolved-link="" t="t">Set</span>[<a href="wallet/KeyPair.html" t="t">KeyPair</a>])
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>JVM TransactionSigner that uses JvmEd25519Signer directly.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>JVM TransactionSigner that uses JvmEd25519Signer directly.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/TransactionSigner$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/TransactionSigner$.html" t="n" class="documentableName ">TransactionSigner</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/TransactionSigner.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/TransactionSigner$.html" t="n">TransactionSigner</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/TwoArgumentPlutusScriptWitness$.html" t="n" class="documentableName ">TwoArgumentPlutusScriptWitness</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/TwoArgumentPlutusScriptWitness.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/TwoArgumentPlutusScriptWitness$.html" t="n">TwoArgumentPlutusScriptWitness</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="txbuilder/TwoArgumentPlutusScriptWitness.html" t="n" class="documentableName ">TwoArgumentPlutusScriptWitness</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">scriptSource</span>: <a href="txbuilder/ScriptSource.html" t="t">ScriptSource</a>[<a href="ledger/PlutusScript.html" t="t">PlutusScript</a>], <span t="k"></span><span data-unresolved-link="" t="n">redeemerBuilder</span>: <a href="ledger/Transaction.html" t="t">Transaction</a><span t="k"> =&gt; </span><a href="../uplc/builtin/Data.html" t="t">Data</a>)<span t="k"> extends </span><a href="txbuilder/Witness.html" t="t">Witness</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/TwoArgumentPlutusScriptWitness$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 trait <a href="txbuilder/Witness.html" t="n">Witness</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="txbuilder/TxBalancingError.html" t="n" class="documentableName ">TxBalancingError</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Transaction balancing error types.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Transaction balancing error types.</p>
+              <p>These errors can occur during the transaction balancing process, which iteratively adjusts fees and change outputs until the transaction is balanced (consumed == produced).</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="txbuilder/TxBuilder.html" t="n" class="documentableName ">TxBuilder</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">env</span>: <a href="ledger/CardanoInfo.html" t="t">CardanoInfo</a>, <span t="k"></span><span data-unresolved-link="" t="n">context</span>: <a href="txbuilder/TransactionBuilder$$Context.html" t="t">Context</a>, <span t="k"></span><span data-unresolved-link="" t="n">evaluator</span>: <a href="ledger/PlutusScriptEvaluator.html" t="t">PlutusScriptEvaluator</a>, <span t="k"></span><span data-unresolved-link="" t="n">steps</span>: <span data-unresolved-link="" t="t">Seq</span>[<a href="txbuilder/TransactionBuilderStep.html" t="t">TransactionBuilderStep</a>] = ..., <span t="k"></span><span data-unresolved-link="" t="n">attachedData</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="ledger.html#DataHash-0" t="t">DataHash</a>, <a href="../uplc/builtin/Data.html" t="t">Data</a>] = ..., <span t="k"></span><span data-unresolved-link="" t="n">changeOutputIndex</span>: <span data-unresolved-link="" t="t">Option</span>[<span data-unresolved-link="" t="t">Int</span>] = ..., <span t="k"></span><span data-unresolved-link="" t="n">debugScripts</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="ledger.html#ScriptHash-0" t="t">ScriptHash</a>, <a href="../uplc/DebugScript.html" t="t">DebugScript</a>] = ...)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A high-level, fluent API for building Cardano transactions.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A high-level, fluent API for building Cardano transactions.</p>
+              <p>TxBuilder provides a convenient way to construct transactions by chaining method calls. It handles input selection, output creation, script attachment, minting, and transaction finalization including fee calculation and change handling.</p>
+              <p>TxBuilder is purely functional; each method returns a new instance with the updated state. The <code>complete</code> method is the only one that performs effects (querying UTXOs from a provider).</p>
+              <p>==Platform Support==</p>
+              <p>TxBuilder supports both JVM and JavaScript platforms. <code>complete(provider, sponsor)</code> returns <code>Future[TxBuilder]</code> on all platforms; on the JVM, block on it with the <code>await</code> extension:</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>import scalus.utils.await
+</span><span line-number="2" class=""><span class="tooltip-container"></span>builder.complete(provider, sponsor).await()
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+              <p>==Usage==</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>// Cross-platform - async (returns Future)
+</span><span line-number="2" class=""><span class="tooltip-container"></span>val txFuture = TxBuilder(env)
+</span><span line-number="3" class=""><span class="tooltip-container"></span> .payTo(recipientAddress, Value.ada(10))
+</span><span line-number="4" class=""><span class="tooltip-container"></span> .complete(provider, sponsorAddress)
+</span><span line-number="5" class=""><span class="tooltip-container"></span> .map(_.sign(signer).transaction)
+</span><span line-number="6" class=""><span class="tooltip-container"></span>
+</span><span line-number="7" class=""><span class="tooltip-container"></span>// JVM - block with the await extension
+</span><span line-number="8" class=""><span class="tooltip-container"></span>import scalus.utils.await
+</span><span line-number="9" class=""><span class="tooltip-container"></span>val tx = TxBuilder(env)
+</span><span line-number="10" class=""><span class="tooltip-container"></span> .payTo(recipientAddress, Value.ada(10))
+</span><span line-number="11" class=""><span class="tooltip-container"></span> .complete(provider, sponsorAddress)
+</span><span line-number="12" class=""><span class="tooltip-container"></span> .await()
+</span><span line-number="13" class=""><span class="tooltip-container"></span> .sign(signer)
+</span><span line-number="14" class=""><span class="tooltip-container"></span> .transaction
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               attachedData
+              </dt>
+              <dd class="body-medium">
+               <p>datum values to be included in the transaction witness set</p>
+              </dd>
+              <dt class="body-small">
+               changeOutputIndex
+              </dt>
+              <dd class="body-medium">
+               <p>index of the explicit change output (set by <a href="txbuilder/TxBuilder.html#changeTo-fffff27a">changeTo</a>), or None for implicit change</p>
+              </dd>
+              <dt class="body-small">
+               context
+              </dt>
+              <dd class="body-medium">
+               <p>the current transaction builder context</p>
+              </dd>
+              <dt class="body-small">
+               env
+              </dt>
+              <dd class="body-medium">
+               <p>the environment containing protocol parameters, network info, and slot configuration</p>
+              </dd>
+              <dt class="body-small">
+               evaluator
+              </dt>
+              <dd class="body-medium">
+               <p>the Plutus script evaluator used for script validation</p>
+              </dd>
+              <dt class="body-small">
+               steps
+              </dt>
+              <dd class="body-medium">
+               <p>accumulated transaction building steps</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/TxBuilder$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/TxBuilder$.html" t="n" class="documentableName ">TxBuilder</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Factory methods for creating TxBuilder instances.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Factory methods for creating TxBuilder instances.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/TxBuilder.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/TxBuilder$.html" t="n">TxBuilder</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="txbuilder/TxBuilderException$.html" t="n" class="documentableName ">TxBuilderException</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/TxBuilderException.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="txbuilder/TxBuilderException$.html" t="n">TxBuilderException</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="sealed,abstract">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"><span t="k">sealed abstract </span></span><span class="kind"><span t="k">class </span></span><a href="txbuilder/TxBuilderException.html" t="n" class="documentableName ">TxBuilderException</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">message</span>: <span data-unresolved-link="" t="t">String</span>, <span t="k"></span><span data-unresolved-link="" t="n">cause</span>: <span data-unresolved-link="" t="t">Throwable</span> = ...)<span t="k"> extends </span><span data-unresolved-link="" t="t">RuntimeException</span></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Base exception for all TxBuilder errors.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Base exception for all TxBuilder errors.</p>
+              <p>This sealed hierarchy provides typed exceptions for different failure modes in TxBuilder, enabling programmatic error handling while remaining backwards compatible with RuntimeException.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="txbuilder/TxBuilderException$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">RuntimeException</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Exception</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Throwable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 class <a href="txbuilder/TxBuilderException$$BalancingException.html" t="n">BalancingException</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TxBuilderException$$BuildStepException.html" t="n">BuildStepException</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TxBuilderException$$CollateralUnavailableException.html" t="n">CollateralUnavailableException</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TxBuilderException$$DeferredResolutionException.html" t="n">DeferredResolutionException</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TxBuilderException$$InsufficientAdaException.html" t="n">InsufficientAdaException</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TxBuilderException$$InsufficientTokensException.html" t="n">InsufficientTokensException</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TxBuilderException$$LedgerValidationException.html" t="n">LedgerValidationException</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TxBuilderException$$RedeemerIndexingException.html" t="n">RedeemerIndexingException</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TxBuilderException$$UtxoQueryException.html" t="n">UtxoQueryException</a>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="sealed">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">sealed </span></span><span class="kind"><span t="k">trait </span></span><a href="txbuilder/Witness.html" t="n" class="documentableName ">Witness</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 trait <a href="txbuilder/SpendWitness.html" t="n">SpendWitness</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/NativeScriptWitness.html" t="n">NativeScriptWitness</a>
+                </div>
+                <div>
+                 object <a href="txbuilder/PubKeyWitness$.html" t="n">PubKeyWitness</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/ThreeArgumentPlutusScriptWitness.html" t="n">ThreeArgumentPlutusScriptWitness</a>
+                </div>
+                <div>
+                 class <a href="txbuilder/TwoArgumentPlutusScriptWitness.html" t="n">TwoArgumentPlutusScriptWitness</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="txbuilder/WitnessKind.html" t="n" class="documentableName ">WitnessKind</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A witness to conduct an authorized operation on-chain. This could be spending an input, minting, rewarding, governance ops, certificate ops, etc.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A witness to conduct an authorized operation on-chain. This could be spending an input, minting, rewarding, governance ops, certificate ops, etc.</p>
+              <p>The only ways to do this as of writing (2025-10-03) are</p>
+              <ul>
+               <li>PubKey</li>
+               <li>Native Script</li>
+               <li>Plutus Script</li>
+              </ul>
+              <p>The types include all additional data required to authorize the operation.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+      <section id="Types">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Types</h4>
+        </div>
+        <div class="documentableElement" id="DiffHandler-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">type </span></span><a href="txbuilder.html#DiffHandler-0" t="n" class="documentableName ">DiffHandler</a> = (<a href="ledger/Value.html" t="t">Value</a>, <a href="ledger/Transaction.html" t="t">Transaction</a>)<span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Either</span>[<a href="txbuilder/TxBalancingError.html" t="t">TxBalancingError</a>, <a href="ledger/Transaction.html" t="t">Transaction</a>]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="ScriptWitness-0">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">type </span></span><a href="txbuilder.html#ScriptWitness-0" t="n" class="documentableName ">ScriptWitness</a> = <a href="txbuilder/NativeScriptWitness.html" t="t">NativeScriptWitness</a><span t="k"> | </span><a href="txbuilder/TwoArgumentPlutusScriptWitness.html" t="t">TwoArgumentPlutusScriptWitness</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Witness type for minting, certificates, withdrawals, and voting operations.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Witness type for minting, certificates, withdrawals, and voting operations.</p>
+              <p>Supports both native scripts and Plutus scripts. Use the factory methods on the companion objects to create witnesses:</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>import TwoArgumentPlutusScriptWitness.*
+</span><span line-number="2" class=""><span class="tooltip-container"></span>val plutusWitness = attached(script, redeemer)
+</span><span line-number="3" class=""><span class="tooltip-container"></span>val refWitness = reference(redeemer)
+</span><span line-number="4" class=""><span class="tooltip-container"></span>
+</span><span line-number="5" class=""><span class="tooltip-container"></span>import NativeScriptWitness.*
+</span><span line-number="6" class=""><span class="tooltip-container"></span>val nativeWitness = attached(nativeScript)
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Concrete-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete methods</h4>
+        </div>
+        <div class="documentableElement" id="addDummySignatures-fffff2a7">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#addDummySignatures-fffff2a7" t="n" class="documentableName ">addDummySignatures</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">numberOfKeys</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">tx</span>: <a href="ledger/Transaction.html" t="t">Transaction</a>): <a href="ledger/Transaction.html" t="t">Transaction</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>add at most 256 keys</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>add at most 256 keys</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="appendDistinct-fffff0da">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#appendDistinct-fffff0da" t="n" class="documentableName ">appendDistinct</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">elem</span>: <span t="t">A</span>, <span t="k"></span><span data-unresolved-link="" t="n">seq</span>: <span data-unresolved-link="" t="t">Seq</span>[<span t="t">A</span>]): <span data-unresolved-link="" t="t">Seq</span>[<span data-unresolved-link="" t="t">A</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Append an element to a sequence, returning distinct values only and preserving the order of elements.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Append an element to a sequence, returning distinct values only and preserving the order of elements.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="keepRawL-3ae">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#keepRawL-3ae" t="n" class="documentableName ">keepRawL</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span> : <span data-unresolved-link="" t="t">Encoder</span>](<span t="k"></span>): <span data-unresolved-link="" t="t">Lens</span>[<a href="ledger/KeepRaw.html" t="t">KeepRaw</a>[<span data-unresolved-link="" t="t">A</span>], <span data-unresolved-link="" t="t">A</span>]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="removeDummySignatures-fffff2a7">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#removeDummySignatures-fffff2a7" t="n" class="documentableName ">removeDummySignatures</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">numberOfKeys</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">tx</span>: <a href="ledger/Transaction.html" t="t">Transaction</a>): <a href="ledger/Transaction.html" t="t">Transaction</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>remove at most 256 keys, must be used in conjunction with addDummyVKeys</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>remove at most 256 keys, must be used in conjunction with addDummyVKeys</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="txBodyL-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#txBodyL-0" t="n" class="documentableName ">txBodyL</a>: <span data-unresolved-link="" t="t">Lens</span>[<a href="ledger/Transaction.html" t="t">Transaction</a>, <a href="ledger/TransactionBody.html" t="t">TransactionBody</a>]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="txBuilder-65b">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#txBuilder-65b" t="n" class="documentableName ">txBuilder</a>(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">env</span>: <a href="ledger/CardanoInfo.html" t="t">CardanoInfo</a>): <a href="txbuilder/TxBuilder.html" t="t">TxBuilder</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Creates a TxBuilder using a context CardanoInfo.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Creates a TxBuilder using a context CardanoInfo.</p>
+              <p>Example:</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>given CardanoInfo = CardanoInfo.mainnet
+</span><span line-number="2" class=""><span class="tooltip-container"></span>val builder = txBuilder  // Uses the given CardanoInfo
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="txInputsL-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#txInputsL-0" t="n" class="documentableName ">txInputsL</a>: <span data-unresolved-link="" t="t">Lens</span>[<a href="ledger/Transaction.html" t="t">Transaction</a>, <a href="ledger.html#TaggedSortedSet-0" t="t">TaggedSortedSet</a>[<a href="ledger/TransactionInput.html" t="t">TransactionInput</a>]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="txOutputsL-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#txOutputsL-0" t="n" class="documentableName ">txOutputsL</a>: <span data-unresolved-link="" t="t">Lens</span>[<a href="ledger/Transaction.html" t="t">Transaction</a>, <span data-unresolved-link="" t="t">IndexedSeq</span>[<a href="ledger/Sized.html" t="t">Sized</a>[<a href="ledger/TransactionOutput.html" t="t">TransactionOutput</a>]]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="txRedeemersL-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#txRedeemersL-0" t="n" class="documentableName ">txRedeemersL</a>: <span data-unresolved-link="" t="t">Lens</span>[<a href="ledger/Transaction.html" t="t">Transaction</a>, <span data-unresolved-link="" t="t">Option</span>[<a href="ledger/KeepRaw.html" t="t">KeepRaw</a>[<a href="ledger/Redeemers.html" t="t">Redeemers</a>]]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="txReferenceInputsL-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#txReferenceInputsL-0" t="n" class="documentableName ">txReferenceInputsL</a>: <span data-unresolved-link="" t="t">Lens</span>[<a href="ledger/Transaction.html" t="t">Transaction</a>, <a href="ledger.html#TaggedSortedSet-0" t="t">TaggedSortedSet</a>[<a href="ledger/TransactionInput.html" t="t">TransactionInput</a>]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="txRequiredSignersL-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#txRequiredSignersL-0" t="n" class="documentableName ">txRequiredSignersL</a>: <span data-unresolved-link="" t="t">Lens</span>[<a href="ledger/Transaction.html" t="t">Transaction</a>, <a href="ledger.html#TaggedSortedSet-0" t="t">TaggedSortedSet</a>[<a href="ledger.html#AddrKeyHash-0" t="t">AddrKeyHash</a>]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="txWitnessSetL-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#txWitnessSetL-0" t="n" class="documentableName ">txWitnessSetL</a>: <span data-unresolved-link="" t="t">Lens</span>[<a href="ledger/Transaction.html" t="t">Transaction</a>, <a href="ledger/TransactionWitnessSet.html" t="t">TransactionWitnessSet</a>]
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Extensions">
+     <div data-togglable="Extensions" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Extensions" class="h400">Extensions</h3>
+      </div>
+      <section id="Extensions">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Extensions</h4>
+        </div>
+        <div>
+         <span class="groupHeader"><span t="k">extension </span>[<span t="k"></span><span data-unresolved-link="" t="t">S</span>, <span t="k"></span><span data-unresolved-link="" t="t">A</span>, <span t="k"></span><span data-unresolved-link="" t="t">B</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">lens</span>: <span data-unresolved-link="" t="t">Lens</span>[<span t="t">S</span>, <span t="t">A</span>])</span>
+         <div class="documentableElement" id=">>>-48b">
+          <div class="documentableElement-expander">
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#>>>-48b" t="n" class="documentableName ">&gt;&gt;&gt;</a>[<span t="k"></span><span data-unresolved-link="" t="t">C</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">other</span>: <span data-unresolved-link="" t="t">Lens</span>[<span t="t">A</span>, <span t="t">C</span>]): <span data-unresolved-link="" t="t">Lens</span>[<span data-unresolved-link="" t="t">S</span>, <span data-unresolved-link="" t="t">C</span>]
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div>
+         <span class="groupHeader"><span t="k">extension </span>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">r</span>: <a href="txbuilder/ResolvedTxInput.html" t="t">ResolvedTxInput</a>)</span>
+         <div class="documentableElement" id="input-906">
+          <div class="documentableElement-expander">
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#input-906" t="n" class="documentableName ">input</a>: <a href="ledger/TransactionInput.html" t="t">TransactionInput</a>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="output-ffffff45">
+          <div class="documentableElement-expander">
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#output-ffffff45" t="n" class="documentableName ">output</a>: <a href="ledger/TransactionOutput.html" t="t">TransactionOutput</a>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="utxo-fffffed8">
+          <div class="documentableElement-expander">
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="txbuilder.html#utxo-fffffed8" t="n" class="documentableName ">utxo</a>: (<a href="ledger/TransactionInput.html" t="t">TransactionInput</a>, <a href="ledger/TransactionOutput.html" t="t">TransactionOutput</a>)
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#members-list">Members list</a><ul><li><a href="#Type-members">Type members</a><ul><li><a href="#Classlikes">Classlikes</a></li><li><a href="#Types">Types</a></li></ul></li><li><a href="#Value-members">Value members</a><ul><li><a href="#Concrete-methods">Concrete methods</a></li></ul></li><li><a href="#Extensions">Extensions</a><ul><li><a href="#Extensions">Extensions</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

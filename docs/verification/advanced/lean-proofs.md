@@ -1,0 +1,132 @@
+Source: https://scalus.org/docs/verification/advanced/lean-proofs
+
+# Mixing UPLC and Lean Proofs
+
+By default, the [Lean workspace](/docs/verification/lean-workspace) holds no Lean of yours: every
+check is generated, run and thrown away. This page is for when you want Lean of your own beside the
+checks, in a workspace you keep:
+
+- **to read a statement as Lean**, over the exact programs it was proved of;
+- **to prove a statement that the solver does not finish**, by other means than `blaster`, such
+  as an induction or a lemma;
+- **to hand statements to other tools**, which read Lean, or the Universal Annotation Language.
+
+The [linear vesting example](/docs/verification/examples#linear-vesting) works this way.
+
+## The Workspace
+
+The workspace that `leanInit` creates already declares two libraries in its `lakefile.lean`, and has
+the two directories for them:
+
+```text
+src/test/lean/LinearVesting/
+├── lakefile.lean
+├── LinearVesting.lean                 the default library: what a check imports
+└── LinearVesting/
+    ├── Generated/                     written by Scalus, committed
+    │   ├── Types.lean                 Lean types of the contract's Scala types
+    │   ├── vesting_schedule_zero_before_start.lean
+    │   └── vesting_schedule_zero_before_start/
+    │       ├── Leaf0.flat             the programs, which the module imports
+    │       └── Leaf1.flat
+    └── Proofs/                        written by you
+        └── Schedule.lean
+```
+
+- `LinearVesting`, the default target, is the root module. The checks need only that, so
+  `lake build` takes seconds.
+- `LinearVestingProofs` is the statements under `Generated` and your proofs under `Proofs`.
+  `lake build LinearVestingProofs`, or `sbt leanProve`, builds it. It is not the default target:
+  a statement module runs its programs symbolically when it is built, which takes minutes, and a
+  proof may not hold yet.
+
+## Write the Statements into the Workspace
+
+```bash copy
+sbt leanExport                          # all the tests of the project
+sbt "leanExport *VestingProofsTest"     # the tests named, as testOnly takes them
+```
+
+`leanExport` runs the tests with the export on. Every named statement that is proved, by Lean or
+by its kept result, is written as a module `<Package>.Generated.<name>`: the statement's name,
+with `_` for each character that a Lean name cannot have. `vesting.schedule.zero_before_start`
+becomes `vesting_schedule_zero_before_start`. Lean is not needed, as a kept result is exported
+like a fresh proof.
+
+A module states the statement as a proposition, at the budget of its proof, over the programs of
+its tests:
+
+```lean
+#import_uplc LinearVesting_Generated_vesting_schedule_zero_before_start_leaf0 PlutusV3 single_cbor_hex
+  "LinearVesting/Generated/vesting_schedule_zero_before_start/Leaf0.flat"
+…
+def statement : Prop :=
+  (∀ (x0 : ByteString) (x1 : Integer) (x2 : Integer) (x3 : Integer), (∀ (x4 : Integer), …))
+```
+
+- Commit the module and its `.flat` files, so a checkout builds without sbt. The programs as text,
+  `.uplc`, are git-ignored. `leanExport` writes them again.
+- The module's header has the SHA-256 of each program. A program that changed is a module that
+  changed, which Lake builds again.
+- **A module is held to the code.** When the code changes, the test of a statement whose module
+  the workspace has fails, and says to run `leanExport`. So a proof by hand is never checked
+  against programs that are no longer the code's.
+
+`Types.lean` has a `structure` for each case class and an `inductive` for each enum, with
+`toData`, `fromData` and the predicate of their encodings, so a proof can name a datum's fields.
+`LeanTypes.of(types).module(name)` writes it; the vesting example does it in a test.
+
+## Write a Proof by Hand
+
+A proof by hand is a theorem of a generated `statement`, in a module under `<Package>/Proofs`:
+
+```lean filename="LinearVesting/Proofs/Schedule.lean" copy
+import LinearVesting.Generated.vesting_schedule_zero_before_start
+
+namespace LinearVesting.Proofs
+
+open LinearVesting.Generated
+
+-- `blaster` closes a goal that the solver finds valid with `admit`.
+set_option warn.sorry false
+
+/-- Nothing is vested before the start. -/
+theorem zero_before_start : vesting_schedule_zero_before_start.statement := by
+  unfold vesting_schedule_zero_before_start.statement
+  blaster
+
+end LinearVesting.Proofs
+```
+
+Check it against the code as it is:
+
+```bash copy
+sbt leanProve
+```
+
+When the code changes, `leanExport` writes the new proposition, and a proof that no longer holds
+no longer builds. `sbt verify` runs `leanProve` too, whenever `<Package>/Proofs` has a Lean module.
+
+  Keep proofs under `<Package>/Proofs`. The kept results rest on a hash of the workspace's own
+  sources, which leaves out `Generated` and `Proofs`. A module anywhere else in the package makes
+  every kept result of the workspace stale.
+
+The proofs of the vesting example are closed by `blaster`, as the checks are: they show the
+mechanism, and are no kernel proof. Nothing checks yet that a statement has a proof by hand.
+
+## Documents of the Universal Annotation Language
+
+`sbt ualExport` writes the same statements as documents of the
+[Universal Annotation Language](https://github.com/input-output-hk/UniversalAnnotationLanguage):
+`assurance.json`, `annotations.ual` and, with `SCALUS_UAL_ENVIRONMENT`, the checking contexts. It
+writes a directory for each suite under `target/ual` (the `ualExportDirectory` setting).
+
+## What to Commit
+
+Beside what every project commits (see [Lean Workspace](/docs/verification/lean-workspace#what-to-commit)):
+
+| Path                                   | Commit | Why                                                  |
+| -------------------------------------- | ------ | ---------------------------------------------------- |
+| `<Package>/Generated/*.lean`, `*.flat` | yes    | the statements, which proofs by hand are theorems of |
+| `<Package>/Generated/**/*.uplc`        | no     | the programs as text, git-ignored                    |
+| `<Package>/Proofs/`                    | yes    | your proofs                                          |

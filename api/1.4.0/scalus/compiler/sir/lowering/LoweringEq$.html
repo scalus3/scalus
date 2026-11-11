@@ -1,0 +1,380 @@
+<!DOCTYPE html><html data-pathToRoot="../../../../" data-rawLocation="scalus/compiler/sir/lowering/LoweringEq$" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>LoweringEq</title><link rel="shortcut icon" type="image/x-icon" href="../../../../favicon.ico"></link><script type="text/javascript" src="../../../../scripts/theme.js"></script><script type="text/javascript" src="../../../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../../../styles/nord-light.css"></link><link rel="stylesheet" href="../../../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../../../styles/searchbar.css"></link><link rel="stylesheet" href="../../../../styles/social-links.css"></link><link rel="stylesheet" href="../../../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../../../styles/fontawesome.css"></link><script type="text/javascript" src="../../../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../../../styles/apistyles.css"></link><script>var pathToRoot = "../../../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../../../index.html">Scalus</a>/<a href="../../../../scalus.html">scalus</a>/<a href="../../../compiler.html">scalus.compiler</a>/<a href="../../sir.html">scalus.compiler.sir</a>/<a href="../lowering.html">scalus.compiler.sir.lowering</a>/<a href="LoweringEq$.html">LoweringEq</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon ob"></span></span>
+ <h1 class="h600 single">LoweringEq</h1>
+</div>
+<div class="fqname body-large">
+ <span>scalus.compiler.sir.lowering.LoweringEq</span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="LoweringEq$.html" t="n" class="documentableName ">LoweringEq</a>
+ </div>
+</div>
+<div class="cover">
+ <div class="doc">
+  <p>Equality lowering — recognizes <code>equalsRepr(a, b)</code> (and the FunctionalInterface Eq path) and emits the most efficient comparison for the lhs/rhs representation pair.</p>
+  <p>Dispatch order in <a href="LoweringEq$.html#generateEqualsForRepr-d57">generateEqualsForRepr</a>:</p>
+  <ul>
+   <li>Primitives (Integer, ByteString, String): specialized builtins</li>
+   <li>BLS curve elements: bls12_381_G1/G2_equal</li>
+   <li>BLS MlResult, Fun: compile error (no equality)</li>
+   <li><code>@UplcRepr(UplcConstr)</code> products: field-by-field via <a href="LoweringEq$.html#generateProdUplcConstrEquals-66d">generateProdUplcConstrEquals</a></li>
+   <li><code>@UplcRepr(UplcConstr)</code> sums: native <code>letrec</code> via <a href="LoweringEq$.html#generateSumUplcConstrEquals-66d">generateSumUplcConstrEquals</a></li>
+   <li>Everything else: convert to Data, equalsData</li>
+  </ul>
+ </div>
+ <section id="attributes">
+  <h2 class="h500">Attributes</h2>
+  <dl class="attributes">
+   <dt class="body-small">
+    Graph
+   </dt>
+   <dd class="body-medium">
+    <div id="inheritance-diagram" class="diagram-class showGraph">
+     <button type="button" class="label-only-button" onclick="zoomOut()">Reset zoom</button><button type="button" class="label-only-button" onclick="hideGraph()">Hide graph</button><button type="button" class="label-only-button" onclick="showGraph()">Show graph</button>
+     <svg id="graph"></svg>
+     <script type="text/dot" id="dot"> digraph g {
+ node0 [id=node0, label="<span style=\"color: #FFFFFF;\">object <a href=\"LoweringEq$.html\" t=\"n\">LoweringEq</a></span>", class="object vertex"];
+node1 [id=node1, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Object</span></span>", class="class vertex"];
+node2 [id=node2, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Any</span></span>", class="class vertex"];
+node3 [id=node3, label="<span style=\"color: #FFFFFF;\">trait <span data-unresolved-link=\"\" t=\"n\">Matchable</span></span>", class="trait vertex"];
+
+
+ node0 -> node1;
+node1 -> node2;
+node1 -> node3;
+node3 -> node2;
+
+}
+</script>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Supertypes
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <div>
+      class <span data-unresolved-link="" t="n">Object</span>
+     </div>
+     <div>
+      trait <span data-unresolved-link="" t="n">Matchable</span>
+     </div>
+     <div>
+      class <span data-unresolved-link="" t="n">Any</span>
+     </div><span></span>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Self type
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <span></span>
+     <div>
+      <a href="LoweringEq$.html" t="n">LoweringEq</a>.<span t="k">type</span>
+     </div>
+    </div>
+   </dd>
+  </dl>
+ </section>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Concrete-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete methods</h4>
+        </div>
+        <div class="documentableElement" id="generateDataEquals-d57">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweringEq$.html#generateDataEquals-d57" t="n" class="documentableName ">generateDataEquals</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">lhs</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">rhs</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Generate equalsData after converting both values to their Data representation.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Generate equalsData after converting both values to their Data representation.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="generateEqualsForRepr-d57">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweringEq$.html#generateEqualsForRepr-d57" t="n" class="documentableName ">generateEqualsForRepr</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">lhs</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">rhs</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Generate repr-specific equality comparison.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Generate repr-specific equality comparison.</p>
+              <p>Dispatches based on resolved type and representation; see <a href="LoweringEq$.html">LoweringEq</a> doc for the dispatch order.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="generatePrimitiveEquals-bce">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweringEq$.html#generatePrimitiveEquals-bce" t="n" class="documentableName ">generatePrimitiveEquals</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">builtin</span>: <a href="../SIR$$Builtin.html" t="t">Builtin</a>, <span t="k"></span><span data-unresolved-link="" t="n">lhs</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">rhs</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="generateProdUplcConstrEquals-66d">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweringEq$.html#generateProdUplcConstrEquals-66d" t="n" class="documentableName ">generateProdUplcConstrEquals</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">lhs</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">rhs</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">knownType</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Generate Case-based field comparison for ProdUplcConstr values. Each field is extracted via genSelect and compared recursively.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Generate Case-based field comparison for ProdUplcConstr values. Each field is extracted via genSelect and compared recursively.</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               knownType
+              </dt>
+              <dd class="body-medium">
+               <p>concrete type for field extraction (may differ from lhs.sirType when lhs has TypeVar type but the concrete type is known from annotation)</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="generateSumUplcConstrEquals-66d">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweringEq$.html#generateSumUplcConstrEquals-66d" t="n" class="documentableName ">generateSumUplcConstrEquals</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">lhs</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">rhs</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">knownType</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Native equality for SumUplcConstr-represented values.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Native equality for SumUplcConstr-represented values.</p>
+              <p>Emits <code>letrec eqSum(a, b) = case a of ...</code> where each variant branch matches <code>b</code> against the same variant tag (returning False on mismatch) and ANDs field comparisons. For fields whose substituted type matches the outer sum type, the recursive <code>eqSum</code> reference is used instead of recursing into a fresh <code>generateEqualsForRepr</code> (which would emit a duplicate letrec for self-referential types like List).</p>
+              <p>For non-recursive sums (e.g., Option) the <code>letrec</code> is harmless overhead — the function never references itself.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="isEqIntrinsicApp-62c">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweringEq$.html#isEqIntrinsicApp-62c" t="n" class="documentableName ">isEqIntrinsicApp</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">app</span>: <a href="../SIR$$Apply.html" t="t">Apply</a>): <span data-unresolved-link="" t="t">Boolean</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Check if this is a fully-applied FunctionalInterface call with known Eq semantics.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Check if this is a fully-applied FunctionalInterface call with known Eq semantics.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="isEqualsReprApp-62c">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweringEq$.html#isEqualsReprApp-62c" t="n" class="documentableName ">isEqualsReprApp</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">app</span>: <a href="../SIR$$Apply.html" t="t">Apply</a>): <span data-unresolved-link="" t="t">Boolean</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Check if this is <code>equalsRepr(a, b)</code> — the outer Apply of curried application. Handles both <code>Apply(Apply(ExternalVar, a), b)</code> and <code>Apply(Apply(TypeApply(ExternalVar, A), a), b)</code> (when type parameter is present).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Check if this is <code>equalsRepr(a, b)</code> — the outer Apply of curried application. Handles both <code>Apply(Apply(ExternalVar, a), b)</code> and <code>Apply(Apply(TypeApply(ExternalVar, A), a), b)</code> (when type parameter is present).</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lowerEqIntrinsic-148">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweringEq$.html#lowerEqIntrinsic-148" t="n" class="documentableName ">lowerEqIntrinsic</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">app</span>: <a href="../SIR$$Apply.html" t="t">Apply</a>, <span t="k"></span><span data-unresolved-link="" t="n">fallback</span>: <a href="../SIR$$Apply.html" t="t">Apply</a><span t="k"> =&gt; </span><a href="LoweringContext.html" t="t">LoweringContext</a><span t="k"> ?=&gt; </span><a href="LoweredValue.html" t="t">LoweredValue</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Lower an Eq application using repr-specific equality.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Lower an Eq application using repr-specific equality.</p>
+              <p>The plugin annotates Apply nodes for FunctionalInterface types with <code>"functionalInterfaceType"</code>. For Eq, we always inline an optimal comparison based on the argument representation instead of calling the Eq function. This is sound because every Eq instance is structurally consistent (<code>a === b</code> iff <code>a.toData == b.toData</code>) by construction: the compiler plugin rejects hand-written Eq lambdas at creation, so an instance can only come from <code>Eq.derived</code> (structural by generation) or <code>Eq.structural(...)</code> (an explicit assertion of structurality by the author). Non-structural types are excluded from the Eq system entirely (see <code>RationalEq</code>/<code>AssocMapEq</code>), and the non-structural combinators (<code>Eq.by</code>/<code>orElse</code>/<code>orElseBy</code>) are rejected in on-chain code (audit 2026-07-10 I1).</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lowerEqualsRepr-51">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweringEq$.html#lowerEqualsRepr-51" t="n" class="documentableName ">lowerEqualsRepr</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">app</span>: <a href="../SIR$$Apply.html" t="t">Apply</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Lower <code>equalsRepr(a, b)</code> — picks the optimal comparison for the resolved types/reprs.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Lower <code>equalsRepr(a, b)</code> — picks the optimal comparison for the resolved types/reprs.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+      <section id="Concrete-fields">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete fields</h4>
+        </div>
+        <div class="documentableElement" id="EqTypeName-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">val </span></span><a href="LoweringEq$.html#EqTypeName-0" t="n" class="documentableName ">EqTypeName</a>: <span data-unresolved-link="" t="t">String</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="EqualsReprName-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">val </span></span><a href="LoweringEq$.html#EqualsReprName-0" t="n" class="documentableName ">EqualsReprName</a>: <span data-unresolved-link="" t="t">String</span>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#attributes">Attributes</a></li><li><a href="#members-list">Members list</a><ul><li><a href="#Value-members">Value members</a><ul><li><a href="#Concrete-methods">Concrete methods</a></li><li><a href="#Concrete-fields">Concrete fields</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

@@ -1,0 +1,85 @@
+Source: https://scalus.org/docs/verification/lean-workspace
+
+# The Lean Workspace
+
+Every check runs in a Lean workspace: a Lake package that requires Scalus's Lean library, with
+Blaster and PlutusCore. The workspace decides which Lean runs and what a check can import. The
+first suite of proofs that runs creates it where it is missing, as `src/test/lean/<Project>`
+(see [Setup](/docs/verification/setup#the-lean-workspace)).
+
+The workspace holds no Lean of yours. Every check is generated, run and thrown away, and what
+persists is the file of kept results beside each suite. The
+[HTLC example](/docs/verification/examples#htlc) works this way.
+
+  To keep Lean of your own beside the checks, such as statements to read or proofs written by hand,
+  see [Mixing UPLC and Lean Proofs](/docs/verification/advanced/lean-proofs).
+
+## Temporary Checks
+
+For each statement it checks:
+
+1. The tactic compiles each Boolean test of the statement into a UPLC program.
+2. It writes the check as the document of a Lean language server that runs in the workspace
+   (`lake serve`). The document is never written to disk.
+3. The programs go into a **temporary directory** as `Leaf<n>.flat` files, which the check's
+   `#import_uplc` commands read. The directory is removed when the check ends.
+4. Lean elaborates the document: it runs the programs symbolically, and Blaster asks Z3.
+
+One server serves all the checks of a suite. It loads the workspace once, and is closed after the
+suite's last test. Nothing is written into the workspace, so the same workspace serves every
+suite of the project.
+
+## What Persists: the Kept Results
+
+The result of each statement is kept in a file beside the suite's source, `<Suite>.proofs.json`,
+which you commit. The suite says where it is:
+
+```scala
+override protected def keptResultsFile: Option[Path] = Some(
+  LeanProofs.inSources("contracts", "src", "test", "scala", "htlc").resolve("HtlcProofsTest.proofs.json")
+)
+```
+
+An entry has the hashes of what its result rests on: the statement as Lean gets it, the program of
+each test, and the Lean side, which is the toolchain, the revisions of Blaster and PlutusCore, and
+the Lean sources of Scalus's library and of the workspace. How a run uses the entries depends on
+where it runs:
+
+| Run                                               | A kept result that agrees    | A missing or stale one                         |
+| ------------------------------------------------- | ---------------------------- | ---------------------------------------------- |
+| With Lean (`sbt test`, `sbt verify`)              | taken, Lean is not asked     | proved again, and the entry replaced           |
+| Without Lean (regular CI)                         | taken                        | its test is canceled, with the part that moved |
+| `verify` without Lean                             | taken                        | its test fails                                 |
+| `SCALUS_REQUIRE_LEAN` set, as in a nightly job    | proved again                 | proved again; a different result fails         |
+
+A kept refutation is replayed on the Scalus CEK machine, which needs no Lean. So a pull request
+can run the proofs without Lean, and still sees at once when a change of the code makes a result
+stale.
+
+## Looking at a Check
+
+To read what Lean is given, keep the checks: set `SCALUS_LEAN_KEEP_CHECKS` to a directory.
+
+```bash copy
+SCALUS_LEAN_KEEP_CHECKS=/tmp/checks sbt "testOnly *HtlcProofsTest"
+```
+
+Each statement gets a directory named after it, with the checks of its last run, one `check-*`
+directory each: `Check.lean`, the programs as `Leaf<n>.flat`, and each program as text,
+`Leaf<n>.uplc`. A check runs by hand, with any Lean option, from the workspace:
+
+```bash
+cd src/test/lean/MyContracts
+lake lean /tmp/checks/htlc.refund.rejected_before_the_timeout/check-*/Check.lean
+```
+
+A suite can keep its checks in a directory of its own instead, by overriding
+`keptChecksDirectory`. A statement whose kept result is taken runs no check, and writes none.
+
+## What to Commit
+
+| Path                                                          | Commit                          | Why                                                          |
+| ------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------ |
+| `<Suite>.proofs.json`                                         | yes                             | the kept results: a run with Lean asks it only what changed  |
+| the workspace: `lakefile.lean`, `lean-toolchain`, `lake-manifest.json`, the root module | up to you | a checkout without it creates the same one as its tests run; commit it once you change it |
+| `.lake/`, `.scalus/`                                          | no                              | what Lake builds, and Scalus's library unpacked from the jar |

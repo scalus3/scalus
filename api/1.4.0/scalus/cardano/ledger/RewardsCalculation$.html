@@ -1,0 +1,546 @@
+<!DOCTYPE html><html data-pathToRoot="../../../" data-rawLocation="scalus/cardano/ledger/RewardsCalculation$" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>RewardsCalculation</title><link rel="shortcut icon" type="image/x-icon" href="../../../favicon.ico"></link><script type="text/javascript" src="../../../scripts/theme.js"></script><script type="text/javascript" src="../../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../../styles/nord-light.css"></link><link rel="stylesheet" href="../../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../../styles/searchbar.css"></link><link rel="stylesheet" href="../../../styles/social-links.css"></link><link rel="stylesheet" href="../../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../../styles/fontawesome.css"></link><script type="text/javascript" src="../../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../../styles/apistyles.css"></link><script>var pathToRoot = "../../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../../index.html">Scalus</a>/<a href="../../../scalus.html">scalus</a>/<a href="../../cardano.html">scalus.cardano</a>/<a href="../ledger.html">scalus.cardano.ledger</a>/<a href="RewardsCalculation$.html">RewardsCalculation</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon ob"></span></span>
+ <h1 class="h600 single">RewardsCalculation</h1>
+</div>
+<div class="fqname body-large">
+ <span>scalus.cardano.ledger.RewardsCalculation</span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="RewardsCalculation$.html" t="n" class="documentableName ">RewardsCalculation</a>
+ </div>
+</div>
+<div class="cover">
+ <div class="doc">
+  <p>Rewards calculation for an epoch</p>
+  <p>Implements rewards computation according to the Cardano ledger specification. Based on the POOLREAP and REWARD rules.</p>
+ </div>
+ <section id="attributes">
+  <h2 class="h500">Attributes</h2>
+  <dl class="attributes">
+   <dt class="body-small">
+    Graph
+   </dt>
+   <dd class="body-medium">
+    <div id="inheritance-diagram" class="diagram-class showGraph">
+     <button type="button" class="label-only-button" onclick="zoomOut()">Reset zoom</button><button type="button" class="label-only-button" onclick="hideGraph()">Hide graph</button><button type="button" class="label-only-button" onclick="showGraph()">Show graph</button>
+     <svg id="graph"></svg>
+     <script type="text/dot" id="dot"> digraph g {
+ node0 [id=node0, label="<span style=\"color: #FFFFFF;\">object <a href=\"RewardsCalculation$.html\" t=\"n\">RewardsCalculation</a></span>", class="object vertex"];
+node1 [id=node1, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Object</span></span>", class="class vertex"];
+node2 [id=node2, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Any</span></span>", class="class vertex"];
+node3 [id=node3, label="<span style=\"color: #FFFFFF;\">trait <span data-unresolved-link=\"\" t=\"n\">Matchable</span></span>", class="trait vertex"];
+
+
+ node0 -> node1;
+node1 -> node2;
+node1 -> node3;
+node3 -> node2;
+
+}
+</script>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Supertypes
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <div>
+      class <span data-unresolved-link="" t="n">Object</span>
+     </div>
+     <div>
+      trait <span data-unresolved-link="" t="n">Matchable</span>
+     </div>
+     <div>
+      class <span data-unresolved-link="" t="n">Any</span>
+     </div><span></span>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Self type
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <span></span>
+     <div>
+      <a href="RewardsCalculation$.html" t="n">RewardsCalculation</a>.<span t="k">type</span>
+     </div>
+    </div>
+   </dd>
+  </dl>
+ </section>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Type-members">
+     <div data-togglable="Type members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Type members" class="h400">Type members</h3>
+      </div>
+      <section id="Classlikes">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Classlikes</h4>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="RewardsCalculation$$EpochRewardsSummary.html" t="n" class="documentableName ">EpochRewardsSummary</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">epoch</span>: <span data-unresolved-link="" t="t">Long</span>, <span t="k"></span><span data-unresolved-link="" t="n">totalRewards</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">treasuryTax</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">availableRewards</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">poolRewards</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="../ledger.html#PoolKeyHash-0" t="t">PoolKeyHash</a>, <a href="RewardsCalculation$$PoolRewardSummary.html" t="t">PoolRewardSummary</a>], <span t="k"></span><span data-unresolved-link="" t="n">accountRewards</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="Credential.html" t="t">Credential</a>, <a href="Coin.html" t="t">Coin</a>])
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Complete rewards summary for an epoch</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Complete rewards summary for an epoch</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="RewardsCalculation$$PoolParameters.html" t="n" class="documentableName ">PoolParameters</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">cost</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">marginNumerator</span>: <span data-unresolved-link="" t="t">Long</span>, <span t="k"></span><span data-unresolved-link="" t="n">marginDenominator</span>: <span data-unresolved-link="" t="t">Long</span>, <span t="k"></span><span data-unresolved-link="" t="n">pledge</span>: <a href="Coin.html" t="t">Coin</a>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Pool parameters needed for rewards calculation</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Pool parameters needed for rewards calculation</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="RewardsCalculation$$PoolRewardSummary.html" t="n" class="documentableName ">PoolRewardSummary</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">totalRewards</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">leaderReward</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">memberRewards</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="Credential.html" t="t">Credential</a>, <a href="Coin.html" t="t">Coin</a>])
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Per-pool rewards breakdown</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Per-pool rewards breakdown</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="RewardsCalculation$$RewardsConfig.html" t="n" class="documentableName ">RewardsConfig</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">monetaryExpansionRate</span>: <span data-unresolved-link="" t="t">Double</span>, <span t="k"></span><span data-unresolved-link="" t="n">treasuryExpansionRate</span>: <span data-unresolved-link="" t="t">Double</span>, <span t="k"></span><span data-unresolved-link="" t="n">minPoolCost</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">optimalPoolCount</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">poolPledgeInfluence</span>: <span data-unresolved-link="" t="t">Double</span>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Configuration parameters for rewards calculation</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Configuration parameters for rewards calculation</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Concrete-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete methods</h4>
+        </div>
+        <div class="documentableElement" id="aggregateAccountRewards-50">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="RewardsCalculation$.html#aggregateAccountRewards-50" t="n" class="documentableName ">aggregateAccountRewards</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">poolRewards</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="../ledger.html#PoolKeyHash-0" t="t">PoolKeyHash</a>, <a href="RewardsCalculation$$PoolRewardSummary.html" t="t">PoolRewardSummary</a>]): <span data-unresolved-link="" t="t">Map</span>[<a href="Credential.html" t="t">Credential</a>, <a href="Coin.html" t="t">Coin</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Aggregate all member rewards into account rewards</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Aggregate all member rewards into account rewards</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="computeTotalRewards-ffffff8b">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="RewardsCalculation$.html#computeTotalRewards-ffffff8b" t="n" class="documentableName ">computeTotalRewards</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">reserves</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">fees</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">config</span>: <a href="RewardsCalculation$$RewardsConfig.html" t="t">RewardsConfig</a>): (<a href="Coin.html" t="t">Coin</a>, <a href="Coin.html" t="t">Coin</a>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Compute total rewards for an epoch</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Compute total rewards for an epoch</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               config
+              </dt>
+              <dd class="body-medium">
+               <p>Rewards configuration parameters</p>
+              </dd>
+              <dt class="body-small">
+               fees
+              </dt>
+              <dd class="body-medium">
+               <p>Transaction fees collected</p>
+              </dd>
+              <dt class="body-small">
+               reserves
+              </dt>
+              <dd class="body-medium">
+               <p>Current reserve pot</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>(total rewards, treasury portion)</p>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="distributePoolRewards-fffff271">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="RewardsCalculation$.html#distributePoolRewards-fffff271" t="n" class="documentableName ">distributePoolRewards</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">availableRewards</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">poolStakes</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="../ledger.html#PoolKeyHash-0" t="t">PoolKeyHash</a>, <a href="Coin.html" t="t">Coin</a>], <span t="k"></span><span data-unresolved-link="" t="n">poolParams</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="../ledger.html#PoolKeyHash-0" t="t">PoolKeyHash</a>, <a href="RewardsCalculation$$PoolParameters.html" t="t">PoolParameters</a>], <span t="k"></span><span data-unresolved-link="" t="n">totalActiveStake</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">config</span>: <a href="RewardsCalculation$$RewardsConfig.html" t="t">RewardsConfig</a>): <span data-unresolved-link="" t="t">Map</span>[<a href="../ledger.html#PoolKeyHash-0" t="t">PoolKeyHash</a>, <a href="Coin.html" t="t">Coin</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Compute rewards distribution among pools</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Compute rewards distribution among pools</p>
+              <p>Simplified rewards calculation that distributes available rewards proportionally to pool stakes.</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               availableRewards
+              </dt>
+              <dd class="body-medium">
+               <p>Rewards available after treasury tax</p>
+              </dd>
+              <dt class="body-small">
+               config
+              </dt>
+              <dd class="body-medium">
+               <p>Rewards configuration</p>
+              </dd>
+              <dt class="body-small">
+               poolParams
+              </dt>
+              <dd class="body-medium">
+               <p>Pool parameters (cost, margin, pledge, etc.)</p>
+              </dd>
+              <dt class="body-small">
+               poolStakes
+              </dt>
+              <dd class="body-medium">
+               <p>Stake delegated to each pool</p>
+              </dd>
+              <dt class="body-small">
+               totalActiveStake
+              </dt>
+              <dd class="body-medium">
+               <p>Total active stake in the system</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>Rewards for each pool</p>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="splitPoolRewards-79d">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="RewardsCalculation$.html#splitPoolRewards-79d" t="n" class="documentableName ">splitPoolRewards</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">poolReward</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">poolParams</span>: <a href="RewardsCalculation$$PoolParameters.html" t="t">PoolParameters</a>, <span t="k"></span><span data-unresolved-link="" t="n">poolStake</span>: <a href="Coin.html" t="t">Coin</a>, <span t="k"></span><span data-unresolved-link="" t="n">memberStakes</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="Credential.html" t="t">Credential</a>, <a href="Coin.html" t="t">Coin</a>]): <a href="RewardsCalculation$$PoolRewardSummary.html" t="t">PoolRewardSummary</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Split pool rewards between leader and members</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Split pool rewards between leader and members</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               memberStakes
+              </dt>
+              <dd class="body-medium">
+               <p>Individual delegator stakes</p>
+              </dd>
+              <dt class="body-small">
+               poolParams
+              </dt>
+              <dd class="body-medium">
+               <p>Pool parameters (margin, cost)</p>
+              </dd>
+              <dt class="body-small">
+               poolReward
+              </dt>
+              <dd class="body-medium">
+               <p>Total reward for the pool</p>
+              </dd>
+              <dt class="body-small">
+               poolStake
+              </dt>
+              <dd class="body-medium">
+               <p>Total stake delegated to pool</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>Breakdown of rewards</p>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#attributes">Attributes</a></li><li><a href="#members-list">Members list</a><ul><li><a href="#Type-members">Type members</a><ul><li><a href="#Classlikes">Classlikes</a></li></ul></li><li><a href="#Value-members">Value members</a><ul><li><a href="#Concrete-methods">Concrete methods</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

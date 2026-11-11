@@ -1,0 +1,227 @@
+<!DOCTYPE html><html data-pathToRoot="../../../" data-rawLocation="scalus/cardano/ledger/HashConstructors" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>HashConstructors</title><link rel="shortcut icon" type="image/x-icon" href="../../../favicon.ico"></link><script type="text/javascript" src="../../../scripts/theme.js"></script><script type="text/javascript" src="../../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../../styles/nord-light.css"></link><link rel="stylesheet" href="../../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../../styles/searchbar.css"></link><link rel="stylesheet" href="../../../styles/social-links.css"></link><link rel="stylesheet" href="../../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../../styles/fontawesome.css"></link><script type="text/javascript" src="../../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../../styles/apistyles.css"></link><script>var pathToRoot = "../../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../../index.html">Scalus</a>/<a href="../../../scalus.html">scalus</a>/<a href="../../cardano.html">scalus.cardano</a>/<a href="../ledger.html">scalus.cardano.ledger</a>/<a href="HashConstructors.html">HashConstructors</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon tr"></span></span>
+ <h1 class="h600 single">HashConstructors</h1>
+</div>
+<div class="fqname body-large">
+ <span>scalus.cardano.ledger.HashConstructors</span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="HashConstructors.html" t="n" class="documentableName ">HashConstructors</a>[<span t="k"></span><span data-unresolved-link="" t="t">HashType</span><span t="k"> &gt;: </span><a href="../ledger.html#Hash-0" t="t">Hash</a>[<span t="t">HashFunction</span>, <span t="t">Purpose</span>], <span t="k"></span><span data-unresolved-link="" t="t">HashFunction</span>, <span t="k"></span><span data-unresolved-link="" t="t">Purpose</span>]
+ </div>
+</div>
+<div class="cover">
+ <div class="doc"></div>
+ <section id="attributes">
+  <h2 class="h500">Attributes</h2>
+  <dl class="attributes">
+   <dt class="body-small">
+    Graph
+   </dt>
+   <dd class="body-medium">
+    <div id="inheritance-diagram" class="diagram-class showGraph">
+     <button type="button" class="label-only-button" onclick="zoomOut()">Reset zoom</button><button type="button" class="label-only-button" onclick="hideGraph()">Hide graph</button><button type="button" class="label-only-button" onclick="showGraph()">Show graph</button>
+     <svg id="graph"></svg>
+     <script type="text/dot" id="dot"> digraph g {
+ node0 [id=node0, label="<span style=\"color: #FFFFFF;\">trait <a href=\"HashConstructors.html\" t=\"n\">HashConstructors</a>[<span t=\"t\">HashType</span>, <span t=\"t\">HashFunction</span>, <span t=\"t\">Purpose</span>]</span>", class="trait vertex"];
+node1 [id=node1, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Object</span></span>", class="class vertex"];
+node2 [id=node2, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Any</span></span>", class="class vertex"];
+node3 [id=node3, label="<span style=\"color: #FFFFFF;\">trait <span data-unresolved-link=\"\" t=\"n\">Matchable</span></span>", class="trait vertex"];
+node4 [id=node4, label="<span style=\"color: #FFFFFF;\">object <a href=\"AddrKeyHash$.html\" t=\"n\">AddrKeyHash</a></span>", class="object vertex"];
+node5 [id=node5, label="<span style=\"color: #FFFFFF;\">object <a href=\"AuxiliaryDataHash$.html\" t=\"n\">AuxiliaryDataHash</a></span>", class="object vertex"];
+node6 [id=node6, label="<span style=\"color: #FFFFFF;\">object <a href=\"BlockHash$.html\" t=\"n\">BlockHash</a></span>", class="object vertex"];
+node7 [id=node7, label="<span style=\"color: #FFFFFF;\">object <a href=\"DataHash$.html\" t=\"n\">DataHash</a></span>", class="object vertex"];
+node8 [id=node8, label="<span style=\"color: #FFFFFF;\">object <a href=\"Hash28$.html\" t=\"n\">Hash28</a></span>", class="object vertex"];
+node9 [id=node9, label="<span style=\"color: #FFFFFF;\">object <a href=\"Hash32$.html\" t=\"n\">Hash32</a></span>", class="object vertex"];
+node10 [id=node10, label="<span style=\"color: #FFFFFF;\">object <a href=\"MetadataHash$.html\" t=\"n\">MetadataHash</a></span>", class="object vertex"];
+node11 [id=node11, label="<span style=\"color: #FFFFFF;\">object <a href=\"PoolKeyHash$.html\" t=\"n\">PoolKeyHash</a></span>", class="object vertex"];
+node12 [id=node12, label="<span style=\"color: #FFFFFF;\">object <a href=\"ScriptDataHash$.html\" t=\"n\">ScriptDataHash</a></span>", class="object vertex"];
+node13 [id=node13, label="<span style=\"color: #FFFFFF;\">object <a href=\"ScriptHash$.html\" t=\"n\">ScriptHash</a></span>", class="object vertex"];
+node14 [id=node14, label="<span style=\"color: #FFFFFF;\">object <a href=\"StakeKeyHash$.html\" t=\"n\">StakeKeyHash</a></span>", class="object vertex"];
+node15 [id=node15, label="<span style=\"color: #FFFFFF;\">object <a href=\"TransactionHash$.html\" t=\"n\">TransactionHash</a></span>", class="object vertex"];
+node16 [id=node16, label="<span style=\"color: #FFFFFF;\">object <a href=\"VrfKeyHash$.html\" t=\"n\">VrfKeyHash</a></span>", class="object vertex"];
+
+
+ node0 -> node1;
+node1 -> node2;
+node1 -> node3;
+node3 -> node2;
+node4 -> node0;
+node5 -> node0;
+node6 -> node0;
+node7 -> node0;
+node8 -> node0;
+node9 -> node0;
+node10 -> node0;
+node11 -> node0;
+node12 -> node0;
+node13 -> node0;
+node14 -> node0;
+node15 -> node0;
+node16 -> node0;
+
+}
+</script>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Supertypes
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <div>
+      class <span data-unresolved-link="" t="n">Object</span>
+     </div>
+     <div>
+      trait <span data-unresolved-link="" t="n">Matchable</span>
+     </div>
+     <div>
+      class <span data-unresolved-link="" t="n">Any</span>
+     </div><span></span>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Known subtypes
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block subtypes">
+     <div>
+      object <a href="AddrKeyHash$.html" t="n">AddrKeyHash</a>
+     </div>
+     <div>
+      object <a href="AuxiliaryDataHash$.html" t="n">AuxiliaryDataHash</a>
+     </div>
+     <div>
+      object <a href="BlockHash$.html" t="n">BlockHash</a>
+     </div>
+     <div>
+      object <a href="DataHash$.html" t="n">DataHash</a>
+     </div>
+     <div>
+      object <a href="Hash28$.html" t="n">Hash28</a>
+     </div>
+     <div>
+      object <a href="Hash32$.html" t="n">Hash32</a>
+     </div>
+     <div>
+      object <a href="MetadataHash$.html" t="n">MetadataHash</a>
+     </div>
+     <div>
+      object <a href="PoolKeyHash$.html" t="n">PoolKeyHash</a>
+     </div>
+     <div>
+      object <a href="ScriptDataHash$.html" t="n">ScriptDataHash</a>
+     </div>
+     <div>
+      object <a href="ScriptHash$.html" t="n">ScriptHash</a>
+     </div>
+     <div>
+      object <a href="StakeKeyHash$.html" t="n">StakeKeyHash</a>
+     </div>
+     <div>
+      object <a href="TransactionHash$.html" t="n">TransactionHash</a>
+     </div>
+     <div>
+      object <a href="VrfKeyHash$.html" t="n">VrfKeyHash</a>
+     </div><span class="show-all-code show-content text-button h100">Show all</span>
+    </div>
+   </dd>
+  </dl>
+ </section>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Type-members">
+     <div data-togglable="Type members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Type members" class="h400">Type members</h3>
+      </div>
+      <section id="Types">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Types</h4>
+        </div>
+        <div class="documentableElement" id="THashFunction-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">type </span></span><a href="HashConstructors.html#THashFunction-0" t="n" class="documentableName ">THashFunction</a> = <span t="t">HashFunction</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="THashPurpose-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">type </span></span><a href="HashConstructors.html#THashPurpose-0" t="n" class="documentableName ">THashPurpose</a> = <span t="t">Purpose</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="THashType-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">type </span></span><a href="HashConstructors.html#THashType-0" t="n" class="documentableName ">THashType</a> = <span t="t">HashType</span>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Concrete-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete methods</h4>
+        </div>
+        <div class="documentableElement" id="fromArray-fffffdc5">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="HashConstructors.html#fromArray-fffffdc5" t="n" class="documentableName ">fromArray</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">bytes</span>: <span data-unresolved-link="" t="t">Array</span>[<span data-unresolved-link="" t="t">Byte</span>]): <span t="t">HashType</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="fromByteString-31e">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="HashConstructors.html#fromByteString-31e" t="n" class="documentableName ">fromByteString</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">bytes</span>: <a href="../../uplc/builtin/ByteString.html" t="t">ByteString</a>): <span t="t">HashType</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="fromHex-fffff5f8">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="HashConstructors.html#fromHex-fffff5f8" t="n" class="documentableName ">fromHex</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">hex</span>: <span data-unresolved-link="" t="t">String</span>): <span t="t">HashType</span>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#attributes">Attributes</a></li><li><a href="#members-list">Members list</a><ul><li><a href="#Type-members">Type members</a><ul><li><a href="#Types">Types</a></li></ul></li><li><a href="#Value-members">Value members</a><ul><li><a href="#Concrete-methods">Concrete methods</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>
