@@ -1,0 +1,145 @@
+---
+asIndexPage: true
+title: Formal Verification of Cardano Smart Contracts - Prove Validator Properties with Lean
+sidebarTitle: Verification
+description: Prove properties of Scalus validators for every input. Statements are written in Scala and proved against the compiled UPLC with Lean 4, Blaster and the Z3 SMT solver.
+---
+
+import { Callout } from 'nextra/components'
+
+# Formal Verification
+
+Formal verification lets you prove properties of a smart contract. With the Scalus verification
+framework you write logical statements in Scala, and they are proved with IOHK's
+[Lean-Blaster](https://github.com/input-output-hk/Lean-blaster) on top of the **compiled UPLC**,
+the program the ledger runs.
+
+<Callout type="warning">
+  **Experimental.** `scalus-verification` and its API may still change. Scalus 1.5.0 has the
+  library and the sbt tasks `leanInit` and `leanBuild`. The tasks `verify`, `leanProve`,
+  `leanExport` and `ualExport` come with the next release.
+</Callout>
+
+```scala copy
+@Compile
+object RoundedMagnitude {
+    /** Half the magnitude, rounded up: -5 -> 3, 0 -> 0, 4 -> 2. */
+    def half(x: BigInt): BigInt = {
+        val magnitude = if x < 0 then -x else x
+        (magnitude + 1) / 2
+    }
+}
+
+class HalfProofsTest extends AnyFunSuite with LeanProofsSuite {
+    import proofs.*
+    import RoundedMagnitude.half
+
+    private val neverNegative =
+        verifier.statement("half.never_negative", forAll[BigInt](x => half(x) >= 0))
+
+    test("no integer input gives a negative result") {
+        check(neverNegative, budget = 100) // proved for every BigInt
+    }
+}
+```
+
+## How It Works
+
+```text
+ Scala statement   forAll[BigInt](x => half(x) >= 0)
+       │  captured at compile time; each Boolean test is compiled to UPLC
+       ▼
+ Lean check        the programs, run symbolically on a Lean model of the CEK machine,
+       │           for at most a budget of steps
+       ▼
+ Blaster + Z3      the goal, as an SMT problem
+       │
+       ├─ valid ──────────────► Proven
+       └─ counterexample ─────► replayed on the Scalus CEK machine
+                                  ├─ the statement fails there ──► Refuted, with the values
+                                  └─ it holds there ─────────────► Inconclusive (spurious)
+```
+
+1. **State.** You declare a statement by name in a test suite, with `forAll`, `==>:` (implies) and
+   ordinary Scala Boolean expressions. Declaring a statement runs nothing.
+2. **Compile.** Macros capture the statement's logical structure. The Scalus compiler plugin
+   compiles each Boolean test inside it to UPLC, with the `@Compile` functions it calls.
+3. **Check.** The `UplcBlaster` tactic gives a Lean language server a check. The check imports the
+   programs and runs them symbolically on [PlutusCoreBlaster](https://github.com/input-output-hk/PlutusCoreBlaster),
+   IOG's Lean model of UPLC. [Blaster](https://github.com/input-output-hk/Lean-blaster) turns the
+   goal into an SMT problem and asks [Z3](https://github.com/Z3Prover/z3).
+4. **Replay.** Scalus replays every counterexample on its own CEK machine before it reports it. A
+   counterexample on which the statement still holds is spurious: the result is inconclusive, and
+   never a wrong refutation.
+5. **Keep.** The result is kept in a file beside the suite, `<Suite>.proofs.json`, with hashes of
+   the statement, of each program, and of the Lean side. A run without Lean passes on a kept result
+   that still agrees with the code, so your regular CI does not need Lean.
+
+## What a Proof Means
+
+A proof shows that a logical statement holds. You write the statement as a Scala Boolean
+expression, inside quantifiers such as `forAll`:
+
+```scala
+forAll[BigInt](x => half(x) >= 0)
+```
+
+Macros translate it into the Scalus verification DSL, `Prop`: a value that keeps the statement's
+logical structure, with each Boolean test inside it compiled to UPLC. You check the statement
+through the verification interface, as in the example above: declare it with
+`verifier.statement`, or with `verifier.refute` for one that must be false, and run it with
+`check`. The check gives one of these results:
+
+| Result         | What it means                                                                                              |
+| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| `Proven`       | the statement holds for every value of its variables: every integer, or every script context the ledger can pass |
+| `ProvenWithin` | it holds for the inputs whose runs end within a bound (`Budget.Within(n)`): a weaker statement, not a theorem |
+| `Refuted`      | it is false, and the result has the values that show it, replayed on the Scalus CEK machine                |
+| `Inconclusive` | neither: the solver's counterexample did not replay, or Lean did not finish in time                        |
+| `Unsupported`  | the statement uses something the tactic cannot translate yet; nothing ran                                  |
+| `Failed`       | Lean or the solver failed to run                                                                           |
+
+Lean runs each program for at most a budget of steps, but the claim is not bounded: a proof at any
+budget holds without the budget. A budget that is too small gives an inconclusive result, not a
+false proof.
+
+## Limitations
+
+- **The proved bytes can differ from the published script.** Plutus has builtins for multi-asset
+  values (CIP-153: `lookupCoin`, `unionValue`, `scaleValue` and others), and by default Scalus
+  compiles `Value` operations to them (`Options.valueBuiltins`). The Lean model of UPLC does not
+  implement these builtins yet. So for a proof the tactic compiles your code with
+  `UplcBlaster.options`, which turn them off: `Value` operations become ordinary UPLC code over
+  the value's `Data` encoding. The proof is about the same Scala source as your published script,
+  but the bytes can differ.
+- **The semantics of UPLC is a model.** Proofs use PlutusCoreBlaster's Lean model of UPLC, which
+  passes the Plutus conformance tests.
+- **The solver is trusted.** Blaster admits a goal that Z3 finds valid. It does not rebuild the
+  proof for Lean's kernel, so the trusted base includes Blaster's translation and Z3.
+- **Not every statement can be proved with Blaster.** There are different techniques for tuning a
+  statement and its check: see [Tuning Your Proof](/docs/verification/tuning).
+- **Some byte-string builtins.** For a byte string that is a variable, Blaster does not translate
+  the builtins that build or take apart a byte string by its bytes (`sliceByteString`,
+  `indexByteString`, `consByteString`, `integerToByteString`) or the bitwise builtins
+  (`complementByteString`, `shiftByteString` and others): it cannot translate `BitVec`, which
+  Lean's model of a byte is made of. Comparing, appending and measuring byte strings work, and so
+  does `byteStringToInteger`, though the solver's byte strings can have characters above 255, so a
+  statement about its value can come back inconclusive. A statement without variables, which Lean
+  decides by running it, can use all of them.
+
+## In This Chapter
+
+| Page                                                | What it covers                                                                     |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [Setup](/docs/verification/setup)                   | Lean, Z3, the dependencies and the sbt plugin                                      |
+| [Your First Proof](/docs/verification/first-proof)  | A rule of an HTLC validator, proved for every script context, with a negative control |
+| [Tuning Your Proof](/docs/verification/tuning)      | The budget of steps, limits on the data, time limits                               |
+| [Lean Workspace](/docs/verification/lean-workspace) | Where the checks run, and the kept results                                         |
+| [sbt Commands](/docs/verification/sbt-commands)     | `verify`, the `lean*` tasks, the environment variables, CI                         |
+| [Examples](/docs/verification/examples)             | The HTLC and linear vesting proofs in the Scalus repository                        |
+| [Mixing UPLC and Lean Proofs](/docs/verification/advanced/lean-proofs) | Advanced: statements as Lean modules, and proofs written by hand |
+
+The design and its details are in the Scalus repository:
+[the verification overview](https://github.com/scalus3/scalus/blob/master/docs/design/verification-overview.md),
+[the `scalus-verification` README](https://github.com/scalus3/scalus/blob/master/scalus-verification/README.md)
+and [the design details](https://github.com/scalus3/scalus/tree/master/docs/design/verification-details).

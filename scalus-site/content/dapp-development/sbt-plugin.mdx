@@ -9,7 +9,9 @@ description: Embed CIP-57 blueprints in JARs and deploy contracts as reference s
 The `ScalusSbtPlugin` adds sbt tasks to your project: `blueprint` for embedding
 [CIP-57](https://cips.cardano.org/cip/CIP-57) blueprint JSON files into JARs,
 `blueprintPin`/`blueprintCheck` for committing pinned blueprints to git, and `deploy`
-for publishing a contract as a reference script UTxO via Blockfrost.
+for publishing a contract as a reference script UTxO via Blockfrost. For
+[formal verification](/docs/verification) it adds `verify` and the tasks of the Lean
+workspace; see [Verification sbt Commands](/docs/verification/sbt-commands).
 
 Projects scaffolded from the [`hello.g8` or `validator.g8` templates](/docs/get-started/project-commands)
 come with this plugin already wired in, so the `blueprint` and `deploy` tasks below work out of the
@@ -193,6 +195,22 @@ Example output:
 [info] Tx e484fdac... submitted successfully
 [info] Deployed successfully! Transaction hash: e484fdac...
 ```
+
+## Verification Tasks
+
+With `scalus-verification` among the test dependencies, the plugin runs the project's proofs:
+
+| Task                 | What it does                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------- |
+| `verify [tests]`     | builds the Lean workspace, runs the suites of proofs with Lean required, then `leanProve`  |
+| `leanInit`           | creates the Lean workspace, `src/test/lean/<Project>`, where it is missing                 |
+| `leanBuild`          | `lake build` in the workspace                                                             |
+| `leanProve`          | builds the generated statements and the proofs written by hand                            |
+| `leanExport [tests]` | writes the statements the tests prove into the workspace as Lean modules                  |
+| `ualExport [tests]`  | writes them as documents of the Universal Annotation Language                             |
+
+See [Verification](/docs/verification) for the setup and
+[sbt Commands](/docs/verification/sbt-commands) for the details.
 
 ## What's Next?
 
