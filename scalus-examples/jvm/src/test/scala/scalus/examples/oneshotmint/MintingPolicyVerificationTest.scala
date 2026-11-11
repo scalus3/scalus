@@ -61,8 +61,9 @@ object Mint
   * other transaction can only burn them. Most statements are about the policy on minting contexts,
   * as a deserializer reads them: the guarantees `mint` states in its body, that the transaction
   * that spends the seed mints the tokens, and that any other burns them. The others are about the
-  * deployed script, deserializer and all, on the `Data` the node gives it, of a transaction of a
-  * few inputs, policies and tokens.
+  * deployed script, deserializer and all, on the `Data` the node gives it: each of every
+  * transaction, which Lean does not finish, and of a transaction of a few inputs, policies and
+  * tokens, under the name with `Limited`, side by side.
   *
   * The minting context has the shape the ledger gives a script of version 1 or 2 (see
   * `LedgerToPlutusTranslation.getMintValueV1V2`): its mint starts with an entry of zero ADA, then
@@ -210,6 +211,39 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
         script
     }
 
+    // The deployed script, of every context the node gives it, under the plain name, and of the
+    // contexts of a few inputs, policies and tokens, under the name with `Limited`.
+
+    /** Only the seed mints, of every script context, with no limits. */
+    private lazy val deployedOnlyTheSeedMints = verifier.statement(
+      "one_shot_mint.deployed.only_the_seed_mints",
+      forAllData[v1.ScriptContext](ctx => succeeds(deployed, ctx.toData) ==>: onlyTheSeedMints(ctx))
+    )
+
+    test(
+      "the deployed script, on every context the node gives it: only the seed mints, not " +
+          "finished by Lean",
+      Unfinished
+    ) {
+        // Checked within a budget, it would hold of every context on which the script and the
+        // test end within it. Lean does not finish it: the symbolic run follows every way a `Data`
+        // can be read, and every length of the inputs, of the mint and of the tokens, to the end
+        // of the budget. At 2000 steps Lean was still in the symbolic run of a test after 10
+        // minutes.
+        val reason = inconclusive(
+          deployedOnlyTheSeedMints,
+          UplcBlaster(Budget.Within(2000), lean, 60.seconds)
+        )
+        assert(reason.contains("did not finish"), reason)
+    }
+
+    private lazy val deployedOnlyTheSeedMintsLimited = verifier.statement(
+      "one_shot_mint.deployed.only_the_seed_mints.two_of_each",
+      forAllDataLimited[v1.ScriptContext](ctx => twoOfEach(ctx))(ctx =>
+          succeeds(deployed, ctx.toData) ==>: onlyTheSeedMints(ctx)
+      )
+    )
+
     test(
       "the deployed script, on every context of at most two inputs, policies and tokens: only the seed mints"
     ) {
@@ -218,15 +252,35 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // Each test checks the limits first, by walks that end, so the symbolic runs end too, and
         // the proof is of the statement: a theorem. The other lists of the transaction are not
         // limited, and the script does not read them.
-        val limited = verifier.statement(
-          "one_shot_mint.deployed.only_the_seed_mints.two_of_each",
-          forAllDataLimited[v1.ScriptContext](ctx =>
-              ctx.txInfo.inputs.length <= 2 && ctx.txInfo.mint.toSortedMap.length <= 2 &&
-                  ctx.txInfo.mint.toSortedMap.values.forall(tokens => tokens.length <= 2)
-          )(ctx => succeeds(deployed, ctx.toData) ==>: onlyTheSeedMints(ctx))
-        )
-        check(limited, 2500)
+        check(deployedOnlyTheSeedMintsLimited, 2500)
     }
+
+    /** Only the seed mints, as the script reads the context, of every script context. */
+    private lazy val deployedOnlyTheSeedMintsAsRead = verifier.statement(
+      "one_shot_mint.deployed.only_the_seed_mints_as_read",
+      forAllData[v1.ScriptContext](ctx =>
+          succeeds(deployed, ctx.toData) ==>?: onlyTheSeedMintsAsRead(ctx.toData)
+      )
+    )
+
+    test(
+      "the deployed script, on every context the node gives it, as it reads it: only the seed " +
+          "mints, not finished by Lean",
+      Unfinished
+    ) {
+        val reason = inconclusive(
+          deployedOnlyTheSeedMintsAsRead,
+          UplcBlaster(Budget.Within(2000), lean, 60.seconds)
+        )
+        assert(reason.contains("did not finish"), reason)
+    }
+
+    private lazy val deployedOnlyTheSeedMintsAsReadLimited = verifier.statement(
+      "one_shot_mint.deployed.only_the_seed_mints_as_read.two_of_each",
+      forAllDataLimited[v1.ScriptContext](ctx => twoOfEach(ctx))(ctx =>
+          succeeds(deployed, ctx.toData) ==>?: onlyTheSeedMintsAsRead(ctx.toData)
+      )
+    )
 
     test(
       "the deployed script, on every context of at most two inputs, policies and tokens, as it reads it: only the seed mints"
@@ -242,39 +296,11 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // the script does there. So the check is the rejecting program alone, `if claim then error
         // else script`, without the claim that the claim returns, which fails where the
         // deserializer does, and without a check of the statement with `==>:` after it.
-        val asRead = verifier.statement(
-          "one_shot_mint.deployed.only_the_seed_mints_as_read.two_of_each",
-          forAllDataLimited[v1.ScriptContext](ctx =>
-              ctx.txInfo.inputs.length <= 2 && ctx.txInfo.mint.toSortedMap.length <= 2 &&
-                  ctx.txInfo.mint.toSortedMap.values.forall(tokens => tokens.length <= 2)
-          )(ctx => succeeds(deployed, ctx.toData) ==>?: onlyTheSeedMintsAsRead(ctx.toData))
-        )
+        //
         // The rejecting program runs the claim's deserializer and then the script: at the 2500
         // steps the statement with `==>:` was proved at, the runs are cut, and at 5000 it is proved
         // in 75 s.
-        check(asRead, 5000)
-    }
-
-    test(
-      "the deployed script, on every context the node gives it: only the seed mints",
-      Unfinished
-    ) {
-        // Only the seed mints, of every script context, with no limits. Checked within a budget,
-        // it would hold of every context on which the script and the test end within it. Lean does
-        // not finish it: the symbolic run follows every way a `Data` can be read, and every length
-        // of the inputs, of the mint and of the tokens, to the end of the budget.
-        val deployedOnlyTheSeedMints = verifier.statement(
-          "one_shot_mint.deployed.only_the_seed_mints",
-          forAllData[v1.ScriptContext](ctx =>
-              succeeds(deployed, ctx.toData) ==>: onlyTheSeedMints(ctx)
-          )
-        )
-        // At 2000 steps Lean was still in the symbolic run of a test after 10 minutes.
-        val reason = inconclusive(
-          deployedOnlyTheSeedMints,
-          UplcBlaster(Budget.Within(2000), lean, 60.seconds)
-        )
-        assert(reason.contains("did not finish"), reason)
+        check(deployedOnlyTheSeedMintsAsReadLimited, 5000)
     }
 }
 
@@ -293,6 +319,13 @@ object MintingPolicyVerificationTest {
 
     /** The one token the deployed script mints. */
     inline def tokenName: ByteString = hex"484f534b59"
+
+    /** The contexts of the statements of the deployed script with limits: of a transaction of two
+      * inputs at most, and a mint of two policies of two tokens at most.
+      */
+    inline def twoOfEach(inline ctx: v1.ScriptContext): Boolean =
+        ctx.txInfo.inputs.length <= 2 && ctx.txInfo.mint.toSortedMap.length <= 2 &&
+            ctx.txInfo.mint.toSortedMap.values.forall(tokens => tokens.length <= 2)
 
     /** Whether a context spends the deployed script's seed, or burns only of the tokens of the
       * policy it is run for.

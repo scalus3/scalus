@@ -10,7 +10,7 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.{Budget, LeanProofs, LeanProofsSuite, UplcBlaster}
+import scalus.verify.uplcblaster.{Budget, LeanProofs, LeanProofsSuite, Unfinished, UplcBlaster}
 
 import java.nio.file.Path
 import scala.concurrent.duration.*
@@ -36,17 +36,19 @@ import scala.concurrent.duration.*
   *     holds whatever the function is, and says nothing of how hard a preimage is to find. Nor can
   *     a counterexample name a preimage of an image, as a test below shows: that a reveal is
   *     accepted is shown by the samples, not by a negative control;
-  *   - a transaction of more than two signatures. The validator searches them, and the tactic
-  *     cannot follow a loop over a list of unknown length: the statements about a refund or a
-  *     reveal are of the contexts of two signatures at most;
+  *   - of a transaction of more than two signatures, what rests on the search of the signatures.
+  *     The tactic cannot follow a loop over a list of unknown length. Lean proves of every context
+  *     what the validator decides by the time, before it searches the signatures. The rest, whose
+  *     tests of every context are tagged `Unfinished`, is stated again beside them, of the contexts
+  *     of two signatures at most, with `Limited` in its name, where Lean proves it;
   *   - where the funds go. The validator asks for a signature and constrains no output;
   *   - the published script's bytes. The validator is compiled here with the tactic's options
   *     (`UplcBlaster.options`), not those of [[HtlcContract]]: the statements are about the same
   *     source.
   *
   * Without Lean, that is without `lake` and a built workspace, the tests pass on the results kept
-  * beside this file (see [[LeanProofs]]). One test is about the tactic and keeps nothing: it is
-  * canceled there.
+  * beside this file (see [[LeanProofs]]). The tests about the tactic keep nothing: one is canceled
+  * there, and those tagged `Unfinished` need Lean.
   */
 class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
@@ -130,45 +132,91 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         check(redeemerOfNeitherActionIsRejected, rejectionBudget)
     }
 
+    // Each statement about a refund or a reveal is of every script context. The validator checks
+    // the time before it searches the signatures, so what it rejects for the time it rejects of
+    // every context, and Lean proves it so. What rests on the search of the signatures Lean does
+    // not prove of every context: its counterexample is a list of more signatures than the
+    // budget's runs search, on which the statement holds, and the test of it is tagged
+    // `Unfinished`. Such a statement is stated again beside it, of the contexts of two signatures
+    // at most, under the name with `Limited` (`forAllContextsMax2Signatures`), where Lean proves
+    // it.
+
+    /** The time of a check of a statement of every context that Lean does not prove: it gives its
+      * spurious counterexample within a minute or two.
+      */
+    private val unfinishedTime = 5.minutes
+
+    /** That Lean's counterexample to `statement`, of every context, is spurious: the statement
+      * holds there, on a list of signatures longer than the budget's runs search.
+      */
+    private def spurious(statement: Statement): Unit = {
+        val reason = inconclusive(
+          statement,
+          UplcBlaster(Budget.LeanSteps(budget), lean, unfinishedTime)
+        )
+        assert(reason.contains("is spurious"), reason)
+    }
+
     // A refund
 
     private val refundRejectedUnlessTheCommitterSigns = verifier.statement(
       "htlc.refund.rejected_unless_the_committer_signs",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           (isRefund(ctx) && !signedByTheCommitter(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
     private val refundRejectedWhoeverSigns = verifier.refute(
       "htlc.refund.rejected_whoever_signs",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
-          isRefund(ctx) ==>: fails(validator, ctx.toData)
-      )
+      forAllData[ScriptContext](ctx => isRefund(ctx) ==>: fails(validator, ctx.toData))
     )
 
-    test("nobody but the committer refunds") {
+    test(
+      "nobody but the committer refunds, of every script context, not finished by Lean",
+      Unfinished
+    ) {
+        // Lean's counterexample is a refund signed by more keys than the budget's runs search,
+        // none of them the committer's.
+        spurious(refundRejectedUnlessTheCommitterSigns)
+    }
+
+    private val refundRejectedUnlessTheCommitterSignsLimited = verifier.statement(
+      "htlc.refund.rejected_unless_the_committer_signs_limited",
+      forAllContextsMax2Signatures(ctx =>
+          (isRefund(ctx) && !signedByTheCommitter(ctx)) ==>: fails(validator, ctx.toData)
+      )
+    )
+    private val refundRejectedWhoeverSignsLimited = verifier.refute(
+      "htlc.refund.rejected_whoever_signs_limited",
+      forAllContextsMax2Signatures(ctx => isRefund(ctx) ==>: fails(validator, ctx.toData))
+    )
+
+    test("nobody but the committer refunds, of two signatures at most") {
         // Of every context of two signatures at most: one that nobody signed, one that another key
         // signed, and one that two other keys signed, whenever.
-        check(refundRejectedUnlessTheCommitterSigns, budget)
-        // negative control: with any signature, the solver finds a refund that is accepted
+        check(refundRejectedUnlessTheCommitterSignsLimited, budget)
+        // negative controls: with any signature, the solver finds a refund that is accepted, of
+        // these contexts and of every one
+        check(refundRejectedWhoeverSignsLimited, budget)
         check(refundRejectedWhoeverSigns, budget)
     }
 
     private val refundRejectedBeforeTheTimeout = verifier.statement(
       "htlc.refund.rejected_before_the_timeout",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           (isRefund(ctx) && !startsFromTheTimeout(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
     private val refundRejectedAtTheTimeout = verifier.refute(
       "htlc.refund.rejected_at_the_timeout",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           (isRefund(ctx) && !startsAfterTheTimeout(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
 
     test("a refund is rejected unless its validity range starts at the timeout or later") {
-        // Whoever signs it: the committer too waits for the timeout. A range that starts at no
-        // time, at an infinity, says nothing of when the transaction is not valid yet.
+        // Whoever signs it, and however many sign it: the validator checks the time first. The
+        // committer too waits for the timeout. A range that starts at no time, at an infinity,
+        // says nothing of when the transaction is not valid yet.
         check(refundRejectedBeforeTheTimeout, budget)
         // negative control: at the timeout itself a refund is accepted
         check(refundRejectedAtTheTimeout, budget)
@@ -176,24 +224,48 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val committerRefundsFromTheTimeout = verifier.statement(
       "htlc.refund.committer_refunds_from_the_timeout",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           (isRefund(ctx) && startsFromTheTimeout(ctx) && signedByTheCommitter(ctx)) ==>:
               succeeds(validator, ctx.toData)
       )
     )
     private val committerRefundsAtAnyTime = verifier.refute(
       "htlc.refund.committer_refunds_at_any_time",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           (isRefund(ctx) && signedByTheCommitter(ctx)) ==>: succeeds(validator, ctx.toData)
       )
     )
 
-    test("from the timeout on, the committer refunds") {
+    test(
+      "from the timeout on, the committer refunds, of every script context, not finished by Lean",
+      Unfinished
+    ) {
+        // Lean's counterexample is a refund signed by more keys than the budget's runs search,
+        // the committer's late among them.
+        spurious(committerRefundsFromTheTimeout)
+    }
+
+    private val committerRefundsFromTheTimeoutLimited = verifier.statement(
+      "htlc.refund.committer_refunds_from_the_timeout_limited",
+      forAllContextsMax2Signatures(ctx =>
+          (isRefund(ctx) && startsFromTheTimeout(ctx) && signedByTheCommitter(ctx)) ==>:
+              succeeds(validator, ctx.toData)
+      )
+    )
+    private val committerRefundsAtAnyTimeLimited = verifier.refute(
+      "htlc.refund.committer_refunds_at_any_time_limited",
+      forAllContextsMax2Signatures(ctx =>
+          (isRefund(ctx) && signedByTheCommitter(ctx)) ==>: succeeds(validator, ctx.toData)
+      )
+    )
+
+    test("from the timeout on, the committer refunds, of two signatures at most") {
         // The funds are not stuck with a receiver who does not reveal, whatever else the
         // transaction has: an upper bound of its validity range, and another signature before or
         // after the committer's.
-        check(committerRefundsFromTheTimeout, budget)
-        // negative control: not at every time
+        check(committerRefundsFromTheTimeoutLimited, budget)
+        // negative controls: not at every time, of these contexts and of every one
+        check(committerRefundsAtAnyTimeLimited, budget)
         check(committerRefundsAtAnyTime, budget)
     }
 
@@ -201,46 +273,76 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val revealRejectedUnlessTheReceiverSigns = verifier.statement(
       "htlc.reveal.rejected_unless_the_receiver_signs",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           (isReveal(ctx) && !signedByTheReceiver(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
 
-    test("nobody but the receiver reveals") {
+    test(
+      "nobody but the receiver reveals, of every script context, not finished by Lean",
+      Unfinished
+    ) {
+        spurious(revealRejectedUnlessTheReceiverSigns)
+    }
+
+    private val revealRejectedUnlessTheReceiverSignsLimited = verifier.statement(
+      "htlc.reveal.rejected_unless_the_receiver_signs_limited",
+      forAllContextsMax2Signatures(ctx =>
+          (isReveal(ctx) && !signedByTheReceiver(ctx)) ==>: fails(validator, ctx.toData)
+      )
+    )
+
+    test("nobody but the receiver reveals, of two signatures at most") {
         // Of every context of two signatures at most, whatever is revealed, and whenever. That a
         // reveal the receiver signed is accepted, the samples show.
-        check(revealRejectedUnlessTheReceiverSigns, budget)
+        check(revealRejectedUnlessTheReceiverSignsLimited, budget)
     }
 
     private val revealRejectedAfterTheTimeout = verifier.statement(
       "htlc.reveal.rejected_after_the_timeout",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           (isReveal(ctx) && !endsByTheTimeout(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
 
     test("a reveal is rejected unless its validity range ends by the timeout") {
-        // Whoever signs it, and whatever is revealed. A range that ends at no time, at an
-        // infinity, could be included after the timeout. That one which ends at the timeout is
-        // accepted, the samples show.
+        // Whoever signs it, however many sign it, and whatever is revealed: the validator checks
+        // the time first. A range that ends at no time, at an infinity, could be included after
+        // the timeout. That one which ends at the timeout is accepted, the samples show.
         check(revealRejectedAfterTheTimeout, budget)
     }
 
     private val revealRejectedWithoutAPreimage = verifier.statement(
       "htlc.reveal.rejected_without_a_preimage",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           (isReveal(ctx) && !revealsAPreimage(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
 
-    test("a reveal of what is not a preimage of the image is rejected") {
+    test(
+      "a reveal of what is not a preimage of the image is rejected, of every script context, not " +
+          "finished by Lean",
+      Unfinished
+    ) {
+        // The validator checks the signature before the hash.
+        spurious(revealRejectedWithoutAPreimage)
+    }
+
+    private val revealRejectedWithoutAPreimageLimited = verifier.statement(
+      "htlc.reveal.rejected_without_a_preimage_limited",
+      forAllContextsMax2Signatures(ctx =>
+          (isReveal(ctx) && !revealsAPreimage(ctx)) ==>: fails(validator, ctx.toData)
+      )
+    )
+
+    test("a reveal of what is not a preimage of the image is rejected, of two signatures at most") {
         // Whoever signs it, and whenever.
-        check(revealRejectedWithoutAPreimage, budget)
+        check(revealRejectedWithoutAPreimageLimited, budget)
     }
 
     private val noRevealIsAccepted = verifier.statement(
       "htlc.reveal.no_reveal_is_accepted",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           (isReveal(ctx) && endsByTheTimeout(ctx) && signedByTheReceiver(ctx)) ==>:
               fails(validator, ctx.toData)
       )
@@ -252,7 +354,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // counterexample whose datum has an image it takes for the hash of the preimage. Replayed
         // on the Scalus CEK, with the real hash, that reveal is rejected: the counterexample is
         // spurious, and the statement is not refuted. The tactic says that the budget is not at
-        // fault, and names the hash.
+        // fault, and names the hash. Of every context, as of two signatures at most.
         val spurious = inconclusive(
           noRevealIsAccepted,
           UplcBlaster(Budget.LeanSteps(budget), lean, 2.minutes)
@@ -264,24 +366,48 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val receiverRevealsUpToTheTimeout = verifier.statement(
       "htlc.reveal.receiver_reveals_up_to_the_timeout",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           (isReveal(ctx) && endsByTheTimeout(ctx) && signedByTheReceiver(ctx) &&
               revealsAPreimage(ctx)) ==>: succeeds(validator, ctx.toData)
       )
     )
 
-    test("up to the timeout, the receiver reveals any preimage of the image") {
+    test(
+      "up to the timeout, the receiver reveals any preimage of the image, of every script " +
+          "context, not finished by Lean",
+      Unfinished
+    ) {
+        spurious(receiverRevealsUpToTheTimeout)
+    }
+
+    private val receiverRevealsUpToTheTimeoutLimited = verifier.statement(
+      "htlc.reveal.receiver_reveals_up_to_the_timeout_limited",
+      forAllContextsMax2Signatures(ctx =>
+          (isReveal(ctx) && endsByTheTimeout(ctx) && signedByTheReceiver(ctx) &&
+              revealsAPreimage(ctx)) ==>: succeeds(validator, ctx.toData)
+      )
+    )
+
+    test(
+      "up to the timeout, the receiver reveals any preimage of the image, of two signatures at most"
+    ) {
         // The receiver who knows the secret is paid, whatever else the transaction has: a lower
         // bound of its validity range, and another signature before or after the receiver's.
-        check(receiverRevealsUpToTheTimeout, budget)
+        check(receiverRevealsUpToTheTimeoutLimited, budget)
     }
 
     // A refund and a reveal, and the bounds
 
+    // Two script contexts: not of one transaction, which the validator only ever sees, but of two,
+    // each a run of the validator of its own, the receiver's reveal and the committer's refund of
+    // outputs under one datum. The statement compares the two runs: no time is in the window of
+    // both, so the committer cannot refund while the receiver may still reveal. It follows from
+    // the two statements of the time above, a reveal ending by the timeout and a refund starting
+    // at it or later; stated so, the solver does the arithmetic of the bounds.
     private val revealEndsBeforeRefundBegins = verifier.statement(
       "htlc.reveal_and_refund.reveal_ends_before_refund_begins",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(revealed =>
-          forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(refunded =>
+      forAllData[ScriptContext](revealed =>
+          forAllData[ScriptContext](refunded =>
               (isReveal(revealed) && isRefund(refunded) && datumOf(revealed) == datumOf(refunded)
                   && startsBeforeTheEnd(refunded, revealed)) ==>:
                   (fails(validator, revealed.toData) || fails(validator, refunded.toData))
@@ -295,29 +421,55 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // rejected. A transaction is valid at a time before the end of its range and not before
         // its start, so there is no time at which both a reveal and a refund are valid. That a
         // reveal that ends at the timeout and a refund that starts at it are both accepted, the
-        // samples show.
+        // samples show. The validator checks the time before it searches the signatures.
         check(revealEndsBeforeRefundBegins, budget)
     }
 
     private val closureOfTheLowerBoundDoesNotMatter = verifier.statement(
       "htlc.bounds.closure_of_the_lower_bound_does_not_matter",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           succeeds(validator, ctx.toData) <=> succeeds(validator, withTheLowerBoundFlipped(ctx))
       )
     )
     private val closureOfTheUpperBoundDoesNotMatter = verifier.statement(
       "htlc.bounds.closure_of_the_upper_bound_does_not_matter",
-      forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+      forAllData[ScriptContext](ctx =>
           succeeds(validator, ctx.toData) <=> succeeds(validator, withTheUpperBoundFlipped(ctx))
       )
     )
 
-    test("whether a bound of the validity range is inclusive does not matter to the validator") {
+    test(
+      "whether a bound of the validity range is inclusive does not matter to the validator, of " +
+          "every script context, not finished by Lean",
+      Unfinished
+    ) {
+        // An accepted run searches the signatures. Each takes Lean about three minutes.
+        spurious(closureOfTheLowerBoundDoesNotMatter)
+        spurious(closureOfTheUpperBoundDoesNotMatter)
+    }
+
+    private val closureOfTheLowerBoundDoesNotMatterLimited = verifier.statement(
+      "htlc.bounds.closure_of_the_lower_bound_does_not_matter_limited",
+      forAllContextsMax2Signatures(ctx =>
+          succeeds(validator, ctx.toData) <=> succeeds(validator, withTheLowerBoundFlipped(ctx))
+      )
+    )
+    private val closureOfTheUpperBoundDoesNotMatterLimited = verifier.statement(
+      "htlc.bounds.closure_of_the_upper_bound_does_not_matter_limited",
+      forAllContextsMax2Signatures(ctx =>
+          succeeds(validator, ctx.toData) <=> succeeds(validator, withTheUpperBoundFlipped(ctx))
+      )
+    )
+
+    test(
+      "whether a bound of the validity range is inclusive does not matter to the validator, of " +
+          "two signatures at most"
+    ) {
         // It accepts a context where it accepts the one whose bound is the other way. That a
         // refund's lower bound is inclusive, and a reveal's upper one exclusive, is how the ledger
         // gives them, and what the comparisons with the timeout rely on.
-        check(closureOfTheLowerBoundDoesNotMatter, budget)
-        check(closureOfTheUpperBoundDoesNotMatter, budget)
+        check(closureOfTheLowerBoundDoesNotMatterLimited, budget)
+        check(closureOfTheUpperBoundDoesNotMatterLimited, budget)
     }
 
     // Samples
@@ -419,6 +571,13 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
   * as where the datum is not a [[Config]]: as a premise, it then does not hold.
   */
 object HtlcVerificationTest {
+
+    /** `body` of every script context of two signatures at most: the statements with `Limited` in
+      * their names. The validator searches the signatures, and the tactic cannot follow a loop over
+      * a list of unknown length: within the limit, its runs end.
+      */
+    inline def forAllContextsMax2Signatures(inline body: ScriptContext => Prop | Boolean): Prop =
+        forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(body)
 
     /** Whether `ctx` is of spending an output. */
     inline def isSpending(inline ctx: ScriptContext): Boolean = ctx.scriptInfo match
