@@ -376,8 +376,12 @@ asks Lean only what changed:
 sbt "scalusExamplesJVM/verify scalus.examples.htlc.HtlcVerificationTest"
 ```
 
-In this build the examples depend on this module as a project, so `verify` builds no workspace
-for them: build the library's and `LinearVesting`'s with `lake build` first, as above.
+In this build the examples depend on this module as a project, so the plugin's `leanBuild` has
+no workspace of theirs to build. The build sets their `leanBuild` to run `lake build` in the
+library's workspace and then in `LinearVesting`'s, and `verify` runs it first. `testOnly` does
+not: after a Lean change, or a new pin in the library's manifest, run
+`sbt scalusExamplesJVM/leanBuild`, or `lake build` as above. A check whose imports are not built
+fails with "Imports are out of date and must be rebuilt".
 
 ### `LeanProofs` and a test framework
 

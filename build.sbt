@@ -818,7 +818,37 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       Test / fork := true,
       // Expose the compiler version to tests so they can pick version-specific baselines
       // (budgets / script sizes drift between the 3.3.x LTS and 3.8.x). See ScalaCompilerVersion.
-      Test / javaOptions += s"-Dscalus.test.scalaVersion=${scalaVersion.value}"
+      Test / javaOptions += s"-Dscalus.test.scalaVersion=${scalaVersion.value}",
+      // `verify` runs `leanBuild` before the suites of proofs. The plugin's `leanBuild` builds
+      // the project's own workspace, and these examples have none: their suites run in the
+      // workspace of Scalus's Lean library (LeanProofs.libraryWorkspace), and
+      // VestingVerificationTest runs in LinearVesting's, which requires that library by its path.
+      // So this builds those two, in that order. A new pin of Blaster or PlutusCore is then
+      // built before a check asks for it. UsdcxMintingPolicyVerificationTest is not a suite of
+      // proofs and needs the Z3 of its own nix shell, so its workspace is not built here.
+      leanBuild := {
+          val log = streams.value.log
+          val sources = (scalusVerification / baseDirectory).value / "src" / "main" / "lean"
+          // Where LeanProofs.libraryWorkspace looks: SCALUS_LEAN_WORKSPACE, else the sources.
+          val library =
+              sys.env.get("SCALUS_LEAN_WORKSPACE").filter(_.nonEmpty).map(file).getOrElse(sources)
+          val vesting = baseDirectory.value / "src" / "test" / "lean" / "LinearVesting"
+          for (workspace <- Seq(library, vesting)) {
+              log.info(s"Running `lake build` in $workspace")
+              val output =
+                  scala.sys.process.ProcessLogger(line => log.info(line), line => log.info(line))
+              val exit =
+                  try scala.sys.process.Process(Seq("lake", "build"), workspace).!(output)
+                  catch {
+                      case e: java.io.IOException =>
+                          sys.error(
+                            s"leanBuild could not run `lake`: ${e.getMessage}. " +
+                                "Run sbt in the nix shell, which has Lean."
+                          )
+                  }
+              if (exit != 0) sys.error(s"`lake build` failed in $workspace, with exit code $exit")
+          }
+      }
     )
     .jsSettings(jsModuleSettings *)
     .jsSettings(
