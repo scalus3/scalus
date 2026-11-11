@@ -1,0 +1,140 @@
+---
+title: Tuning Your Proof - Budgets, Data Limits and Time Limits
+sidebarTitle: Tuning Your Proof
+description: What to do when a Scalus proof comes back inconclusive or does not finish. Let the tactic find the budget of steps, give one yourself, limit the length of a script context's collections with forAllDataLimited, and set the time a check may take.
+---
+
+import { Callout } from 'nextra/components'
+
+# Tuning Your Proof
+
+Not every statement is decided at once. A check can come back inconclusive, or run until its time
+limit. Three things can be tuned: the **budget** of steps Lean's machine runs each program, the
+**data** the statement ranges over, and the **time** a check may take.
+
+## The Budget
+
+Lean runs each program of a statement for at most a budget of steps of its CEK machine, and
+Blaster reasons about that bounded run.
+
+- **A proof at any budget holds without the budget.** A run that needs more steps counts against
+  the proof: a claim must return `true` within the budget, and a premise that has not finished
+  counts as true. So too small a budget cannot prove a false statement.
+- **Too small a budget gives a spurious counterexample.** Scalus replays it on its own CEK
+  machine, sees that the statement holds there, and reports `Inconclusive`. The reason says how
+  many steps would do.
+
+### Let Scalus Find It
+
+`check(statement)`, without a budget, searches for one (`Budget.Auto`). It starts at 100 steps.
+Where Lean's counterexample is spurious, Lean's machine counts what each program does on it, and
+the search goes on at the least budget at which the statement holds there. For a statement that
+the vesting validator rejects an early withdrawal, the search went 100, 262, 649, 694, 1315, 1573,
+1584, 1608, and proved it there: eight checks in 45 seconds.
+
+The budget found is kept with the result, in `<Suite>.proofs.json`. A statement that has not
+changed is taken as it was kept. When the code changes, the next search starts at the kept
+budget, so a statement still decided there takes one check.
+
+### Give It Yourself
+
+`check(statement, budget = 4000)` checks at a fixed budget (`Budget.LeanSteps(4000)`). Use it when
+you know the cost of the statement, or to save the search on a run without kept results.
+
+- **Stay close above the worst path.** Proof cost grows faster than the budget. For a `gcd`
+  property whose worst sample needs 203 steps, budget 250 proved in 2 seconds, 350 took 52
+  seconds, and 500 did not finish.
+- **The path that counts is that of the runs the statement is about.** A statement that a
+  validator rejects a transaction needs the budget of the rejection, not that of a whole accepted
+  spend. The vesting validator rejects an early withdrawal after about 1600 steps: the statement
+  is proved in 12 seconds at budget 1700, and not at all at 12000.
+
+<Callout type="warning">
+  Do not derive budgets from `ExUnits`. Plutus charges for each `Eval` transition, while Lean's
+  machine counts `Eval` and `Return`: a Lean budget is about 1.85 times Scalus's step count.
+</Callout>
+
+### Within a Bound
+
+`Budget.Within(n)` proves a statement of the inputs whose runs end within `n` steps. A run that the
+budget cuts is read in the statement's favour, so it is no counterexample. The result is
+`ProvenWithin`, with the bound: a weaker statement, not a theorem. Use it for a statement that no
+budget proves, to learn that it holds as far as the runs go.
+
+## Limit the Data
+
+A validator that walks a collection of the script context, such as the signatories, the inputs or
+the outputs, walks it to its end. For a statement over every context, the solver can always propose
+a longer collection than the budget's runs walk. Its counterexample is then spurious at every
+budget, and the check runs until its time limit.
+
+`forAllDataLimited` bounds the length of the collections of a variable:
+
+```scala
+forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
+    (isRefund(ctx) && !signedByTheCommitter(ctx)) ==>: fails(validator, ctx.toData)
+)
+```
+
+- **The limit is of the shape of the values:** `maxCollectionLength(x) <= n`, the length of a
+  collection of `x` compared with a number (`x.txInfo.inputs.length <= 3`), `isEmpty`, `nonEmpty`,
+  and `forall` over a list, or over a map's keys or values, of the limits of each element, joined
+  with `&&`. Any other condition belongs in the statement's premise; the compiler says so.
+- **Each test checks the limits first**, with a walk that ends, so a walk over a limited list runs
+  to its end. The statement is proved as a theorem of the values within the limits. With
+  `Budget.Auto`, the search starts at the steps the programs take on the largest values the limits
+  allow.
+- **It says nothing of larger values.** Name the statement so, and keep the statement of every
+  context beside it.
+
+The HTLC suite does all three for the rules that depend on the signatories. It states each rule of
+every context, and tags that test `Unfinished`. It states the rule again of the contexts of at most
+two signatures, under the same name with `_limited`, where Lean proves it:
+
+```scala
+inline def forAllContextsMax2Signatures(inline body: ScriptContext => Prop | Boolean): Prop =
+    forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(body)
+
+private val refundRejectedUnlessTheCommitterSignsLimited = verifier.statement(
+  "htlc.refund.rejected_unless_the_committer_signs_limited",
+  forAllContextsMax2Signatures(ctx =>
+      (isRefund(ctx) && !signedByTheCommitter(ctx)) ==>: fails(validator, ctx.toData)
+  )
+)
+```
+
+The rules that the validator decides by the time, before it reads the signatories, need no limit:
+see [Your First Proof](/docs/verification/first-proof#why-no-limit-is-needed-here).
+
+## The Time Limit
+
+A check has a time limit by the clock: ten minutes (`UplcBlaster.defaultTimeout`). A check that
+reaches it is given up, and is `Inconclusive`. The reason says where the check was:
+
+- **still running a program symbolically:** the budget lets a program run through a long walk.
+  A smaller budget, or limited data, may cure it;
+- **with the solver:** the statement is hard for the solver as it is stated.
+
+To give a check another limit, pass the tactic yourself:
+
+```scala
+check(VerificationRequest(statement, UplcBlaster(Budget.Auto, lean, 20.minutes)))
+```
+
+- With `Budget.Auto`, the limit is that of the whole search. `withAttemptTimeout(t)` adds one for
+  each check of the search.
+- `withoutTimeout` lifts the limit.
+- `withMaxHeartbeats(n)` sets Lean's own limit of work for one command, twice Lean's default
+  unless you say otherwise; `0` means none. It ends a check the same way on every machine, but the
+  solver's time does not count towards it.
+
+## Mark What Does Not Finish
+
+Tag a test of a statement that Lean does not finish with `Unfinished`. Such a test waits for its
+time limit, and the solver can take gigabytes meanwhile. `verify` leaves these tests out, and so
+should `test` (see [sbt Commands](/docs/verification/sbt-commands#tests-that-lean-does-not-finish)).
+They stay in the suite as the record of what is not proved yet, and `testOnly` runs them on purpose.
+
+To see what Lean is given for a check that does not finish, keep the checks
+(`SCALUS_LEAN_KEEP_CHECKS`) and run one by hand: see
+[Looking at a Check](/docs/verification/lean-workspace#looking-at-a-check).

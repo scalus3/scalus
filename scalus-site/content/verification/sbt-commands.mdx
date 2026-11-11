@@ -1,0 +1,128 @@
+---
+title: Verification sbt Commands - verify, leanInit, leanBuild, leanExport, leanProve
+sidebarTitle: sbt Commands
+description: The Scalus sbt plugin's verification tasks. Run every proof of a project with sbt verify, create and build the Lean workspace, export statements to Lean, build proofs written by hand, and set up CI with and without Lean.
+---
+
+import { Callout } from 'nextra/components'
+
+# sbt Commands
+
+The [Scalus sbt plugin](/docs/dapp-development/sbt-plugin) has the verification tasks. `leanInit`,
+`leanBuild` and `leanProve` skip a project that has no `scalus-verification` among its test
+dependencies, and `verify` finds no suites of proofs there, so you can run them for a whole build.
+The tasks that write a Lean workspace run one at a time.
+
+| Task                 | What it does                                                                                           | Needs Lean |
+| -------------------- | ------------------------------------------------------------------------------------------------------ | ---------- |
+| `verify [tests]`     | `leanBuild`, then the suites of proofs with Lean required, then `leanProve` where there are proofs by hand | yes        |
+| `leanInit`           | creates the workspace where it is missing, and brings Scalus's Lean library in `.scalus/` up to date    | no         |
+| `leanBuild`          | `leanInit`, then `lake build` in the workspace                                                         | yes        |
+| `leanProve`          | `leanInit`, then `lake build <Package>Proofs`: the generated statements and your proofs                | yes        |
+| `leanExport [tests]` | runs the tests, writing every named statement proved into `<Package>/Generated`                        | no         |
+| `ualExport [tests]`  | runs the tests, writing the statements as Universal Annotation Language documents                      | no         |
+
+`[tests]` are test names or patterns, as `testOnly` takes them: `verify *HtlcProofsTest`.
+`leanExport`, `leanProve` and `ualExport` are for a workspace with Lean of your own: see
+[Mixing UPLC and Lean Proofs](/docs/verification/advanced/lean-proofs).
+
+## `verify`
+
+```bash copy
+sbt verify                                         # every suite of proofs of the project
+sbt "verify *HtlcProofsTest *VestingProofsTest"    # the suites named
+sbt contracts/verify                               # one project of a multi-project build
+```
+
+`verify` runs every proof of the project, in three steps:
+
+1. **`leanBuild`.** The first build of a workspace takes minutes. Later ones take seconds.
+2. **The suites of proofs.** Without arguments, these are the project's tests that extend
+   `LeanProofsSuite`; with arguments, the tests named. They run with **Lean required**: a statement
+   that cannot be checked here fails the task, where a plain `sbt test` would cancel its test. The
+   tests tagged `Unfinished` are left out.
+3. **`leanProve`**, where the workspace has a Lean module under `<Package>/Proofs`. A workspace
+   without proofs by hand has nothing the checks of step 2 did not prove already, so the step is
+   skipped.
+
+`verify` uses the kept results. A statement whose kept result still agrees with the code is not
+asked of Lean again, so a second `verify` after a small change only proves what the change
+touched. The results Lean finds are written into the `<Suite>.proofs.json` files: commit them
+with the change. To prove everything again, recalculate. A result that differs from the kept one
+then fails:
+
+```bash copy
+SCALUS_KEPT_RESULTS=recalculate sbt verify
+```
+
+`verify` does not export the statements. When the workspace has a module of a statement whose
+code changed, that statement's test fails and says to run `leanExport`. Run it, then `verify`
+again.
+
+## Tests That Lean Does Not Finish
+
+Tag a test about a statement that Lean does not finish with `Unfinished`. Such a test waits for
+its time limit, and the solver can take gigabytes meanwhile. `verify` leaves them out, and so
+should `test`:
+
+```scala filename="build.sbt" copy
+Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-l", "scalus.verify.uplcblaster.Unfinished")
+```
+
+Run them on purpose with `testOnly`:
+
+```bash copy
+sbt "testOnly *VestingProofsTest -- -n scalus.verify.uplcblaster.Unfinished"
+```
+
+## Settings
+
+| Setting              | Default                  | What it is                                         |
+| -------------------- | ------------------------ | -------------------------------------------------- |
+| `leanWorkspace`      | `src/test/lean/<Project>` | the project's Lean workspace                       |
+| `ualExportDirectory` | `target/ual`             | where `ualExport` writes, a directory for each suite |
+
+## Environment Variables
+
+| Variable                  | Effect                                                                                                    |
+| ------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `SCALUS_KEPT_RESULTS`     | how kept results are used: `use`, `recalculate`, `frozen`, or `off`. The default depends on the run: see [kept results](/docs/verification/lean-workspace#what-persists-the-kept-results) |
+| `SCALUS_REQUIRE_LEAN`     | set: a statement that cannot be checked fails, and every statement is proved again                        |
+| `SCALUS_LEAN_KEEP_CHECKS` | a directory: every check that runs is also written there, to read or to run by hand                        |
+| `SCALUS_LEAN_EXPORT`      | set: what `leanExport` does, without sbt                                                                  |
+| `SCALUS_UAL_EXPORT`       | a directory: what `ualExport` does, without sbt                                                           |
+| `SCALUS_UAL_ENVIRONMENT`  | the manifest of a consumer's environment, for the checking contexts of `ualExport`                        |
+
+## Continuous Integration
+
+Run the proofs in two places.
+
+**On every pull request, without Lean.** The regular `sbt test` passes each statement on its kept
+result. A change of the code that makes a result stale cancels that statement's test, and the
+reason names what moved. Nothing has to be installed, and the workspace need not be committed:
+the tests create it.
+
+**Nightly, or when the contracts change, with Lean.** Prove everything again, and check that the
+committed results are those of the code:
+
+```yaml filename=".github/workflows/proofs.yml"
+- uses: actions/cache@v4
+  with:
+    path: |
+      ~/.elan
+      .scalus/ScalusProofs/.lake
+      src/test/lean/*/.lake
+    key: lean-${{ hashFiles('src/test/lean/*/lean-toolchain', 'src/test/lean/*/lake-manifest.json') }}
+- name: Prove
+  run: SCALUS_KEPT_RESULTS=recalculate sbt verify
+- name: The kept results are current
+  run: git diff --exit-code -- '*.proofs.json'
+```
+
+The job needs elan and Z3 on the runner. Caching `~/.elan` and the `.lake` directories saves the
+build of Blaster and PlutusCore, which otherwise takes several minutes on every run.
+
+<Callout type="info">
+  Scalus's own [Lean-Proofs workflow](https://github.com/scalus3/scalus/blob/master/.github/workflows/lean-proofs.yml)
+  works this way, with `SCALUS_REQUIRE_LEAN` and a check that no `*.proofs.json` changed.
+</Callout>
