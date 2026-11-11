@@ -167,7 +167,9 @@ a statement whose result is kept is exported as one that was proved now.
   the test that proved it.
 - The tasks tell the tests by resources on their class path (`scalus/verify/lean/export`,
   `scalus/verify/ual/export`), as the workspace is told, and delete them after: a plain `test`
-  exports nothing.
+  exports nothing. `verify` says so that Lean is required (`scalus/verify/lean/require`), and
+  exports nothing: a module of a statement whose code changed fails the statement's test, which
+  says to run `leanExport`.
 - Without sbt, the environment variables `SCALUS_LEAN_EXPORT` (set) and `SCALUS_UAL_EXPORT` (a
   directory) do the same. `SCALUS_UAL_ENVIRONMENT` names the manifest of a consumer's environment,
   for the checking contexts.

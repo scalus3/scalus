@@ -91,7 +91,8 @@ Not built yet:
   from `@Compile` objects
   ([statement capture](verification-details/prop-capture.md#function-tables-from-compile-objects-proposed));
 - a serializable `Prop`;
-- the `sbt verify` runner (§5.4) and a report. Proofs run as test suites instead;
+- the `sbt verify` runner of §5.4, which discovers verifier instances, and a report. Proofs run as
+  test suites instead, and the sbt plugin's `verify` runs those suites with Lean required;
 - failing a suite without a negative control (§7);
 - statements harvested from `require` (§8.3).
 
@@ -944,6 +945,9 @@ test("vesting authorisation is proved about the shipped script") {
   compile time we only capture: statements become values.
 - **`sbt verify`** discovers verifier instances and their batch requests the way test frameworks
   discover suites. It calls each verifier's `verify` method and keeps the results (§5.6).
+  Built in part: the sbt plugin's `verify` discovers the suites of proofs, the tests that extend
+  `LeanProofsSuite`, and runs them with Lean required and the kept results in use, then builds the
+  proofs written by hand (`scalus-verification/README.md`).
 - **At test time**, `VerificationResult`s are read from what is kept, and policy tests like the
   one above run.
 - **In CI**, keep the split that `scalus-verification` already uses. At PR time, a cheap check that
