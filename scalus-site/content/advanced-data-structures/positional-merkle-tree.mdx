@@ -1,0 +1,154 @@
+---
+title: Positional Merkle Tree
+sidebarTitle: Positional Merkle Tree
+description: Fixed-depth positional commitments with single proofs, SSZ multiproofs and verify-and-empty for Cardano smart contracts.
+---
+
+# Positional Merkle Tree
+
+`PositionalMerkleTree` commits to a fixed number of slots and can empty occupied slots with a proof. A treasury can commit to its payout outputs, pay each selected output once, and retain only the updated root in its datum. Equal outputs at different positions are separate leaves.
+
+The caller authenticates **both the current root and the depth**, through a datum or script parameter, and binds every verified position to the slot actually paid or changed. An empty slot and an emptied slot have the same value. Emptying preserves positions and capacity.
+
+## Encoding
+
+This is Ethereum SSZ's fixed-size chunk tree **with BLAKE2b-256 replacing SHA-256**. The maintained reference is **ethereum/ssz-specs v0.1.0**, pinned at **`7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70`**: [`src/ssz/trees.py`](https://github.com/ethereum/ssz-specs/blob/7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70/src/ssz/trees.py) defines `merkleize(chunks, limit = 2^D)`, [`src/ssz/chunks.py`](https://github.com/ethereum/ssz-specs/blob/7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70/src/ssz/chunks.py) supplies zero subtrees, and [`src/ssz/gindex.py`](https://github.com/ethereum/ssz-specs/blob/7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70/src/ssz/gindex.py) defines generalized indices and helper ordering. These agree with consensus-specs v1.5.0 for this tree's valid arithmetic. There is no SSZ list length mixed into the root, and no domain tags.
+
+For depth `D`, positions are integers in `[0, 2^D)`. Depth zero is a single slot. The streaming builder and verifier support depths 0 through 256; the materialized off-chain tree uses integer array indices and supports depths 0 through 29, subject to available memory.
+
+Let `H(x) = blake2b_256(x)`, the unkeyed 32-byte digest, and `++` mean byte concatenation:
+
+- Occupied leaf at position `p`: `H(elementBytes)`. The application defines and consistently serializes `elementBytes`; the library adds no framing.
+- Unused or emptied leaf: `Z[0] = 32 zero bytes`. An element whose digest equals `Z[0]` is refused.
+- Internal node: `H(left32 ++ right32)`, preserving left/right order.
+- Empty subtree of height `h + 1`: `Z[h + 1] = H(Z[h] ++ Z[h])`.
+- Root: pad the leaf chunks to exactly `2^D` with `Z[0]` and hash adjacent pairs until one chunk remains. Do not duplicate the last occupied leaf or mix in a count.
+
+The root has generalized index 1; index `g` has children `2*g` and `2*g + 1`. Position `p` has generalized index `2^D + p`.
+
+### Single proof
+
+A proof is **exactly `32 * D` bytes**: the sibling at the leaf level first, then each sibling up to the root. There are no direction bytes or indices in the proof. At level `i`, starting with `i = 0`, use bit `i` of `p`: zero hashes `current ++ sibling`, one hashes `sibling ++ current`. Depth is taken from authenticated configuration, never from proof length. Negative or out-of-range positions fail, including nonzero bits above depth.
+
+Verification hashes the submitted element. Verify-and-empty carries two hashes over the same siblings: one starts at `H(elementBytes)`, the other at `Z[0]`. It checks the first against the supplied root and returns the second. Membership returns the unchanged root after the same membership check, computing only the old path.
+
+### Multiproof
+
+The query is a nonempty list of `(position, elementBytes)` pairs with strictly ascending, distinct, in-range positions. Elements are unhashed. Repeated values are allowed; repeated positions are refused. In the Scala API this is the Scalus prelude `List[PositionalMerkleTree.Leaf]`. Its `ToData` encoding is a Plutus Data list of `Constr(0, [I(position), B(elementBytes)])`; this query encoding is separate from the raw proof bytes.
+
+To derive the helpers independently:
+
+1. For each selected generalized index `g = 2^D + p`, add `g` to a path set and `g xor 1` to a sibling set, then set `g = floor(g / 2)`. Repeat while `g > 1`; do not add the root.
+2. Subtract the union of all path indices from the union of all sibling indices.
+3. Sort the remaining indices in descending numeric order. Concatenate their 32-byte hashes in that order. This is exactly SSZ's `get_helper_indices` order.
+
+For example, at depth 3, positions `[0, 1, 6]` have generalized indices `[8, 9, 14]` and helper indices `[15, 6, 5]`. Their proof is `hashAt(15) ++ hashAt(6) ++ hashAt(5)`, 96 bytes. A one-position multiproof is byte-for-byte the single proof. Selecting every slot requires zero helpers.
+
+The verifier processes selected nodes from right to left within each level. It merges two selected siblings, or reads the next helper when a sibling is absent. Each merge computes both the original and replacement parent. It repeats over the parents until the authenticated depth is exhausted, checks the original root, and returns the replacement root. Missing helpers fail before slicing. Extra helpers and trailing bytes fail at the root; every supplied byte must be consumed.
+
+Helpers are parsed at fixed 32-byte offsets. There are no per-helper length fields: splitting identical wire bytes externally into 31+33 bytes rather than 32+32 does not change the proof. A changed concatenation must still authenticate the root under the fixed 32-byte interpretation. Off-chain custom node digests must also return exactly 32 bytes; invalid widths fail immediately and digest exceptions propagate.
+
+## Example
+
+Off chain, construct the tree and prove two outputs. Rebuild later proofs from the updated tree:
+
+```scala
+import scalus.crypto.tree.PositionalMerkleTree
+import scalus.uplc.builtin.ByteString
+
+val outputs = Vector("output-0", "output-1", "output-2").map(ByteString.fromString)
+val tree = PositionalMerkleTree.fromElements(outputs, 15)
+val positions = Vector(0, 2)
+val proof = tree.proveMulti(positions)
+val updated = tree.emptied(positions)
+
+// When only a commitment is needed, the iterator is consumed once with O(depth) memory.
+val root = PositionalMerkleTree.rootFromElements(outputs.iterator, 15)
+assert(root == tree.rootHash)
+```
+
+Inside an `@Compile` validator, take `oldRoot` and `depth` from current authenticated state and require the continuing datum to contain the returned root. Here `outputs` is a Scalus prelude `List` of canonical element bytes checked against the actual payouts; use the same positions for verification and payment:
+
+```scala
+import scalus.cardano.onchain.plutus.crypto.tree.PositionalMerkleTree
+import scalus.cardano.onchain.plutus.prelude.List
+
+val nextRoot = PositionalMerkleTree.verifyAndEmptyMany(
+  oldRoot,
+  depth,
+  List(
+    PositionalMerkleTree.Leaf(0, outputs.at(0)),
+    PositionalMerkleTree.Leaf(2, outputs.at(2))
+  ),
+  proof
+)
+```
+
+For one payout use `verifyAndEmpty(root, depth, position, element, proof)`. For read-only membership use `verifyMembership` with the same arguments. A later payout needs a proof against the updated root: old-root single proofs cannot simply be reused after a prior payout.
+
+The treasury validator must also check the actual paid outputs, preserve its state token and continuing value, and authenticate the continuing datum. This library verifies a root transition; it does not authorize a treasury transaction.
+
+Verify-and-empty proves membership against **the root supplied to it**. An old proof still succeeds when deliberately checked against its old root. The caller must require the current state root, and must bind the verified position to the actual payout or changed slot. Verifying slot 0 and paying slot 1 is not authorized by that proof. After emptying slot 0, an untouched slot's old proof can also be stale when one of its helper subtrees contained slot 0; regenerate it against the updated tree.
+
+## Security
+
+The commitment assumes BLAKE2b-256 collision and preimage resistance, consistent element serialization, and an authenticated depth and root. Fixed depth plus exact path length prevents an internal node from being accepted as a leaf at a different level, even though both use the same hash function. A different authenticated depth defines a different interpretation; the root alone does not bind depth.
+
+Zero32 has no known leaf preimage. Consequently unused and emptied slots cannot prove an element, and a valid emptying proof cannot be replayed against the new root. Strictly increasing bounded positions prevent paying one slot twice in a batch. Recomputing old and new roots together shares one authenticated topology. Exact helper consumption prevents malformed multiproofs from reading missing nodes or ignoring unused helpers. Zero-valued helpers themselves are valid, necessary hashes.
+
+The regression suites name CVE-2012-2459 (duplicate-last padding), CVE-2017-12842 and tBTC GHSA-wg2x-rv86-mmpx (leaf/internal ambiguity and wrong depths), CVE-2023-34459 (malformed multiproofs), and the CVE-2018-17144 duplicate-position analogue. These are regression analogies, not claims that the historical exploits apply unchanged to this tree.
+
+## Costs and verification
+
+At depth 15 a single proof is 480 bytes. Verify-and-empty hashes the element once and each old/new parent once: 31 BLAKE2b-256 calls. Membership uses 16 calls. A multiproof shares selected sibling paths and their ancestors. Proof sizes below count only the concatenated helpers; positions, elements and Plutus Data framing are additional transaction bytes.
+
+The committed tests compare both SHA-256 and BLAKE2b trees to 86 positive arithmetic cases generated by executing the pinned maintained SSZ code, including the root calculators in [`src/ssz/verification.py`](https://github.com/ethereum/ssz-specs/blob/7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70/src/ssz/verification.py). The BLAKE2b vectors also run as Scala and compiled Plutus V3. Both hashes initialize their zero caches before any SSZ imports in separate generator processes. The 42 v1.5.0 cases remain an arithmetic cross-check. Independent full rebuilding checks random duplicate-heavy trees at depths 1 through 6 and every nonempty subset at depths 1 through 3. Tests assert nonzero executed counts per depth, hash and applicable backend. The fixture's README records the sources, generation inputs and source digests.
+
+### Reproducing the fixtures
+
+The complete input and query recipe for `ssz-v0.1.0.json` is:
+
+1. Run the node hashes in order `sha256`, then `blake2b256`, in separate processes. Initialize the selected node hash before importing any SSZ module so its zero-subtree cache uses that hash. In **both** runs, element `i` is the ASCII bytes of `element-{i % 7}`, with zero-based `i`, decimal digits and no newline. Its occupied chunk is always unkeyed BLAKE2b-256 of those bytes, even in the SHA-256 node-hash run.
+2. Visit depths `[1, 2, 3, 4, 5, 6, 15]` in order, with `capacity = 2^depth`. Start with profiles `(shape, count)` of `("empty", 0)`, `("partial", max(1, capacity * 3 // 5))` and `("full", capacity)`, where `//` is integer division. Then consider counts `[1, 3, 5, capacity - 1]` in order; append `("prefix-N", N)` only when `N <= capacity` and that count is not already present. Fill positions `0..count-1` with the element chunks and pad to capacity with zero32. Compute `root` without length mixing. This yields 43 profiles per hash, 86 total.
+3. For each profile, generate single proofs at the sorted distinct positions `{0, capacity - 1, count // 2, max(0, count - 1)}`. Record `occupied = position < count`; a proof for an unused slot authenticates its zero chunk, not an element.
+4. For nonempty profiles, generate multiproof queries in this order: positions `0..min(4, count)-1`, then the sorted distinct set `{0, count // 2, count - 1}`. Retain both queries even when they coincide. Append `[0, 1, 6]` for the full depth-three profile. Empty profiles have no multiproof queries. Set each generalized index to `capacity + position`, obtain `helperIndices` from `get_helper_indices`, and concatenate their 32-byte subtree hashes in that descending index order.
+5. For every single or multi query, set its selected chunks to zero32 and re-merkleize at the same capacity to obtain `emptiedRoot`. Encode roots and concatenated proof bytes as lowercase hexadecimal without `0x`.
+
+Each JSON profile records `algorithm`, `depth`, `shape`, `count`, `root`, `singles` and `multis`. A single records `position`, `occupied`, `proof` and `emptiedRoot`; a multi records `positions`, `helperIndices`, `proof` and `emptiedRoot`. Preserve the profile and query order above. To reproduce the retained `ssz-v1.5.0.json` cross-check, use only the `empty`, `partial` and `full` profiles, with the same elements and query rules; this yields 21 profiles per hash, 42 total.
+
+For byte-identical files, write records in the field order listed here with Python `json.dumps(records, indent=2) + "\n"`.
+
+The reference supplies valid arithmetic, never rejection verdicts. Negative expectations follow this API's strict contract. In particular, the legacy verifier can discard duplicate or nested claims, and its float depth helper rounds `2^53 - 1` incorrectly. This implementation uses bounded integer shifts or arbitrary-precision integer arithmetic throughout.
+
+### Measured costs
+
+`PositionalMerkleTreeBudgetTest` prints CPU steps, memory units and raw proof bytes using `Options.release` and `PlutusVM.makePlutusV3VM()`, which loads the shipped `CardanoInfo.mainnet` cost model. With Scala 3.3.9, depth 15 and 32-byte elements, single verify-and-empty costs **46,503,274 CPU steps and 161,238 memory units**, with a 480-byte proof.
+
+The sequential column evaluates all `k` single operations in one compiled call, building each proof against the preceding updated root. The multiproof column evaluates one batch against the original root. Contiguous positions are `0` through `k - 1`; scattered positions are the sorted set `{(i * 7919) mod 32768 | 0 <= i < k}`. Element `i` is its unsigned integer value, encoded big-endian in 32 bytes. The measurements include decoding the supplied Plutus Data argument and require successful results equal to the off-chain updated root.
+
+| Positions | k | Single proofs (bytes) | Sequential CPU | Sequential memory | Multiproof (bytes) | Multiproof CPU | Multiproof memory |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Contiguous | 2 | 960 | 93,559,178 | 325,920 | 448 | 112,959,796 | 439,836 |
+| Contiguous | 4 | 1,920 | 185,402,676 | 643,944 | 416 | 126,067,798 | 482,110 |
+| Contiguous | 8 | 3,840 | 369,121,672 | 1,280,192 | 384 | 157,306,376 | 584,946 |
+| Contiguous | 16 | 7,680 | 736,623,664 | 2,553,088 | 352 | 224,806,098 | 808,906 |
+| Contiguous | 32 | 15,360 | 1,471,755,648 | 5,099,680 | 320 | 364,828,100 | 1,275,114 |
+| Scattered | 2 | 960 | 93,719,178 | 326,920 | 832 | 182,567,192 | 683,242 |
+| Scattered | 4 | 1,920 | 185,834,676 | 646,644 | 1,632 | 343,071,674 | 1,244,114 |
+| Scattered | 8 | 3,840 | 369,953,672 | 1,285,392 | 2,880 | 593,902,628 | 2,126,370 |
+| Scattered | 16 | 7,680 | 737,983,664 | 2,561,588 | 5,312 | 1,075,283,874 | 3,827,961 |
+| Scattered | 32 | 15,360 | 1,474,155,648 | 5,114,680 | 10,144 | 2,049,031,158 | 7,253,570 |
+
+Multiproofs save bytes in every measured batch. They save CPU and memory for these contiguous batches starting at `k = 4`; the level-fold bookkeeping makes these scattered batches more expensive than sequential single proofs. Choose based on both transaction size and execution budget. These are helper-library costs, not a complete treasury transaction's budget or size.
+
+For 32,768 leaves at depth 15, a standalone JVM measurement on a shared Ryzen 9 7950X3D, restricted to eight logical CPUs, took **32.37–37.34 ms** for the streaming root and **38.47–42.56 ms** for the materialized tree. This used Scala 3.3.9, Java 25, three warmups and five samples per builder, excluding input preparation. The streaming implementation stores a frontier of `D + 1` hashes and a few accumulators; the materialized tree retains all node hashes. These wall times are illustrative and depend on JIT state and machine load; the budget test prints fresh samples on each run.
+
+## Scope
+
+The API provides membership, single and batch emptying, and off-chain proof construction. It supplies no insertion/update verifier, non-membership proof, length commitment, output serialization, or transaction validator. Existing Merkle tree APIs and encodings are unchanged. A custom off-chain node digest exists for interoperability tests; the on-chain verifier always uses BLAKE2b-256.
+
+## Related
+
+- [Merkle Tree](/docs/advanced-data-structures/merkle-tree) — static membership by element
+- [Incremental Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree) — append-only commitments
+- [Merkle Patricia Forestry](/docs/advanced-data-structures/merkle-patricia-forestry) — keyed insertion, update and deletion
