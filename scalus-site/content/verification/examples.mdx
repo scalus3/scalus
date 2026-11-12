@@ -24,18 +24,18 @@ for the one-shot minting policy.
 
 ## Run Them
 
-From a checkout of the Scalus repository, with elan and Z3 on the `PATH` (`nix develop` has
-both):
+From a checkout of the Scalus repository, with elan and Z3 5.4.0 or later on the `PATH`
+(`nix develop` has both):
 
 ```bash copy
-# Once, and after a change of the Lean sources: Scalus's Lean library, with Blaster and PlutusCore
-(cd scalus-verification/src/main/lean && lake build)
-# The vesting example's workspace, which shares the library's packages: seconds
-(cd scalus-examples/jvm/src/test/lean/LinearVesting && lake build)
-
-sbt "scalusExamplesJVM/verify scalus.examples.htlc.HtlcVerificationTest"
-sbt "scalusExamplesJVM/verify scalus.examples.vesting.VestingVerificationTest"
+sbt "scalusExamplesJVM/verify HtlcVerificationTest"
+sbt "scalusExamplesJVM/verify VestingVerificationTest"
 ```
+
+`verify` first builds the two Lean workspaces the examples' checks run in: Scalus's Lean library,
+`scalus-verification/src/main/lean`, with Blaster and PlutusCore, whose first build takes several
+minutes, and the vesting example's, `LinearVesting`, which shares the library's packages and
+builds in seconds. Then it runs the suite with Lean required.
 
 With the kept results committed beside each suite, a run asks Lean only what changed, and takes
 about the time of compiling the examples. Proving everything again
@@ -43,8 +43,10 @@ about the time of compiling the examples. Proving everything again
 
 <Callout type="info">
   In the Scalus build the examples depend on `scalus-verification` as a project, not as a jar, so
-  `leanInit`, `leanBuild` and `leanProve` skip `scalusExamplesJVM`. That is why the `lake build`
-  steps above are by hand. In your own project, `sbt verify` does them.
+  they have no workspace of the plugin's: the build sets their `leanBuild` to build the two above.
+  A plain `testOnly` builds nothing. After a Lean change, or a new pin of Blaster or PlutusCore,
+  run `sbt scalusExamplesJVM/leanBuild` before it, or a check fails with "Imports are out of date
+  and must be rebuilt".
 </Callout>
 
 ## HTLC
