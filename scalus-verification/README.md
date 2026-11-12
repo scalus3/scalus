@@ -568,8 +568,8 @@ Tasks of the plugin do the work:
 ```
 sbt leanInit     # make the workspace ready, as a suite does
 sbt leanBuild    # leanInit, then `lake build` in the workspace
-sbt leanProve    # leanInit, then `lake build <Name>Proofs`: the statements, and the proofs by hand
-sbt verify       # leanBuild, the suites of proofs with Lean required, then leanProve
+sbt leanProve    # `lake build <Name>Proofs` in every workspace of the project that declares it
+sbt verify       # leanBuild, the suites of proofs with Lean required, then the proofs by hand
 ```
 
 `verify` runs the project's suites of proofs, the tests that extend `LeanProofsSuite`, or the tests
@@ -579,8 +579,14 @@ task pass having checked nothing. It tells them that
 Lean is required by a resource on their class path (`LeanProofs.requireLeanResource`), as the
 exports are told: a statement that cannot be checked fails, and is not canceled. Unlike
 `SCALUS_REQUIRE_LEAN`, it uses the kept results, and asks Lean only what changed;
-`SCALUS_KEPT_RESULTS=recalculate` asks it everything. It runs `leanProve` where the workspace has a
-Lean module under `<Name>/Proofs`, and not otherwise.
+`SCALUS_KEPT_RESULTS=recalculate` asks it everything. Then it builds the library of proofs,
+`lake build <Name>Proofs`, of every Lean workspace of the project that has a Lean module under
+`<Name>/Proofs`, and skips the step where none has.
+
+The workspaces of a project are the Lake packages beside its `leanWorkspace`, in `src/test/lean`:
+its own, and any other it keeps there, as Scalus's examples keep `LinearVesting`. `leanProve` and
+`verify` build all of them, each made ready first, with the `scalus-verification` among the test
+dependencies, a jar or a project of the build.
 
 - The first `leanBuild` clones and builds Blaster and PlutusCore, which takes minutes. Until
   then a suite that would ask Lean is canceled, and says to run it.

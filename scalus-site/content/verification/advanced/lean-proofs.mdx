@@ -111,7 +111,8 @@ sbt leanProve
 ```
 
 When the code changes, `leanExport` writes the new proposition, and a proof that no longer holds
-no longer builds. `sbt verify` runs `leanProve` too, whenever `<Package>/Proofs` has a Lean module.
+no longer builds. `sbt verify` builds the proofs too, in every workspace of the project, in
+`src/test/lean`, whose `<Package>/Proofs` has a Lean module.
 
 <Callout type="warning">
   Keep proofs under `<Package>/Proofs`. The kept results rest on a hash of the workspace's own

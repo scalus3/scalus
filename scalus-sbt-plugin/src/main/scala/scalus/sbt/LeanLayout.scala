@@ -39,6 +39,40 @@ object LeanLayout {
     /** The tag of a test about a statement that Lean does not finish, which `verify` leaves out. */
     val UnfinishedTag: String = "scalus.verify.uplcblaster.Unfinished"
 
+    /** Whether `directory` is a Lean workspace: a Lake package, which has a lakefile. */
+    def isWorkspace(directory: File): Boolean =
+        new File(directory, "lakefile.lean").isFile || new File(directory, "lakefile.toml").isFile
+
+    /** The Lean workspaces in `directory`, by name: the directories in it that are Lake packages.
+      * The workspaces of a project are those beside its `leanWorkspace`, in `src/test/lean`: its
+      * own, and any other it keeps there, as Scalus's examples keep one for each example.
+      */
+    def workspaces(directory: File): Seq[File] =
+        Option(directory.listFiles).toSeq.flatten
+            .filter(file => file.isDirectory && isWorkspace(file))
+            .sortBy(_.getName)
+
+    /** The library of proofs of `workspace`, `<Package>Proofs`: the statements Scalus wrote under
+      * `<Package>/Generated`, and the proofs written by hand of them under `<Package>/Proofs`.
+      */
+    def proofsLibrary(workspace: File): String = s"${workspace.getName}Proofs"
+
+    /** Whether the lakefile of `workspace` declares its library of proofs ([[proofsLibrary]]). A
+      * workspace that Scalus created does. One of Lean of its own, which Scalus writes no
+      * statements into, need not.
+      */
+    def hasProofsLibrary(workspace: File): Boolean = {
+        val library = java.util.regex.Pattern.quote(proofsLibrary(workspace))
+        def text(file: File): String =
+            new String(java.nio.file.Files.readAllBytes(file.toPath), "UTF-8")
+        val lean = new File(workspace, "lakefile.lean")
+        val toml = new File(workspace, "lakefile.toml")
+        if (lean.isFile) s"(?m)lean_lib\\s+«?$library»?(\\s|$$)".r.findFirstIn(text(lean)).isDefined
+        else if (toml.isFile)
+            s"""(?m)^\\s*name\\s*=\\s*["']$library["']""".r.findFirstIn(text(toml)).isDefined
+        else false
+    }
+
     /** The directory of the proofs written by hand in `workspace`, `<Package>/Proofs`, which the
       * workspace's library `<Package>Proofs` builds.
       */

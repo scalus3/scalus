@@ -51,8 +51,10 @@ import sbtcompat.PluginCompat.*
   * takes minutes and the network. A project without `scalus-verification` is passed over by
   * both tasks.
   *
-  * `leanProve` builds the library of proofs of the workspace, `<Package>Proofs`: the statements
-  * `leanExport` writes, and the proofs written by hand of them.
+  * `leanProve` builds the library of proofs, `<Package>Proofs`, of every Lean workspace of the
+  * project that declares one: the statements `leanExport` writes, and the proofs written by hand
+  * of them. The workspaces of a project are the Lake packages beside `leanWorkspace`, in
+  * `src/test/lean`: its own, and any other it keeps there.
   *
   * Two tasks export what the proofs prove, by running the project's tests with the export on: all
   * of them, or those named, as `testOnly` takes them (`leanExport *VestingVerificationTest`).
@@ -63,9 +65,9 @@ import sbtcompat.PluginCompat.*
   *
   * `verify` is all of it in one task: `leanBuild`, then the project's suites of proofs, those that
   * extend `LeanProofsSuite`, or the tests named (`verify *HtlcVerificationTest`), with Lean
-  * required, so that a statement that cannot be checked fails and is not canceled, and then
-  * `leanProve`, where the workspace has proofs written by hand. The kept results are used: a
-  * statement whose kept result still agrees is not asked of Lean again. The tests tagged
+  * required, so that a statement that cannot be checked fails and is not canceled, and then the
+  * library of proofs of every workspace that has proofs written by hand. The kept results are
+  * used: a statement whose kept result still agrees is not asked of Lean again. The tests tagged
   * `Unfinished` are left out.
   */
 object ScalusSbtPlugin extends AutoPlugin {
@@ -105,7 +107,7 @@ object ScalusSbtPlugin extends AutoPlugin {
             )
         val leanProve =
             taskKey[Unit](
-              "Run `lake build <Package>Proofs` in the Lean workspace: the statements leanExport wrote, and the proofs written by hand of them"
+              "Run `lake build <Package>Proofs` in every Lean workspace of the project that declares it: the statements leanExport wrote, and the proofs written by hand of them"
             )
         val leanExport =
             inputKey[Unit](
@@ -121,7 +123,7 @@ object ScalusSbtPlugin extends AutoPlugin {
             )
         val verify =
             inputKey[Unit](
-              "Build the Lean workspace, run the project's suites of proofs, or the tests named, with Lean required, and build the proofs written by hand"
+              "Build the Lean workspace, run the project's suites of proofs, or the tests named, with Lean required, and build the proofs written by hand in every Lean workspace of the project"
             )
     }
 
@@ -394,42 +396,56 @@ object ScalusSbtPlugin extends AutoPlugin {
         val workspace = leanWorkspace.value
         val project = name.value
         val log = streams.value.log
-        val urls = cp.map(_.toURI.toURL).toArray
+        readyWith("leanInit", cp, workspace, log) match {
+            case None =>
+                log.info(
+                  s"leanInit: $project has no scalus-verification jar among its test " +
+                      "dependencies, and gets no Lean workspace of the plugin's: its suites " +
+                      "name their own"
+                )
+                None
+            case Some(notes) => Some((workspace, notes))
+        }
+    }.tag(LeanTag)
+
+    /** Makes `workspace` ready through the tool of `scalus-verification` on `classpath`
+      * (`LeanWorkspaceTool.init`), for the task `task`, and returns where the workspace does not
+      * agree with Scalus's Lean library. None where the classpath has no `scalus-verification`.
+      */
+    private def readyWith(
+        task: String,
+        classpath: Seq[java.io.File],
+        workspace: java.io.File,
+        log: sbt.util.Logger
+    ): Option[Seq[String]] = {
+        val urls = classpath.map(_.toURI.toURL).toArray
         val cl = new java.net.URLClassLoader(urls, ClassLoader.getPlatformClassLoader)
         try {
-            loadLeanTool(cl) match {
-                case None =>
-                    log.info(
-                      s"leanInit: $project has no scalus-verification jar among its test " +
-                          "dependencies, and gets no Lean workspace of the plugin's: its suites " +
-                          "name their own"
-                    )
-                    None
-                case Some(toolClass) =>
-                    val tool = toolClass.getField("MODULE$").get(null)
-                    val outcome = toolClass
-                        .getMethod("init", classOf[java.nio.file.Path])
-                        .invoke(tool, workspace.toPath)
-                    def lines(method: String): Seq[String] = {
-                        val list = outcome.getClass
-                            .getMethod(method)
-                            .invoke(outcome)
-                            .asInstanceOf[java.util.List[String]]
-                        (0 until list.size).map(i => list.get(i))
-                    }
-                    lines("doneLines").foreach(line => log.info(line))
-                    val notes = lines("noteLines")
-                    notes.foreach(note => log.warn(s"The Lean workspace $workspace: $note"))
-                    Some((workspace, notes))
+            loadLeanTool(cl).map { toolClass =>
+                val tool = toolClass.getField("MODULE$").get(null)
+                val outcome = toolClass
+                    .getMethod("init", classOf[java.nio.file.Path])
+                    .invoke(tool, workspace.toPath)
+                def lines(method: String): Seq[String] = {
+                    val list = outcome.getClass
+                        .getMethod(method)
+                        .invoke(outcome)
+                        .asInstanceOf[java.util.List[String]]
+                    (0 until list.size).map(i => list.get(i))
+                }
+                lines("doneLines").foreach(line => log.info(line))
+                val notes = lines("noteLines")
+                notes.foreach(note => log.warn(s"The Lean workspace $workspace: $note"))
+                notes
             }
         } catch {
             case e: java.lang.reflect.InvocationTargetException =>
                 // The cause as a whole: the message of a file system's exception is a path only.
-                sys.error(s"leanInit failed: ${e.getCause}")
+                sys.error(s"$task failed: ${e.getCause}")
         } finally {
             cl.close()
         }
-    }.tag(LeanTag)
+    }
 
     lazy val leanInitTask: Def.Initialize[Task[java.io.File]] = Def.task {
         val _ = leanReady.value
@@ -448,14 +464,50 @@ object ScalusSbtPlugin extends AutoPlugin {
         }
     }.tag(LeanTag)
 
-    /** Runs `lake build <Package>Proofs` in the workspace: the statements Scalus wrote under
-      * `<Package>/Generated` (`leanExport`), and the proofs written by hand under `<Package>/Proofs`,
-      * which are theorems of them. A proof that does not hold fails it.
+    /** Runs `lake build <Package>Proofs` in every Lean workspace of the project whose lakefile
+      * declares that library: the statements Scalus wrote under `<Package>/Generated`
+      * (`leanExport`), and the proofs written by hand under `<Package>/Proofs`, which are theorems
+      * of them. A proof that does not hold fails it. The workspaces are those beside
+      * `leanWorkspace` ([[LeanLayout.workspaces]]), so a project that keeps several has all of them
+      * built, and one that has none yet gets none created.
       */
-    lazy val leanProveTask: Def.Initialize[Task[Unit]] = Def.task {
+    lazy val leanProveTask: Def.Initialize[Task[Unit]] = Def.taskDyn {
+        val directory = leanWorkspace.value.getParentFile
         val log = streams.value.log
-        leanReady.value.foreach { case (workspace, notes) =>
-            lakeBuild("leanProve", workspace, notes, Seq(s"${workspace.getName}Proofs"), log)
+        val workspaces = LeanLayout.workspaces(directory).filter(LeanLayout.hasProofsLibrary)
+        if (workspaces.isEmpty) {
+            log.info(
+              s"leanProve: no Lean workspace under $directory declares a library of proofs " +
+                  "(<Package>Proofs), so there is nothing to build"
+            )
+            Def.task(())
+        } else proofsBuilt("leanProve", workspaces)
+    }
+
+    /** Runs `lake build <Package>Proofs` in each of `workspaces`, for the task `task`, each made
+      * ready first, as `leanInit` makes the project's own. The tool that makes them ready is looked
+      * for among all the test dependencies, a jar or a project of the build, as Scalus's own
+      * examples have it. A project without `scalus-verification` is passed over.
+      */
+    private def proofsBuilt(
+        task: String,
+        workspaces: Seq[java.io.File]
+    ): Def.Initialize[Task[Unit]] = Def.task {
+        implicit val conv: xsbti.FileConverter = fileConverter.value
+        val cp = toFiles((Test / dependencyClasspath).value)
+        val project = name.value
+        val log = streams.value.log
+        workspaces.foreach { workspace =>
+            readyWith(task, cp, workspace, log) match {
+                case None =>
+                    log.info(
+                      s"$task: $project has no scalus-verification among its test " +
+                          s"dependencies, so $workspace is not built"
+                    )
+                case Some(notes) =>
+                    val library = LeanLayout.proofsLibrary(workspace)
+                    lakeBuild(task, workspace, notes, Seq(library), log)
+            }
         }
     }.tag(LeanTag)
 
@@ -614,27 +666,32 @@ object ScalusSbtPlugin extends AutoPlugin {
         }.sorted
     }
 
-    /** `leanProve`, where the workspace has proofs written by hand under `<Package>/Proofs`. A
-      * workspace with none has nothing that the checks of the suites did not prove already.
+    /** The library of proofs of each Lean workspace of the project that has proofs written by
+      * hand under `<Package>/Proofs`, as `leanProve` builds it. Every workspace beside
+      * `leanWorkspace` is looked at, and not only the project's own. A workspace without proofs
+      * written by hand has nothing that the checks of the suites did not prove already, and is
+      * not built.
       */
     lazy val proofsByHandTask: Def.Initialize[Task[Unit]] = Def.taskDyn {
-        val ready = leanReady.value
+        val directory = leanWorkspace.value.getParentFile
         val log = streams.value.log
-        ready match {
-            // A project without scalus-verification as a jar has no workspace of the plugin's:
-            // its suites name their own.
-            case None => Def.task(())
-            case Some((workspace, _)) =>
-                // Lean proofs of the project's own, the advanced use: most projects have none,
-                // and their `verify` is the suites alone.
-                if (LeanLayout.hasProofsByHand(workspace)) Def.task(leanProve.value)
-                else {
-                    log.debug(
-                      s"verify: no Lean proofs under ${LeanLayout.proofsDirectory(workspace)}, " +
-                          "so leanProve is not run"
-                    )
-                    Def.task(())
-                }
+        val workspaces = LeanLayout.workspaces(directory).filter(LeanLayout.hasProofsByHand)
+        if (workspaces.isEmpty) {
+            // Lean proofs of the project's own are the advanced use: most projects have none, and
+            // their `verify` is the suites alone. So the step that is not needed is not spoken of,
+            // as something missing would be, unless sbt is asked for its debug log.
+            log.debug(
+              s"verify: skipping the full recheck (leanProve): it is needed only for proofs " +
+                  s"written by hand, and no Lean workspace under $directory has any, in " +
+                  "<Package>/Proofs. The suites above checked every statement."
+            )
+            Def.task(())
+        } else {
+            log.info(
+              s"verify: building the proofs written by hand in " +
+                  workspaces.map(_.getName).mkString(", ")
+            )
+            proofsBuilt("verify", workspaces)
         }
     }
 
