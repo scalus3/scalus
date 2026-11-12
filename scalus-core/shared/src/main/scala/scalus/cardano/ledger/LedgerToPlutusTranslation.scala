@@ -234,27 +234,31 @@ object LedgerToPlutusTranslation {
         v2.TxInInfo(txOutRef, txOut)
     }
 
+    // Ledger Coin translation retains the ADA entry even when its quantity is zero.
+    private def getAdaEntry(coin: Coin) =
+        v1.Value.adaPolicyId -> prelude.List.singleton(
+          v1.Value.adaTokenName -> BigInt(coin.value)
+        )
+
     /** Convert scalus.cardano.ledger.Value to scalus.ledger.api.v1.Value.
       *
       * This function converts the domain model value representation to the Plutus script context
       * value format, which uses nested association maps for multi-asset representation.
       */
     def getValue(value: Value): v1.Value = {
-        // Add ADA entry if not empty
-        val adaValue = v1.Value.lovelace(BigInt(value.coin.value))
-
-        val assetsValue = v1.Value.fromList(
-          prelude.List.from(
-            value.assets.assets.view.map { case (policyId, assets) =>
-                val assetList = prelude.List.from(assets.view.map { (assetName, amount) =>
-                    assetName.bytes -> BigInt(amount)
-                })
-                policyId -> assetList
-            }
-          )
+        val assetEntries = prelude.List.from(
+          value.assets.assets.view.map { case (policyId, assets) =>
+              val assetList = prelude.List.from(assets.view.map { (assetName, amount) =>
+                  assetName.bytes -> BigInt(amount)
+              })
+              policyId -> assetList
+          }
         )
-
-        adaValue + assetsValue
+        // Caller-supplied ledger maps can carry a different ordering.
+        val sortedAssetEntries = v1.Value.fromList(assetEntries).toSortedMap.toList.map {
+            case (policyId, assets) => policyId -> assets.toList
+        }
+        v1.Value.unsafeFromList(prelude.List.Cons(getAdaEntry(value.coin), sortedAssetEntries))
     }
 
     /** Convert multi-asset values for minting context.
@@ -591,7 +595,7 @@ object LedgerToPlutusTranslation {
           inputs = prelude.List
               .from(body.inputs.toSet.view.map(getTxInInfoV1(_, utxos))),
           outputs = prelude.List.from(body.outputs.view.map(getTxOutV1)),
-          fee = v1.Value.lovelace(body.fee.value),
+          fee = v1.Value.unsafeFromList(prelude.List.singleton(getAdaEntry(body.fee))),
           mint = getMintValueV1V2(body.mint),
           dcert = prelude.List
               .from(body.certificates.toSeq.view.map(getDCert)),
@@ -630,7 +634,7 @@ object LedgerToPlutusTranslation {
           referenceInputs = prelude.List
               .from(body.referenceInputs.toSet.view.map(getTxInInfoV2(_, utxos))),
           outputs = prelude.List.from(body.outputs.view.map(getTxOutV2)),
-          fee = v1.Value.lovelace(body.fee.value),
+          fee = v1.Value.unsafeFromList(prelude.List.singleton(getAdaEntry(body.fee))),
           mint = getMintValueV1V2(body.mint),
           dcert = prelude.List
               .from(body.certificates.toSeq.view.map(getDCert)),
