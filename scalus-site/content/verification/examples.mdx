@@ -35,7 +35,8 @@ sbt "scalusExamplesJVM/verify VestingVerificationTest"
 `verify` first builds the two Lean workspaces the examples' checks run in: Scalus's Lean library,
 `scalus-verification/src/main/lean`, with Blaster and PlutusCore, whose first build takes several
 minutes, and the vesting example's, `LinearVesting`, which shares the library's packages and
-builds in seconds. Then it runs the suite with Lean required.
+builds in seconds. Then it runs the suite with Lean required. Last, whichever suite it ran, it
+builds the vesting example's proofs written by hand, `lake build LinearVestingProofs`.
 
 With the kept results committed beside each suite, a run asks Lean only what changed, and takes
 about the time of compiling the examples. Proving everything again
@@ -44,9 +45,10 @@ about the time of compiling the examples. Proving everything again
 <Callout type="info">
   In the Scalus build the examples depend on `scalus-verification` as a project, not as a jar, so
   they have no workspace of the plugin's: the build sets their `leanBuild` to build the two above.
-  A plain `testOnly` builds nothing. After a Lean change, or a new pin of Blaster or PlutusCore,
-  run `sbt scalusExamplesJVM/leanBuild` before it, or a check fails with "Imports are out of date
-  and must be rebuilt".
+  `leanProve` and `verify` find `LinearVesting` beside the project's own workspace, and build its
+  proofs by hand. A plain `testOnly` builds nothing. After a Lean change, or a new pin of Blaster
+  or PlutusCore, run `sbt scalusExamplesJVM/leanBuild` before it, or a check fails with "Imports
+  are out of date and must be rebuilt".
 </Callout>
 
 ## HTLC
@@ -136,5 +138,6 @@ sbt "scalusExamplesJVM/leanExport scalus.examples.vesting.VestingVerificationTes
 (cd scalus-examples/jvm/src/test/lean/LinearVesting && lake build LinearVestingProofs)
 ```
 
-Building the proofs takes a few minutes: each statement module runs its programs symbolically. In
-your own project, `sbt leanProve` runs the build, and `sbt verify` runs it after the suites.
+Building the proofs takes a few minutes: each statement module runs its programs symbolically.
+`sbt scalusExamplesJVM/leanProve` runs the same build, and `sbt scalusExamplesJVM/verify` runs it
+after the suites.

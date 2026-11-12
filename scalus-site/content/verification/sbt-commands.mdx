@@ -18,7 +18,7 @@ The tasks that write a Lean workspace run one at a time.
 | `verify [tests]`     | `leanBuild`, then the verification tests (the suites of proofs) with Lean required | yes        |
 | `leanInit`           | creates the workspace where it is missing, and brings Scalus's Lean library in `.scalus/` up to date    | no         |
 | `leanBuild`          | `leanInit`, then `lake build` in the workspace                                                         | yes        |
-| `leanProve`          | `leanInit`, then `lake build <Package>Proofs`: the generated statements and your proofs                | yes        |
+| `leanProve`          | `lake build <Package>Proofs` in every workspace that declares it: the generated statements and your proofs | yes        |
 | `leanExport [tests]` | runs the tests, writing every named statement proved into `<Package>/Generated`                        | no         |
 | `ualExport [tests]`  | runs the tests, writing the statements as Universal Annotation Language documents                      | no         |
 
@@ -46,8 +46,11 @@ sbt contracts/verify                               # one project of a multi-proj
    tests tagged `Unfinished` are left out.
 
 Only in the [advanced use](/docs/verification/advanced/lean-proofs), where you keep Lean proofs of
-your own under `<Package>/Proofs` of the workspace, does `verify` also build them (`leanProve`), so
-that a proof that no longer holds fails the run. Without such files there is no third step.
+your own under `<Package>/Proofs` of a workspace, does `verify` also build them
+(`lake build <Package>Proofs`), so that a proof that no longer holds fails the run. It builds them
+in every Lean workspace of the project that has such files: the Lake packages in `src/test/lean`,
+beside the project's own, so a project that keeps several has all of them checked. Without such
+files there is no third step.
 
 `verify` uses the kept results. A statement whose kept result still agrees with the code is not
 asked of Lean again, so a second `verify` after a small change only proves what the change
