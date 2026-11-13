@@ -45,9 +45,31 @@ class ProtocolParamsTest extends AnyFunSuite {
     }
 
     test("the cardano-cli resource reads rho, tau and a0 exactly") {
-        // spec [DM-20b]
+        // spec [DM-20c]
         val p = ProtocolParams.fromCardanoCliJson(resource("protocol-params.json"))
         assertExactRewardParams("protocol-params.json", p)
+    }
+
+    private def resourceText(name: String): String =
+        scala.util.Using.resource(resource(name)) { in =>
+            new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+        }
+
+    test("the readers agree with the deprecated upickle codecs on every resource") {
+        // spec [DM-20c]: the same values, with the voting thresholds now in lowest terms
+        import LegacyProtocolParamsCodecs.*
+        for name <- blockfrostResources do
+            val json = resourceText(name)
+            assert(
+              reducedThresholds(ProtocolParams.fromBlockfrostJson(json)) ==
+                  reducedThresholds(legacyBlockfrost(json)),
+              name
+            )
+        val cli = resourceText("protocol-params.json")
+        assert(
+          reducedThresholds(ProtocolParams.fromCardanoCliJson(cli)) ==
+              reducedThresholds(legacyCardanoCli(cli))
+        )
     }
 
     test(

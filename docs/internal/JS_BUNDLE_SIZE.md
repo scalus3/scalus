@@ -268,6 +268,12 @@ jsoniter contributes **zero** bytes to `scalus.js` today: its only users, `Bluep
 `PlutusDataSchema`, are fully eliminated, so it is JVM tooling. Its whole runtime is ~81 KB of
 fastLink output against upickle's 742 KB.
 
+*Update, 2026-11-13 (D129 in `docs/superpowers/specs/2026-11-02-emulator-ledger-rules-design.md`):*
+the `ProtocolParams` JSON entry points now go through jsoniter, by `internal/JsonTree`.
+`JsProtocolParams` exports `fromBlockfrostJson` and `toBlockfrostJson`, so jsoniter's runtime is
+now reachable from `scalus.js`, and the upickle Blockfrost codec no longer is. The effect on the
+bundle has not been measured yet.
+
 "ujson only" was considered and rejected: ujson pulls 20 of the 70 reachable `upickle.core`
 modules regardless, so it has a floor of ~240 KB where removing upickle outright reaches zero,
 and it needs the same hand-written codecs. Porting the remaining upickle users
