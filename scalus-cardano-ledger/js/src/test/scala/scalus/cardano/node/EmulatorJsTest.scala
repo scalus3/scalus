@@ -16,7 +16,6 @@ import scalus.cardano.ledger.JsProtocolParams.underlying
 import scalus.utils.scalajs.internal.*
 
 import scala.scalajs.js
-import scala.scalajs.js.typedarray.Uint8Array
 
 class EmulatorJsTest extends AnyFunSuite {
 

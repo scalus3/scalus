@@ -552,6 +552,7 @@ and `pluginScalaVersions` (the versions a `scalus-plugin_<version>` is published
 | 3.3.9   | Default. The only build that publishes the `_3` library artifacts. |
 | 3.8.4   | Cross-built and tested. |
 | 3.9.0   | Cross-built and tested. The next LTS line. |
+| 3.10.1  | Cross-built and tested. The latest line. 3.10.0 is not supported: its compiler crashes on `scalus-verification` ([scala/scala3#27039](https://github.com/scala/scala3/pull/27039)). |
 | 3.3.8   | Compiler plugin only. Downstream projects may still be pinned to it. |
 
 Each of those gets its own `scalus-plugin_<version>` artifact, because a Scala 3 compiler plugin has
@@ -562,12 +563,12 @@ release with `scalus-plugin_3.3.7`.
 
 The `_3` library artifacts share a single coordinate across all of Scala 3, so exactly one build may
 publish them, and it has to be the **oldest** supported compiler: a 3.3.x compiler refuses TASTy
-emitted by 3.8.x/3.9.x, while newer compilers read 3.3.x TASTy without trouble. `publishOnlyLts`
+emitted by 3.8.x and later, while newer compilers read 3.3.x TASTy without trouble. `publishOnlyLts`
 enforces that. A Scala 3.9.0 project therefore consumes the 3.3.9-built artifact, and does not need
 one built by its own compiler.
 
 Build and test one version locally with `sbt ci-jvm-3_3_9`, `sbt ci-jvm-3_8_4`,
-`sbt ci-jvm-3_9_0` or `sbt ci-jvm-3_3_8`. The CI-JVM workflow runs one job per version, named
+`sbt ci-jvm-3_9_0`, `sbt ci-jvm-3_10_1` or `sbt ci-jvm-3_3_8`. The CI-JVM workflow runs one job per version, named
 after it.
 
 ### Adding or bumping a version

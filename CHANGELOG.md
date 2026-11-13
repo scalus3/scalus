@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- `scalus-plugin` is published for Scala 3.10.1. Scala 3.10.0 is not supported: its compiler
+  crashes on some Scalus code (scala/scala3#27039).
+
 ## 1.5.0 (2026-11-04)
 
 ### Highlights

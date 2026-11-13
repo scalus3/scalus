@@ -16,7 +16,7 @@ class ProgramFlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arb
                 val firstDiffByte = plutus.zip(scalus).takeWhile((a, b) => a == b).length / 2
                 val ast =
                     try p.toString
-                    catch case _: Throwable => "<toString overflowed>"
+                    catch case _: StackOverflowError => "<toString overflowed>"
                 fail(
                   s"flat encoding mismatch: version=${p.version} firstDiffByte=$firstDiffByte " +
                       s"plutusLen=${plutus.length / 2} scalusLen=${scalus.length / 2}\n" +

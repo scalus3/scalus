@@ -25,6 +25,7 @@ jobs:
           - { name: "3.3.8", task: ci-jvm-3_3_8 }
           - { name: "3.8.4", task: ci-jvm-3_8_4 }
           - { name: "3.9.0", task: ci-jvm-3_9_0 }
+          - { name: "3.10.1", task: ci-jvm-3_10_1 }
     permissions:
       contents: read
       id-token: write

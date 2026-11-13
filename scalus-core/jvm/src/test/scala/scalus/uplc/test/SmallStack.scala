@@ -3,6 +3,7 @@ package scalus.uplc.test
 import org.scalatest.Assertions.fail
 
 import java.util.concurrent.atomic.AtomicReference
+import scala.annotation.nowarn
 
 /** Runs code on a thread whose stack is far too small for one stack frame per nesting level of
   * deeply nested data, to show that the code does not recurse over the nesting.
@@ -20,6 +21,9 @@ object SmallStack {
     /** Runs `body` as [[run]] does, on a daemon thread with a stack of `stackSize` bytes, or of the
       * JVM's default size where `stackSize` is 0, and returns its result.
       */
+    // Catches every Throwable on purpose: a StackOverflowError on the small stack is the result
+    // the caller checks for.
+    @nowarn("msg=Catching Throwable")
     def onStack[A](stackSize: Long)(body: => A): A = {
         val stack =
             if stackSize == 0 then "the default stack" else s"a ${stackSize / 1024} KiB stack"

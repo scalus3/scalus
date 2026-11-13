@@ -1,5 +1,6 @@
 package scalus.cardano.node.stream.internal
 
+import scala.annotation.nowarn
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -35,6 +36,9 @@ private[stream] final class HubDriver(
         if begin then pump()
     }
 
+    // Catches every Throwable on purpose: an event that throws, even a StackOverflowError, must
+    // fail the feed, not stall it silently.
+    @nowarn("msg=Catching Throwable")
     private def pump(): Unit =
         follower.events.pull().onComplete {
             case Success(Some(event)) =>

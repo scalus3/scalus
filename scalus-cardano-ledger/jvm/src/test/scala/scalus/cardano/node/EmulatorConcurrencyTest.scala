@@ -9,6 +9,7 @@ import scalus.testing.kit.Party.{Alice, Bob}
 
 import java.util.concurrent.{Callable, CountDownLatch, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
+import scala.util.control.NonFatal
 
 /** The JVM emulator accepts submissions from several threads at once. This suite pins what that has
   * to mean, which a sequential test cannot see: whatever order the threads interleave in, the
@@ -153,7 +154,7 @@ class EmulatorConcurrencyTest extends AnyFunSuite {
                                 start.await()
                                 emulator.submitSync(tx)
                             } catch {
-                                case t: Throwable =>
+                                case NonFatal(t) =>
                                     failure.compareAndSet(null, t)
                                     throw t
                             }

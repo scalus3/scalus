@@ -41,6 +41,8 @@ val scala3LtsVersion = "3.3.9"
 val scala3NextVersion = "3.8.4"
 // Next LTS series.
 val scala3NextLtsVersion = "3.9.0"
+// Latest non-LTS series.
+val scala3LatestVersion = "3.10.1"
 // Previous LTS patches, supported for the compiler plugin only. Downstream projects may still be
 // pinned to one of them, and a compiler plugin has to match the compiler exactly, so each keeps a
 // published scalus-plugin_<version>. Nothing else needs to be built here: every 3.3.x emits the
@@ -50,7 +52,8 @@ val scala3NextLtsVersion = "3.9.0"
 val scala3LtsPrevVersions = Seq("3.3.8")
 
 // The versions the whole build cross-builds and tests.
-val supportedScalaVersions = Seq(scala3LtsVersion, scala3NextVersion, scala3NextLtsVersion)
+val supportedScalaVersions =
+    Seq(scala3LtsVersion, scala3NextVersion, scala3NextLtsVersion, scala3LatestVersion)
 // The versions that get a published `scalus-plugin_<version>`; the plugin uses CrossVersion.full,
 // so each is a distinct artifact. The `_3` library artifacts instead share one coordinate across
 // all of Scala 3, so exactly one build may publish them: `publishOnlyLts` picks scala3LtsVersion,
@@ -1416,7 +1419,7 @@ val crossVersionCiTasks = {
     // them drifting from the vals above. A stale `++` argument matches no project's
     // crossScalaVersions, so sbt silently keeps the default version and the job reports green for
     // a version it never built.
-    val spelledOutInAliases = Seq("3.3.8", "3.3.9", "3.8.4", "3.9.0")
+    val spelledOutInAliases = Seq("3.3.8", "3.3.9", "3.8.4", "3.9.0", "3.10.1")
     if (spelledOutInAliases != pluginScalaVersions)
         sys.error(
           s"The ci-jvm-* aliases build ${spelledOutInAliases.mkString(", ")}, but " +
@@ -1440,7 +1443,8 @@ val crossVersionCiTasks = {
 
 // One CI job per supported compiler version; the alias name carries the version, so a version bump
 // renames the alias here and its matrix entry in .github/workflows/ci-jvm.yml. Keep the `++`
-// arguments in sync with scala3LtsVersion / scala3NextVersion / scala3NextLtsVersion above.
+// arguments in sync with scala3LtsVersion / scala3NextVersion / scala3NextLtsVersion /
+// scala3LatestVersion above.
 // The default LTS, and the only build that publishes the `_3` library artifacts. Carries the
 // format and MiMa checks too: they are version-independent, so they run in this job only
 // (the Scala.js half of MiMa runs in ci-js, see `mima-js`). The last two steps build Scaladoc as
@@ -1472,6 +1476,7 @@ val pluginOnlyCiTasks = Seq(
 commandSequence("ci-jvm-3_3_8", ("++3.3.8" +: pluginOnlyCiTasks) *)
 commandSequence("ci-jvm-3_8_4", ("++3.8.4" +: crossVersionCiTasks) *)
 commandSequence("ci-jvm-3_9_0", ("++3.9.0" +: crossVersionCiTasks) *)
+commandSequence("ci-jvm-3_10_1", ("++3.10.1" +: crossVersionCiTasks) *)
 // Convenience name for the default-version job.
 addCommandAlias("ci-jvm", "ci-jvm-3_3_9")
 commandSequence(
