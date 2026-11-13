@@ -199,6 +199,15 @@ private[ledger] object ProtocolParamsJson {
           throw new NoSuchElementException(s"key not found: $path.$key")
         )
 
+    /** The id of the Plutus language named `name` ("PlutusV1", ...), at `path`. */
+    private def languageId(path: String, name: String): Int = {
+        // no cause: rootCauseMessage reports the deepest message, which has no path
+        try Language.valueOf(name).languageId
+        catch
+            case _: IllegalArgumentException =>
+                throw new IllegalArgumentException(s"$path: unknown Plutus language \"$name\"")
+    }
+
     private def termsOf(r: UnitInterval | NonNegativeInterval): NonNegativeInterval = r match
         case u: UnitInterval        => NonNegativeInterval.reduce(u.numerator, u.denominator)
         case n: NonNegativeInterval => NonNegativeInterval.reduce(n.numerator, n.denominator)
@@ -280,7 +289,7 @@ private[ledger] object ProtocolParamsJson {
                   // `cost_models`. Accept both.
                   val path = s"$key.$language"
                   val values = costs.arrOpt.getOrElse(fieldsAt(path, costs).values.toVector)
-                  Language.valueOf(language).languageId -> values.map(long(path, _)).toIndexedSeq
+                  languageId(path, language) -> values.map(long(path, _)).toIndexedSeq
               }.toMap
             )
         }
@@ -368,7 +377,7 @@ private[ledger] object ProtocolParamsJson {
           // Emit only the latter: building the former needs the per-language Plutus
           // operation-name tables, which we don't have and MeshJS/Evolution SDK don't need (they
           // read `cost_models_raw`).
-          "cost_models_raw" -> costModelsTree(params.costModels),
+          "cost_models_raw" -> writeCostModels(params.costModels),
           "drep_activity" -> str(params.dRepActivity),
           "drep_deposit" -> str(params.dRepDeposit),
           "dvt_motion_no_confidence" -> blockfrostFraction(dvt.motionNoConfidence),
@@ -419,8 +428,11 @@ private[ledger] object ProtocolParamsJson {
         )
     }
 
-    /** Cost models keyed by the canonical language name ("PlutusV1", ...), in language order. */
-    private def costModelsTree(costModels: CostModels): JsonTree = {
+    /** Cost models keyed by the canonical language name ("PlutusV1", ...), in language order, each
+      * an array of its parameters: the shape of Blockfrost's `cost_models_raw` and of cardano-cli's
+      * `costModels`.
+      */
+    def writeCostModels(costModels: CostModels): JsonTree = {
         val byLanguage = costModels.models.toSeq.sortBy(_._1).map { (languageId, costs) =>
             Language.fromId(languageId).toString -> Arr(costs.iterator.map(num).toVector)
         }
@@ -448,6 +460,23 @@ private[ledger] object ProtocolParamsJson {
         )
     }
 
+    /** Cost models in cardano-cli's shape, at `path`: an object from language name ("PlutusV1",
+      * ...) to the array of that language's parameters.
+      */
+    def readCostModels(path: String, json: JsonTree): CostModels = {
+        CostModels(
+          fieldsAt(path, json).map { (language, costs) =>
+              val languagePath = s"$path.$language"
+              val values = costs.arrOpt.getOrElse(
+                throw new IllegalArgumentException(
+                  s"$languagePath: expected an array, got ${costs.kind}"
+                )
+              )
+              languageId(languagePath, language) -> values.map(long(languagePath, _)).toIndexedSeq
+          }.toMap
+        )
+    }
+
     def readCardanoCli(json: JsonTree): ProtocolParams = {
         def longField(key: String): Long = long(key, json(key))
         val dvt = json("dRepVotingThresholds")
@@ -470,17 +499,7 @@ private[ledger] object ProtocolParamsJson {
           collateralPercentage = longField("collateralPercentage"),
           committeeMaxTermLength = longField("committeeMaxTermLength"),
           committeeMinSize = longField("committeeMinSize"),
-          costModels = CostModels(
-            fieldsAt("costModels", json("costModels")).map { (language, costs) =>
-                val path = s"costModels.$language"
-                val values = costs.arrOpt.getOrElse(
-                  throw new IllegalArgumentException(
-                    s"$path: expected an array, got ${costs.kind}"
-                  )
-                )
-                Language.valueOf(language).languageId -> values.map(long(path, _)).toIndexedSeq
-            }.toMap
-          ),
+          costModels = readCostModels("costModels", json("costModels")),
           dRepActivity = longField("dRepActivity"),
           dRepDeposit = longField("dRepDeposit"),
           dRepVotingThresholds = DRepVotingThresholds(
@@ -547,7 +566,7 @@ private[ledger] object ProtocolParamsJson {
           "collateralPercentage" -> num(params.collateralPercentage),
           "committeeMaxTermLength" -> num(params.committeeMaxTermLength),
           "committeeMinSize" -> num(params.committeeMinSize),
-          "costModels" -> costModelsTree(params.costModels),
+          "costModels" -> writeCostModels(params.costModels),
           "dRepActivity" -> num(params.dRepActivity),
           "dRepDeposit" -> num(params.dRepDeposit),
           "dRepVotingThresholds" -> obj(
