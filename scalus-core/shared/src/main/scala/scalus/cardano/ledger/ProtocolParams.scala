@@ -1,5 +1,6 @@
 package scalus.cardano.ledger
 
+import scalus.cardano.ledger.internal.{JsonTree, ProtocolParamsJson}
 import upickle.default.*
 
 import java.io.InputStream
@@ -365,15 +366,17 @@ object ProtocolParams {
       * what the JavaScript SDKs already know how to consume: both MeshJS and the Evolution SDK ship
       * a Blockfrost parameter mapping, so handing them this costs them no new code.
       *
-      * Delegates to [[blockfrostParamsReadWriter]] rather than re-listing the fields here, so the
-      * field mapping (including which values Blockfrost renders as decimal strings) has one source
-      * of truth shared with [[fromBlockfrostJson]].
+      * Fractions are written as their exact decimal when they have one of at most 19 places, as
+      * every Cardano network's do; otherwise as the nearest `Double`, since Blockfrost's shape has
+      * no exact form for them. spec [DM-21b]
       */
-    def toBlockfrostJson(params: ProtocolParams): String = {
-        write(params)(using blockfrostParamsReadWriter)
-    }
+    def toBlockfrostJson(params: ProtocolParams): String =
+        JsonTree.render(ProtocolParamsJson.writeBlockfrost(params))
 
     /** Reads ProtocolParams from JSON string in Blockfrost format.
+      *
+      * Every number is read exactly: fractions (`rho`, `tau`, `a0`, the voting thresholds and the
+      * prices) in lowest terms, from a JSON number or a decimal string. spec [DM-20c]
       *
       * @throws IllegalArgumentException
       *   if the JSON is not a complete Blockfrost parameter set. The message names the field that
@@ -381,7 +384,7 @@ object ProtocolParams {
       */
     def fromBlockfrostJson(json: String): ProtocolParams = {
         explainParseFailure(blockfrostShape) {
-            read[ProtocolParams](json)(using blockfrostParamsReadWriter)
+            ProtocolParamsJson.readBlockfrost(JsonTree.parse(json))
         }
     }
 
@@ -392,18 +395,41 @@ object ProtocolParams {
       */
     def fromBlockfrostJson(json: InputStream): ProtocolParams = {
         explainParseFailure(blockfrostShape) {
-            read[ProtocolParams](json)(using blockfrostParamsReadWriter)
+            ProtocolParamsJson.readBlockfrost(JsonTree.parse(json))
         }
     }
 
+    /** [[fromBlockfrostJson]] for a macro, which runs inside the compiler: the same reader, on a
+      * parser that also runs there when compiling for Scala Native ([[JsonTree.parseInMacro]]).
+      */
+    private[scalus] def fromBlockfrostJsonInMacro(json: String): ProtocolParams = {
+        explainParseFailure(blockfrostShape) {
+            ProtocolParamsJson.readBlockfrost(JsonTree.parseInMacro(json))
+        }
+    }
+
+    /** Render as `cardano-cli query protocol-parameters` JSON, the inverse of
+      * [[fromCardanoCliJson]].
+      *
+      * A fraction is written as cardano-ledger writes it: its exact decimal when it has one of at
+      * most 19 places, else `{"numerator": n, "denominator": d}` in lowest terms. Integers are JSON
+      * numbers at any size. So every value reads back exactly. spec [DM-21b]
+      */
+    def toCardanoCliJson(params: ProtocolParams): String =
+        JsonTree.render(ProtocolParamsJson.writeCardanoCli(params))
+
     /** Reads ProtocolParams from JSON string in Cardano CLI format.
+      *
+      * Every number is read exactly. A fraction may be a JSON number, a decimal string, or the
+      * `{"numerator": n, "denominator": d}` object cardano-ledger writes for a fraction without a
+      * short decimal. spec [DM-20c]
       *
       * @throws IllegalArgumentException
       *   if the JSON is not a complete `cardano-cli query protocol-parameters` output.
       */
     def fromCardanoCliJson(json: String): ProtocolParams = {
         explainParseFailure(cardanoCliShape) {
-            read[ProtocolParams](json)(using cardanoCliParamsReadWriter)
+            ProtocolParamsJson.readCardanoCli(JsonTree.parse(json))
         }
     }
 
@@ -414,7 +440,7 @@ object ProtocolParams {
       */
     def fromCardanoCliJson(json: InputStream): ProtocolParams = {
         explainParseFailure(cardanoCliShape) {
-            read[ProtocolParams](json)(using cardanoCliParamsReadWriter)
+            ProtocolParamsJson.readCardanoCli(JsonTree.parse(json))
         }
     }
 
@@ -426,13 +452,10 @@ object ProtocolParams {
 
     /** Run a parse, and rewrite whatever it throws into something a caller can act on.
       *
-      * Both codecs read fields straight off a `ujson.Value`, so a parameter set from an older era
-      *   - or from an endpoint that renders one field differently - fails deep inside upickle's
-      *     visitor. What surfaces is the exception upickle wraps that in, whose message is the JSON
-      *     path alone: a user who pasted a response missing `min_fee_ref_script_cost_per_byte` gets
-      *     `Error: $` and nothing to go on. The cause chain still holds the real complaint ("key
-      *     not found: min_fee_ref_script_cost_per_byte"), so lift it back out and say which format
-      *     was expected.
+      * A parameter set from an older era, or from an endpoint that renders one field differently,
+      * fails on the first field it lacks ("key not found: min_fee_ref_script_cost_per_byte"). Wrap
+      * that, at the root of whatever cause chain carried it, in a message that also says which
+      * format was expected.
       */
     private def explainParseFailure[A](expectedShape: String)(parse: => A): A =
         try parse
@@ -452,8 +475,8 @@ object ProtocolParams {
         // Bounded: a malformed cause chain must not turn a parse error into a hang.
         while current != null && depth < 16 do
             val message = Option(current.getMessage).map(_.trim).getOrElse("")
-            // upickle reports the JSON path ("$") as the message of the exception it wraps the
-            // real failure in, which says nothing on its own.
+            // The deprecated upickle codecs report the JSON path ("$") as the message of the
+            // exception they wrap the real failure in, which says nothing on its own.
             if message.nonEmpty && message != "$" then best = message
             current = current.getCause
             depth += 1
@@ -468,7 +491,15 @@ object ProtocolParams {
       * `CardanoInfo.mainnet` alone pull about 740 KB of upickle, ujson and upack into the Scala.js
       * bundle. Deferring construction lets the linker drop them when nothing parses JSON, which is
       * the case for everything `scalus.js` exports. See `docs/internal/JS_BUNDLE_SIZE.md`.
+      *
+      * Kept as it was for compatibility: it reads every JSON number through a `Double`, and the
+      * voting thresholds and prices at a fixed decimal precision. [[fromBlockfrostJson]] and
+      * [[toBlockfrostJson]] keep every number exact. spec [DM-20c]
       */
+    @deprecated(
+      "use ProtocolParams.fromBlockfrostJson and toBlockfrostJson, which keep every number exact",
+      "1.5.0"
+    )
     lazy val blockfrostParamsReadWriter: ReadWriter[ProtocolParams] =
         readwriter[ujson.Value].bimap[ProtocolParams](
           params =>
@@ -678,7 +709,16 @@ object ProtocolParams {
       * `lazy` for the reason given on [[blockfrostParamsReadWriter]]. This one matters most: it
       * ends in `macroRW`, whose 30-field derivation is what drags `CostModels`, `ExUnits`,
       * `ProtocolVersion`, `UnitInterval`, `ExUnitPrices` and the voting thresholds along with it.
+      *
+      * Kept as it was for compatibility: it reads every JSON number through a `Double`, and the
+      * voting thresholds and prices at a fixed decimal precision, and it cannot read the
+      * `{"numerator", "denominator"}` fractions cardano-ledger writes. [[fromCardanoCliJson]] and
+      * [[toCardanoCliJson]] keep every number exact. spec [DM-20c]
       */
+    @deprecated(
+      "use ProtocolParams.fromCardanoCliJson and toCardanoCliJson, which keep every number exact",
+      "1.5.0"
+    )
     lazy val cardanoCliParamsReadWriter: ReadWriter[ProtocolParams] = {
         // Provide implicit ReadWriter for CostModels in Cardano CLI format
         given ReadWriter[CostModels] = CostModels.cardanoCliReadWriter
@@ -728,42 +768,20 @@ object ProtocolParams {
     private def decimalFraction(json: ujson.Value, field: String): NonNegativeInterval = {
         val value = json(field)
         value.strOpt match
-            case Some(text) => fractionOf(field, BigDecimal(text))
-            case None       => fractionOf(field, BigDecimal.decimal(value.num))
-    }
-
-    /** The exact fraction, in lowest terms, of `decimal`. */
-    private def fractionOf(field: String, decimal: BigDecimal): NonNegativeInterval = {
-        val unscaled = BigInt(decimal.bigDecimal.unscaledValue)
-        val scale = decimal.scale
-        val (num, den) =
-            if scale >= 0 then (unscaled, BigInt(10).pow(scale))
-            else (unscaled * BigInt(10).pow(-scale), BigInt(1))
-        try NonNegativeInterval.reduceBigInt(num, den)
-        catch
-            case e: IllegalArgumentException =>
-                // no cause: rootCauseMessage reports the deepest message, which has no field
-                throw IllegalArgumentException(s"$field: $decimal: ${e.getMessage}")
+            case Some(text) => ProtocolParamsJson.fractionOf(field, BigDecimal(text))
+            case None       => ProtocolParamsJson.fractionOf(field, BigDecimal.decimal(value.num))
     }
 
     /** The 1.4 `Double` form of a0: the shortest decimal that reads back as `value`, as
       * [[decimalFraction]] takes a JSON number. D119
       */
     private def nonNegativeIntervalOf(field: String, value: Double): NonNegativeInterval =
-        fractionOf(field, BigDecimal.decimal(value))
+        ProtocolParamsJson.fractionOf(field, BigDecimal.decimal(value))
 
     /** The 1.4 `Double` form of rho and tau, as [[nonNegativeIntervalOf]], in [0, 1]. D119 */
     private def unitIntervalOf(field: String, value: Double): UnitInterval =
-        toUnitInterval(field, nonNegativeIntervalOf(field, value))
+        ProtocolParamsJson.toUnitInterval(field, nonNegativeIntervalOf(field, value))
 
     private def unitIntervalField(json: ujson.Value, field: String): UnitInterval =
-        toUnitInterval(field, decimalFraction(json, field))
-
-    private def toUnitInterval(field: String, r: NonNegativeInterval): UnitInterval = {
-        require(
-          r.numerator <= r.denominator,
-          s"$field: ${r.numerator}/${r.denominator} is not in the unit interval [0, 1]"
-        )
-        UnitInterval(r.numerator, r.denominator)
-    }
+        ProtocolParamsJson.toUnitInterval(field, decimalFraction(json, field))
 }
