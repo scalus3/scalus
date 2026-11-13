@@ -72,10 +72,8 @@ trait JsPlainCardanoInfo extends js.Object {
 // protocol-parameters` output, but that reader is not exported here: it is devops-tool output, not
 // something a browser or Node client has lying around, and nothing in this codebase names a JS
 // consumer for it the way MeshJS and the Evolution SDK are named consumers of the Blockfrost shape.
-// Exporting it would also pull `CostModels`'s, `ExUnits`'s, `ProtocolVersion`'s, `UnitInterval`'s,
-// `ExUnitPrices`'s and the voting thresholds' `macroRW` derivation into the JS bundle for a path
-// nothing uses - see docs/internal/JS_BUNDLE_SIZE.md. Use `ProtocolParams.fromCardanoCliJson`
-// directly from Scala if you need it there.
+// Exporting it would also add its reader and writer to the JS bundle for a path nothing uses.
+// Use `ProtocolParams.fromCardanoCliJson` directly from Scala if you need it there.
 //
 // WHY THE PUBLIC CONSTRUCTOR TAKES NOTHING. Unlike `JsValue`'s `lovelace` or `JsUtxo`'s raw fields,
 // there is no primitive JS value a caller could hand this constructor that means anything. Scala.js
@@ -168,8 +166,7 @@ object JsProtocolParams {
 
     /** The zero-valued placeholder the public constructor starts from. Built from the nested case
       * classes directly, not through `fromBlockfrostJson`, so merely referencing this class never
-      * pulls upickle's derivation machinery into the bundle - see the `lazy val` comments on
-      * `ProtocolParams.blockfrostParamsReadWriter`.
+      * pulls a JSON codec into the bundle - see `docs/internal/JS_BUNDLE_SIZE.md`.
       *
       * `ProtocolVersion` requires `major >= 1`, so the placeholder is `(1, 0)`, not `(0, 0)`.
       */
@@ -240,10 +237,10 @@ object JsProtocolParams {
       *
       * The only JSON entry point exported to JavaScript. `cardano-cli query protocol-parameters`
       * output is readable from Scala but not from here: it is devops-tool output rather than
-      * something a browser or Node client has to hand, and exporting the reader would pull the JSON
-      * derivation for six more ledger types into the bundle. To configure an evaluation from any
-      * other provider, put its cost array in an `EvaluationOptions` record instead of parsing a
-      * whole parameter set.
+      * something a browser or Node client has to hand, and exporting the reader would add its code
+      * to the bundle for a path nothing uses. To configure an evaluation from any other provider,
+      * put its cost array in an `EvaluationOptions` record instead of parsing a whole parameter
+      * set.
       */
     @JSExportStatic
     def fromBlockfrostJson(json: String): JsProtocolParams = wrap(
