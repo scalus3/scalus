@@ -19,6 +19,10 @@ object LegacyProtocolParamsCodecs {
         upickle.default.read[ProtocolParams](json)(using ProtocolParams.cardanoCliParamsReadWriter)
 
     @nowarn("msg=deprecated")
+    def legacyCostModels(json: String): CostModels =
+        upickle.default.read[CostModels](json)(using CostModels.cardanoCliReadWriter)
+
+    @nowarn("msg=deprecated")
     def legacyCardanoCliJson(params: ProtocolParams): String =
         upickle.default.write(params)(using ProtocolParams.cardanoCliParamsReadWriter)
 
