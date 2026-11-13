@@ -9,6 +9,7 @@ import org.typelevel.paiges.Doc
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.*
 import scalus.cardano.address.Address
+import scalus.cardano.ledger.internal.{JsonTree, ProtocolParamsJson}
 import scalus.serialization.cbor.Cbor
 import scalus.utils.Hex.toHex
 import scalus.utils.{Pretty, Style}
@@ -725,13 +726,45 @@ case class CostModels(models: Map[Int, IndexedSeq[Long]]) derives Codec {
 object CostModels {
     import upickle.default.*
 
+    /** Reads cost models from `cardano-cli` JSON: an object from language name ("PlutusV1", ...) to
+      * the array of that language's cost parameters, as in the `costModels` field of
+      * `cardano-cli query protocol-parameters`. Every parameter is read exactly.
+      *
+      * @throws IllegalArgumentException
+      *   if the JSON is not of that shape. The message names the language or value that is wrong.
+      */
+    def fromCardanoCliJson(json: String): CostModels = {
+        try ProtocolParamsJson.readCostModels("costModels", JsonTree.parse(json))
+        catch
+            case e: Exception =>
+                throw new IllegalArgumentException(
+                  s"Could not read cost models: ${e.getMessage}. Expected an object from " +
+                      "language name to an array of cost parameters, as cardano-cli writes them.",
+                  e
+                )
+    }
+
+    /** Renders cost models as `cardano-cli` JSON, the inverse of [[fromCardanoCliJson]]: languages
+      * in order, each an array of its parameters as JSON numbers at any size.
+      */
+    def toCardanoCliJson(costModels: CostModels): String = {
+        JsonTree.render(ProtocolParamsJson.writeCostModels(costModels))
+    }
+
     /** ReadWriter for Cardano CLI JSON format that uses string keys like "PlutusV1", "PlutusV2",
       * "PlutusV3"
       *
       * `lazy` on purpose: as a plain `val` it runs in this object's constructor, so any use of
       * `CostModels` at all would build the codec and reach upickle's derivation machinery, which
       * keeps upickle in the Scala.js bundle. See `docs/internal/JS_BUNDLE_SIZE.md`.
+      *
+      * Kept as it was for compatibility: it reads every parameter through a `Double`.
+      * [[fromCardanoCliJson]] and [[toCardanoCliJson]] keep every number exact.
       */
+    @deprecated(
+      "use CostModels.fromCardanoCliJson and toCardanoCliJson, which keep every number exact",
+      "1.5.0"
+    )
     lazy val cardanoCliReadWriter: ReadWriter[CostModels] =
         readwriter[ujson.Value].bimap[CostModels](
           costModels =>
