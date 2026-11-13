@@ -41,6 +41,16 @@ class IntervalToDoubleTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         checkBoth(9007199254740993L, 1L, 9007199254740992.0)
     }
 
+    private val maxExact = 1L << 53
+
+    test("toDouble divides terms through two to the power of 53 and converts larger ones exactly") {
+        checkBoth(maxExact, maxExact, 1.0)
+        checkBoth(1L, maxExact, Math.pow(2.0, -53))
+        // 2^53 + 1 is not a double: dividing by its rounded value would give 2^-53.
+        checkBoth(1L, maxExact + 1, Math.nextDown(Math.pow(2.0, -53)))
+        checkBoth(maxExact + 1, maxExact + 1, 1.0)
+    }
+
     test("toDouble rounds exact binary midpoints to the even significand") {
         checkBoth(9007199254740993L, 18014398509481984L, 0.5)
         checkBoth(9007199254740995L, 18014398509481984L, Math.nextUp(Math.nextUp(0.5)))
@@ -102,6 +112,20 @@ class IntervalToDoubleTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val fractions = denominator.flatMap(d => Gen.chooseNum(0L, d).map(n => (n, d)))
         forAll(fractions, minSuccessful(10000)) { case (n, d) =>
             assertNearest(n, d, UnitInterval(n, d).toDouble)
+        }
+    }
+
+    // Uniform Long terms almost never fall at or below 2^53, so draw them on both sides of it.
+    test(
+      "toDouble is nearest with ties to even for terms on both sides of two to the power of 53"
+    ) {
+        val term = Gen.oneOf(
+          Gen.chooseNum(0L, maxExact),
+          Gen.chooseNum(maxExact - 1000, maxExact + 1000)
+        )
+        forAll(term, term.map(math.max(_, 1L)), minSuccessful(10000)) { (n, d) =>
+            assertNearest(n, d, NonNegativeInterval(n, d).toDouble)
+            if n <= d then assertNearest(n, d, UnitInterval(n, d).toDouble)
         }
     }
 }
