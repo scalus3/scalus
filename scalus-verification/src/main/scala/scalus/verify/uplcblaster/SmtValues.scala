@@ -55,6 +55,11 @@ private[uplcblaster] object SmtValues {
           * there are characters enough.
           */
         final case class OutsideType(reason: String) extends Unreadable
+
+        /** The term is of a Lean type, and Lean did not encode it, in the time it had or at all:
+          * the counterexample says nothing, and is not read.
+          */
+        final case class NotEncoded(reason: String) extends Unreadable
     }
 
     private type Read[A] = Either[Unreadable, A]
@@ -98,6 +103,75 @@ private[uplcblaster] object SmtValues {
 
     def string(text: String, renaming: Renaming): Either[Unreadable, String] =
         read(text, toText(renaming))
+
+    /** The Lean term of the value `text`, of a Lean type that is not one of those above, as a
+      * script context of CardanoLedgerApi: Lean elaborates it, and so can encode it. The solver
+      * names Lean's constructors by their full names, so an application is one of Lean's; a list, a
+      * pair and an option are written as Lean writes them, an integer as a literal, and a string
+      * literal as one of Lean's, a character by its code: a byte string's and a string's read with
+      * `renaming`, as the other values of the counterexample are. A part the model leaves
+      * unconstrained is any value of its type: Lean's `default`, where its type has one.
+      */
+    def leanTerm(text: String, renaming: Renaming): Either[Unreadable, String] =
+        read(text, toLean(renaming))
+
+    private def toLean(renaming: Renaming)(node: Node): Read[String] = {
+        def recur(item: Node): Read[String] = toLean(renaming)(item)
+        def all(items: List[Node]): Read[List[String]] =
+            items.foldRight[Read[List[String]]](Right(Nil)) { (item, rest) =>
+                for term <- recur(item); others <- rest yield term :: others
+            }
+        node match
+            case Node.Atom(text) if unconstrained(text)                     => Right("default")
+            case Node.Atom(text) if text.nonEmpty && text.forall(_.isDigit) => Right(text)
+            case Node.Atom("List.nil")                                      => Right("[]")
+            case Node.Atom("Option.none")                                   => Right("none")
+            case Node.Atom(name)                                            => Right(name)
+            case Node.Apply(List(Node.Atom(name), Node.Text(codePoints)))
+                if name.endsWith("ByteString.mk") =>
+                leanString(codePoints.map(c => renaming.bytes.getOrElse(c, c)))
+                    .map(literal => s"($name $literal)")
+            case Node.Text(codePoints) =>
+                leanString(codePoints.map(c => renaming.text.getOrElse(c, c)))
+            case Node.Apply(List(Node.Atom("-"), value)) => recur(value).map(v => s"(-$v)")
+            case Node.Apply(Node.Atom("as") :: Node.Atom("List.nil") :: _)    => Right("[]")
+            case Node.Apply(Node.Atom("as") :: Node.Atom("Option.none") :: _) => Right("none")
+            case Node.Apply(Node.Atom("as") :: value :: _)                    => recur(value)
+            case Node.Apply(List(Node.Atom("List.cons"), head, tail)) =>
+                for h <- recur(head); t <- recur(tail) yield s"($h :: $t)"
+            case Node.Apply(List(Node.Atom("Prod.mk"), first, second)) =>
+                for a <- recur(first); b <- recur(second) yield s"($a, $b)"
+            case Node.Apply(List(Node.Atom("Option.some"), value)) =>
+                recur(value).map(v => s"(some $v)")
+            case Node.Apply(Node.Atom(name) :: arguments) =>
+                all(arguments).map(terms => (name :: terms).mkString("(", " ", ")"))
+            case other => malformed(s"expected a value, got $other")
+    }
+
+    /** The escape of the character `codePoint`, at most `0xFFFF`, in a Lean string literal: `\xHH`
+      * for one of a byte's code, and `\uHHHH` above. Lean has no escape for a character above.
+      */
+    private[uplcblaster] def leanEscape(codePoint: Int): String =
+        if codePoint <= 0xff then f"\\x$codePoint%02x" else f"\\u$codePoint%04x"
+
+    /** A Lean string literal of `codePoints`: each character by its code, as Lean reads it
+      * ([[leanEscape]]). A character beyond that is none of a byte string's, nor of Plutus's
+      * strings here.
+      */
+    private def leanString(codePoints: Vector[Int]): Read[String] =
+        codePoints.find(_ > 0xffff) match
+            case Some(codePoint) =>
+                Left(
+                  Unreadable.OutsideType(
+                    s"the string ${shown(codePoints)} has the character U+${codePoint.toHexString}"
+                  )
+                )
+            case None =>
+                Right(
+                  codePoints
+                      .map(leanEscape)
+                      .mkString("\"", "", "\"")
+                )
 
     /** The characters of the string literals of a term: those of its byte strings, and those of its
       * strings.

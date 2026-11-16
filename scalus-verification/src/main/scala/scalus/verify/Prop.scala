@@ -80,6 +80,12 @@ enum Prop {
       * only where `a` holds: it fails where `a` fails, and where `a` holds and `b` fails.
       */
     case Rejects(premise: Prop, claim: Prop)
+
+    /** `value`'s `Data` satisfies `predicate`, a Boolean function of Lean: a test that no program
+      * runs, which only Lean evaluates, without a budget. `value` is a statement variable, or the
+      * `Data` of a value as a constant ([[Props.isValid]]).
+      */
+    case Satisfies(predicate: LeanPredicate, value: PropExpr[?])
     case Iff(a: Prop, b: Prop)
     case Not(a: Prop)
 
@@ -512,6 +518,26 @@ object Props {
     /** `fn` applied to `arg` does not return: `!succeeds(fn, arg)`. */
     inline def fails[A, R](fn: FunctionDef[A, R], inline arg: A): Prop = !succeeds(fn, arg)
 
+    /** `ctx` is a script context the ledger can give a script: the rules of IOG's CardanoLedgerApi
+      * (`CardanoLedgerApi.V3.Contexts.validScriptContext`), of whatever purpose, of the context's
+      * `Data` ([[LeanPredicate.validScriptContextV3]]). As the premise of a statement over every
+      * context, it leaves out the contexts of no transaction the ledger accepts:
+      *
+      * {{{
+      * forAllData[ScriptContext](ctx =>
+      *     (isValid(ctx) && isRefund(ctx) && !signedByTheCommitter(ctx)) ==>: fails(validator, ctx.toData)
+      * )
+      * }}}
+      *
+      * Only Lean evaluates it, without a budget, also on the values of a counterexample: a tactic
+      * runs no program for it. `ctx` is a statement variable, which the tactic passes as one `Data`
+      * (a script context is), or a value that has no statement variable in it, whose `Data` is a
+      * constant of the statement. The rules bound no list: a statement that walks one still needs
+      * its limits ([[forAllDataLimited]]).
+      */
+    inline def isValid(inline ctx: scalus.cardano.onchain.plutus.v3.ScriptContext): Prop =
+        ${ PropMacro.satisfies('ctx, '{ LeanPredicate.validScriptContextV3 }) }
+
     /** A function of one parameter returns on every argument that satisfies `when`:
       * `∀ x. when(x) ==>: succeeds(fn, x)`.
       */
@@ -575,8 +601,10 @@ object Props {
             case Prop.Or(left, right)      => Prop.Or(loop(left), loop(right))
             case Prop.Implies(left, right) => Prop.Implies(loop(left), loop(right))
             case Prop.Rejects(left, right) => Prop.Rejects(loop(left), loop(right))
-            case Prop.Iff(left, right)     => Prop.Iff(loop(left), loop(right))
-            case Prop.Not(inner)           => Prop.Not(loop(inner))
+            case Prop.Satisfies(predicate, value) =>
+                Prop.Satisfies(predicate, expression(value))
+            case Prop.Iff(left, right) => Prop.Iff(loop(left), loop(right))
+            case Prop.Not(inner)       => Prop.Not(loop(inner))
         if names.isEmpty then prop else loop(prop)
     }
 

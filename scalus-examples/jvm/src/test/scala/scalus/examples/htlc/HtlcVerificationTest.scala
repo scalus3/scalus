@@ -3,8 +3,10 @@ package scalus.examples.htlc
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude
-import scalus.cardano.onchain.plutus.v3.{Interval, IntervalBound, IntervalBoundType, PubKeyHash, ScriptContext, ScriptInfo, TxId, TxInfo, TxOutRef}
-import scalus.uplc.builtin.Builtins.{constrData, headList, mkCons, sha3_256, tailList, unConstrData}
+import scalus.cardano.onchain.plutus.v1.Value
+import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
+import scalus.cardano.onchain.plutus.v3.{Address, Credential, Interval, IntervalBound, IntervalBoundType, PubKeyHash, ScriptContext, ScriptInfo, ScriptPurpose, TxId, TxInInfo, TxInfo, TxOutRef, ValidatorHash}
+import scalus.uplc.builtin.Builtins.{constrData, headList, mkCons, mkNilData, sha3_256, tailList, unConstrData}
 import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
@@ -18,18 +20,22 @@ import scala.concurrent.duration.*
 /** Properties of [[HtlcValidator]], proved about its compiled UPLC with the `UplcBlaster` tactic
   * (see `docs/design/verification-details/uplc-blaster.md`).
   *
-  * The statements are of every script context the ledger can give the script
-  * (`forAllData[ScriptContext]`), with what they are about stated as a premise: a refund, a reveal,
-  * a validity range. The validator reads the datum, the redeemer, the validity range and the
-  * signatures, so a statement holds whatever the rest of the transaction is. Four groups:
+  * The statements are of every script context the ledger can give the script: of
+  * `forAllData[ScriptContext]`, with `isValid(ctx)` as their first premise, which holds of a
+  * context where the ledger's rules do, as IOG's CardanoLedgerApi states them (the transaction
+  * spends the output with its datum, is balanced, pays a fee, has a validity range that is not
+  * empty and its redeemer for the spend, …). Lean evaluates the rules, and runs no program for
+  * them. The second premise is what a statement is about: a refund, a reveal, a validity range. The
+  * validator reads the datum, the redeemer, the validity range and the signatures, so a statement
+  * holds whatever the rest of the transaction is. Four groups:
   *   - the validator on every script context: what it rejects before it reads the transaction;
   *   - a refund: who may take it, and from when, and that the committer can;
   *   - a reveal: who may make it, until when and of what, and that the receiver can;
   *   - the two together, and the bounds: there is no time at which both are accepted, and whether a
   *     bound of the validity range is inclusive does not matter.
   *
-  * Sample spends, decided by running the validator with the real hash, show that it accepts a
-  * refund and a reveal.
+  * Sample spends, valid transactions decided by running the validator with the real hash, show that
+  * it accepts a refund and a reveal, and that the premises can hold together.
   *
   * What is not proved:
   *   - anything of the hash. To the solver `sha3_256` is a function it knows nothing of, so a proof
@@ -99,7 +105,9 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val outputWithoutADatumIsRejected = verifier.statement(
       "htlc.context.output_without_a_datum_is_rejected",
-      forAllData[ScriptContext](ctx => spendsWithoutDatum(ctx) ==>: fails(validator, ctx.toData))
+      forAllData[ScriptContext](ctx =>
+          isValid(ctx) ==>: spendsWithoutDatum(ctx) ==>: fails(validator, ctx.toData)
+      )
     )
 
     test("an output without a datum cannot be spent") {
@@ -108,7 +116,9 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val onlySpendingIsValidated = verifier.statement(
       "htlc.context.only_spending_is_validated",
-      forAllData[ScriptContext](ctx => !Prop(isSpending(ctx)) ==>: fails(validator, ctx.toData))
+      forAllData[ScriptContext](ctx =>
+          isValid(ctx) ==>: !Prop(isSpending(ctx)) ==>: fails(validator, ctx.toData)
+      )
     )
 
     test("the script validates nothing but spending") {
@@ -118,7 +128,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val redeemerOfNeitherActionIsRejected = verifier.statement(
       "htlc.context.redeemer_of_neither_action_is_rejected",
       forAllData[ScriptContext](ctx =>
-          (Prop(spendsWithDatum(ctx)) && !Prop(
+          isValid(ctx) ==>: (Prop(spendsWithDatum(ctx)) && !Prop(
             unConstrData(ctx.redeemer).fst == BigInt(0)
                 || unConstrData(ctx.redeemer).fst == BigInt(1)
           )) ==>: fails(validator, ctx.toData)
@@ -132,29 +142,35 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         check(redeemerOfNeitherActionIsRejected, rejectionBudget)
     }
 
+    // A negative control, declared with `refute`, is of every script context, valid or not: that
+    // the solver finds a context the statement is false of shows that its premise can hold with
+    // the claim false. With `isValid` it would have to build a transaction the ledger accepts, a
+    // balanced one among them, which the validator accepts: of a refund at the timeout, Lean did
+    // not finish in 20 minutes (2026-11-12). The samples below are such transactions.
+
     // Each statement about a refund or a reveal is of every script context. The validator checks
     // the time before it searches the signatures, so what it rejects for the time it rejects of
     // every context, and Lean proves it so. What rests on the search of the signatures Lean does
-    // not prove of every context: its counterexample is a list of more signatures than the
-    // budget's runs search, on which the statement holds, and the test of it is tagged
-    // `Unfinished`. Such a statement is stated again beside it, of the contexts of two signatures
-    // at most, under the name with `Limited` (`forAllContextsMax2Signatures`), where Lean proves
-    // it.
+    // not prove of every context, and the test of it is tagged `Unfinished`: a counterexample is a
+    // list of more signatures than the budget's runs search, on which the statement holds, of a
+    // valid transaction, which the solver does not find within the time. Such a statement is
+    // stated again beside it, of the contexts of two signatures at most, under the name with
+    // `Limited` (`forAllContextsMax2Signatures`), where Lean proves it.
 
-    /** The time of a check of a statement of every context that Lean does not prove: it gives its
-      * spurious counterexample within a minute or two.
-      */
+    /** The time of a check of a statement of every context that Lean does not prove. */
     private val unfinishedTime = 5.minutes
 
-    /** That Lean's counterexample to `statement`, of every context, is spurious: the statement
-      * holds there, on a list of signatures longer than the budget's runs search.
+    /** That Lean neither proves nor refutes `statement`, of every context, in [[unfinishedTime]].
+      * Without `isValid` its counterexample was a list of signatures longer than the budget's runs
+      * search, spurious, in a minute or two; with it, the solver has a valid transaction to build
+      * too, and does not finish (2026-11-12).
       */
-    private def spurious(statement: Statement): Unit = {
+    private def unfinished(statement: Statement): Unit = {
         val reason = inconclusive(
           statement,
           UplcBlaster(Budget.LeanSteps(budget), lean, unfinishedTime)
         )
-        assert(reason.contains("is spurious"), reason)
+        assert(reason.contains("did not finish"), reason)
     }
 
     // A refund
@@ -162,7 +178,8 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val refundRejectedUnlessTheCommitterSigns = verifier.statement(
       "htlc.refund.rejected_unless_the_committer_signs",
       forAllData[ScriptContext](ctx =>
-          (isRefund(ctx) && !signedByTheCommitter(ctx)) ==>: fails(validator, ctx.toData)
+          isValid(ctx) ==>: (isRefund(ctx) && !signedByTheCommitter(ctx)) ==>:
+              fails(validator, ctx.toData)
       )
     )
     private val refundRejectedWhoeverSigns = verifier.refute(
@@ -174,15 +191,16 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
       "nobody but the committer refunds, of every script context, not finished by Lean",
       Unfinished
     ) {
-        // Lean's counterexample is a refund signed by more keys than the budget's runs search,
+        // A counterexample would be a refund signed by more keys than the budget's runs search,
         // none of them the committer's.
-        spurious(refundRejectedUnlessTheCommitterSigns)
+        unfinished(refundRejectedUnlessTheCommitterSigns)
     }
 
     private val refundRejectedUnlessTheCommitterSignsLimited = verifier.statement(
       "htlc.refund.rejected_unless_the_committer_signs_limited",
       forAllContextsMax2Signatures(ctx =>
-          (isRefund(ctx) && !signedByTheCommitter(ctx)) ==>: fails(validator, ctx.toData)
+          isValid(ctx) ==>: (isRefund(ctx) && !signedByTheCommitter(ctx)) ==>:
+              fails(validator, ctx.toData)
       )
     )
     private val refundRejectedWhoeverSignsLimited = verifier.refute(
@@ -203,7 +221,8 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val refundRejectedBeforeTheTimeout = verifier.statement(
       "htlc.refund.rejected_before_the_timeout",
       forAllData[ScriptContext](ctx =>
-          (isRefund(ctx) && !startsFromTheTimeout(ctx)) ==>: fails(validator, ctx.toData)
+          isValid(ctx) ==>: (isRefund(ctx) && !startsFromTheTimeout(ctx)) ==>:
+              fails(validator, ctx.toData)
       )
     )
     private val refundRejectedAtTheTimeout = verifier.refute(
@@ -225,7 +244,8 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val committerRefundsFromTheTimeout = verifier.statement(
       "htlc.refund.committer_refunds_from_the_timeout",
       forAllData[ScriptContext](ctx =>
-          (isRefund(ctx) && startsFromTheTimeout(ctx) && signedByTheCommitter(ctx)) ==>:
+          isValid(ctx) ==>:
+              (isRefund(ctx) && startsFromTheTimeout(ctx) && signedByTheCommitter(ctx)) ==>:
               succeeds(validator, ctx.toData)
       )
     )
@@ -240,15 +260,16 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
       "from the timeout on, the committer refunds, of every script context, not finished by Lean",
       Unfinished
     ) {
-        // Lean's counterexample is a refund signed by more keys than the budget's runs search,
+        // A counterexample would be a refund signed by more keys than the budget's runs search,
         // the committer's late among them.
-        spurious(committerRefundsFromTheTimeout)
+        unfinished(committerRefundsFromTheTimeout)
     }
 
     private val committerRefundsFromTheTimeoutLimited = verifier.statement(
       "htlc.refund.committer_refunds_from_the_timeout_limited",
       forAllContextsMax2Signatures(ctx =>
-          (isRefund(ctx) && startsFromTheTimeout(ctx) && signedByTheCommitter(ctx)) ==>:
+          isValid(ctx) ==>:
+              (isRefund(ctx) && startsFromTheTimeout(ctx) && signedByTheCommitter(ctx)) ==>:
               succeeds(validator, ctx.toData)
       )
     )
@@ -274,7 +295,8 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val revealRejectedUnlessTheReceiverSigns = verifier.statement(
       "htlc.reveal.rejected_unless_the_receiver_signs",
       forAllData[ScriptContext](ctx =>
-          (isReveal(ctx) && !signedByTheReceiver(ctx)) ==>: fails(validator, ctx.toData)
+          isValid(ctx) ==>: (isReveal(ctx) && !signedByTheReceiver(ctx)) ==>:
+              fails(validator, ctx.toData)
       )
     )
 
@@ -282,13 +304,14 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
       "nobody but the receiver reveals, of every script context, not finished by Lean",
       Unfinished
     ) {
-        spurious(revealRejectedUnlessTheReceiverSigns)
+        unfinished(revealRejectedUnlessTheReceiverSigns)
     }
 
     private val revealRejectedUnlessTheReceiverSignsLimited = verifier.statement(
       "htlc.reveal.rejected_unless_the_receiver_signs_limited",
       forAllContextsMax2Signatures(ctx =>
-          (isReveal(ctx) && !signedByTheReceiver(ctx)) ==>: fails(validator, ctx.toData)
+          isValid(ctx) ==>: (isReveal(ctx) && !signedByTheReceiver(ctx)) ==>:
+              fails(validator, ctx.toData)
       )
     )
 
@@ -301,7 +324,8 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val revealRejectedAfterTheTimeout = verifier.statement(
       "htlc.reveal.rejected_after_the_timeout",
       forAllData[ScriptContext](ctx =>
-          (isReveal(ctx) && !endsByTheTimeout(ctx)) ==>: fails(validator, ctx.toData)
+          isValid(ctx) ==>: (isReveal(ctx) && !endsByTheTimeout(ctx)) ==>:
+              fails(validator, ctx.toData)
       )
     )
 
@@ -315,7 +339,8 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val revealRejectedWithoutAPreimage = verifier.statement(
       "htlc.reveal.rejected_without_a_preimage",
       forAllData[ScriptContext](ctx =>
-          (isReveal(ctx) && !revealsAPreimage(ctx)) ==>: fails(validator, ctx.toData)
+          isValid(ctx) ==>: (isReveal(ctx) && !revealsAPreimage(ctx)) ==>:
+              fails(validator, ctx.toData)
       )
     )
 
@@ -325,13 +350,14 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
       Unfinished
     ) {
         // The validator checks the signature before the hash.
-        spurious(revealRejectedWithoutAPreimage)
+        unfinished(revealRejectedWithoutAPreimage)
     }
 
     private val revealRejectedWithoutAPreimageLimited = verifier.statement(
       "htlc.reveal.rejected_without_a_preimage_limited",
       forAllContextsMax2Signatures(ctx =>
-          (isReveal(ctx) && !revealsAPreimage(ctx)) ==>: fails(validator, ctx.toData)
+          isValid(ctx) ==>: (isReveal(ctx) && !revealsAPreimage(ctx)) ==>:
+              fails(validator, ctx.toData)
       )
     )
 
@@ -367,8 +393,9 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val receiverRevealsUpToTheTimeout = verifier.statement(
       "htlc.reveal.receiver_reveals_up_to_the_timeout",
       forAllData[ScriptContext](ctx =>
-          (isReveal(ctx) && endsByTheTimeout(ctx) && signedByTheReceiver(ctx) &&
-              revealsAPreimage(ctx)) ==>: succeeds(validator, ctx.toData)
+          isValid(ctx) ==>:
+              (isReveal(ctx) && endsByTheTimeout(ctx) && signedByTheReceiver(ctx) &&
+                  revealsAPreimage(ctx)) ==>: succeeds(validator, ctx.toData)
       )
     )
 
@@ -377,14 +404,15 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
           "context, not finished by Lean",
       Unfinished
     ) {
-        spurious(receiverRevealsUpToTheTimeout)
+        unfinished(receiverRevealsUpToTheTimeout)
     }
 
     private val receiverRevealsUpToTheTimeoutLimited = verifier.statement(
       "htlc.reveal.receiver_reveals_up_to_the_timeout_limited",
       forAllContextsMax2Signatures(ctx =>
-          (isReveal(ctx) && endsByTheTimeout(ctx) && signedByTheReceiver(ctx) &&
-              revealsAPreimage(ctx)) ==>: succeeds(validator, ctx.toData)
+          isValid(ctx) ==>:
+              (isReveal(ctx) && endsByTheTimeout(ctx) && signedByTheReceiver(ctx) &&
+                  revealsAPreimage(ctx)) ==>: succeeds(validator, ctx.toData)
       )
     )
 
@@ -408,8 +436,11 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
       "htlc.reveal_and_refund.reveal_ends_before_refund_begins",
       forAllData[ScriptContext](revealed =>
           forAllData[ScriptContext](refunded =>
-              (isReveal(revealed) && isRefund(refunded) && datumOf(revealed) == datumOf(refunded)
-                  && startsBeforeTheEnd(refunded, revealed)) ==>:
+              (isValid(revealed) && isValid(refunded)) ==>:
+                  (isReveal(revealed) && isRefund(refunded) && datumOf(revealed) == datumOf(
+                    refunded
+                  )
+                      && startsBeforeTheEnd(refunded, revealed)) ==>:
                   (fails(validator, revealed.toData) || fails(validator, refunded.toData))
           )
       )
@@ -428,13 +459,21 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val closureOfTheLowerBoundDoesNotMatter = verifier.statement(
       "htlc.bounds.closure_of_the_lower_bound_does_not_matter",
       forAllData[ScriptContext](ctx =>
-          succeeds(validator, ctx.toData) <=> succeeds(validator, withTheLowerBoundFlipped(ctx))
+          isValid(ctx) ==>:
+              (succeeds(validator, ctx.toData) <=> succeeds(
+                validator,
+                withTheLowerBoundFlipped(ctx)
+              ))
       )
     )
     private val closureOfTheUpperBoundDoesNotMatter = verifier.statement(
       "htlc.bounds.closure_of_the_upper_bound_does_not_matter",
       forAllData[ScriptContext](ctx =>
-          succeeds(validator, ctx.toData) <=> succeeds(validator, withTheUpperBoundFlipped(ctx))
+          isValid(ctx) ==>:
+              (succeeds(validator, ctx.toData) <=> succeeds(
+                validator,
+                withTheUpperBoundFlipped(ctx)
+              ))
       )
     )
 
@@ -460,13 +499,21 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val closureOfTheLowerBoundDoesNotMatterLimited = verifier.statement(
       "htlc.bounds.closure_of_the_lower_bound_does_not_matter_limited",
       forAllContextsMax2Signatures(ctx =>
-          succeeds(validator, ctx.toData) <=> succeeds(validator, withTheLowerBoundFlipped(ctx))
+          isValid(ctx) ==>:
+              (succeeds(validator, ctx.toData) <=> succeeds(
+                validator,
+                withTheLowerBoundFlipped(ctx)
+              ))
       )
     )
     private val closureOfTheUpperBoundDoesNotMatterLimited = verifier.statement(
       "htlc.bounds.closure_of_the_upper_bound_does_not_matter_limited",
       forAllContextsMax2Signatures(ctx =>
-          succeeds(validator, ctx.toData) <=> succeeds(validator, withTheUpperBoundFlipped(ctx))
+          isValid(ctx) ==>:
+              (succeeds(validator, ctx.toData) <=> succeeds(
+                validator,
+                withTheUpperBoundFlipped(ctx)
+              ))
       )
     )
 
@@ -485,80 +532,120 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val sampleRevealIsAccepted = verifier.statement(
       "htlc.samples.reveal_is_accepted",
-      succeeds(
-        validator,
-        sampleSpending(
+      isValid(
+        validSpending(
           Action.Reveal(hex"cafe").toData,
           Interval.entirelyBefore(BigInt(900)),
           signedBy(receiver)
         )
-      )
+      ) &&
+          succeeds(
+            validator,
+            sampleSpending(
+              Action.Reveal(hex"cafe").toData,
+              Interval.entirelyBefore(BigInt(900)),
+              signedBy(receiver)
+            )
+          )
     )
     private val sampleRevealUpToTheTimeoutIsAccepted = verifier.statement(
       "htlc.samples.reveal_up_to_the_timeout_is_accepted",
-      succeeds(
-        validator,
-        sampleSpending(
+      isValid(
+        validSpending(
           Action.Reveal(hex"cafe").toData,
           Interval.entirelyBefore(BigInt(1000)),
           signedBy(receiver)
         )
-      )
+      ) &&
+          succeeds(
+            validator,
+            sampleSpending(
+              Action.Reveal(hex"cafe").toData,
+              Interval.entirelyBefore(BigInt(1000)),
+              signedBy(receiver)
+            )
+          )
     )
     private val sampleRefundIsAccepted = verifier.statement(
       "htlc.samples.refund_is_accepted",
-      succeeds(
-        validator,
-        sampleSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), signedBy(committer))
-      )
+      isValid(
+        validSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), signedBy(committer))
+      ) &&
+          succeeds(
+            validator,
+            sampleSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), signedBy(committer))
+          )
     )
     private val unsignedSampleRevealIsRejected = verifier.statement(
       "htlc.samples.unsigned_reveal_is_rejected",
-      fails(
-        validator,
-        sampleSpending(
+      isValid(
+        validSpending(
           Action.Reveal(hex"cafe").toData,
           Interval.entirelyBefore(BigInt(900)),
           unsigned
         )
-      )
+      ) &&
+          fails(
+            validator,
+            sampleSpending(
+              Action.Reveal(hex"cafe").toData,
+              Interval.entirelyBefore(BigInt(900)),
+              unsigned
+            )
+          )
     )
     private val unsignedSampleRefundIsRejected = verifier.statement(
       "htlc.samples.unsigned_refund_is_rejected",
-      fails(
-        validator,
-        sampleSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), unsigned)
-      )
+      isValid(validSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), unsigned)) &&
+          fails(
+            validator,
+            sampleSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), unsigned)
+          )
     )
     private val sampleRevealOfAnotherSecretIsRejected = verifier.statement(
       "htlc.samples.reveal_of_another_secret_is_rejected",
-      fails(
-        validator,
-        sampleSpending(
+      isValid(
+        validSpending(
           Action.Reveal(hex"beef").toData,
           Interval.entirelyBefore(BigInt(900)),
           signedBy(receiver)
         )
-      )
+      ) &&
+          fails(
+            validator,
+            sampleSpending(
+              Action.Reveal(hex"beef").toData,
+              Interval.entirelyBefore(BigInt(900)),
+              signedBy(receiver)
+            )
+          )
     )
     private val sampleRevealAfterTheTimeoutIsRejected = verifier.statement(
       "htlc.samples.reveal_after_the_timeout_is_rejected",
-      fails(
-        validator,
-        sampleSpending(
+      isValid(
+        validSpending(
           Action.Reveal(hex"cafe").toData,
           Interval.entirelyBefore(BigInt(1001)),
           signedBy(receiver)
         )
-      )
+      ) &&
+          fails(
+            validator,
+            sampleSpending(
+              Action.Reveal(hex"cafe").toData,
+              Interval.entirelyBefore(BigInt(1001)),
+              signedBy(receiver)
+            )
+          )
     )
 
     test("sample reveals and refunds are accepted on the Lean machine, and not unsigned or late") {
-        // Closed statements: Lean decides them by running the validator, with the real hash, on
-        // a transaction that the ledger's types build. They are what the statements above are not
-        // vacuous of: the receiver's reveal of the secret is accepted, up to the timeout, and the
-        // committer's refund from it, so that a reveal which ends at the timeout and a refund
-        // which starts at it are both accepted.
+        // Closed statements: Lean decides them by evaluating the ledger's rules of the context,
+        // which hold of each, and by running the validator, with the real hash, on it. They are
+        // what the statements above are not vacuous of: the receiver's reveal of the secret is
+        // accepted, up to the timeout, and the committer's refund from it, of a transaction the
+        // ledger accepts, so that a reveal which ends at the timeout and a refund which starts at
+        // it are both accepted.
         def kind(statement: Statement): ProofKind = artifactOf(check(statement, budget)).kind
         assert(kind(sampleRevealIsAccepted) == ProofKind.LeanNative)
         assert(kind(sampleRevealUpToTheTimeoutIsAccepted) == ProofKind.LeanNative)
@@ -568,6 +655,66 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // The receiver's reveal of another secret is not accepted, nor one after the timeout.
         assert(kind(sampleRevealOfAnotherSecretIsRejected) == ProofKind.LeanNative)
         assert(kind(sampleRevealAfterTheTimeoutIsRejected) == ProofKind.LeanNative)
+    }
+
+    // The premises of the statements of valid contexts that no sample above meets: that each holds
+    // with `isValid` of some transaction the ledger accepts, so that the statement is not proved of
+    // none.
+    private val validSpendWithoutADatum = verifier.statement(
+      "htlc.samples.valid_spend_without_a_datum",
+      isValid(validSpendingWithoutDatum(Action.Timeout.toData)) &&
+          Prop(spendsWithoutDatum(validSpendingWithoutDatum(Action.Timeout.toData)))
+    )
+    private val validMintingIsNoSpending = verifier.statement(
+      "htlc.samples.valid_minting_is_no_spending",
+      isValid(validMinting) && !Prop(isSpending(validMinting))
+    )
+    private val validSpendOfNeitherAction = verifier.statement(
+      "htlc.samples.valid_spend_of_neither_action",
+      isValid(validSpending(constrData(2, mkNilData()), Interval.after(BigInt(1000)), unsigned)) &&
+          Prop(
+            spendsWithDatum(
+              validSpending(constrData(2, mkNilData()), Interval.after(BigInt(1000)), unsigned)
+            ) && unConstrData(constrData(2, mkNilData())).fst == BigInt(2)
+          )
+    )
+    private val validRevealAndRefundOverlap = verifier.statement(
+      "htlc.samples.valid_reveal_and_refund_overlap",
+      isValid(
+        validSpending(
+          Action.Reveal(hex"cafe").toData,
+          Interval.entirelyBefore(BigInt(1000)),
+          signedBy(receiver)
+        )
+      ) &&
+          isValid(
+            validSpending(Action.Timeout.toData, Interval.after(BigInt(900)), signedBy(committer))
+          ) &&
+          Prop(
+            startsBeforeTheEnd(
+              validSpending(
+                Action.Timeout.toData,
+                Interval.after(BigInt(900)),
+                signedBy(committer)
+              ),
+              validSpending(
+                Action.Reveal(hex"cafe").toData,
+                Interval.entirelyBefore(BigInt(1000)),
+                signedBy(receiver)
+              )
+            )
+          )
+    )
+
+    test("the premises of the statements of valid contexts hold together of some transaction") {
+        // Closed statements, as the samples above: a spend without a datum, a minting, a spend
+        // whose redeemer is neither action, and a reveal and a refund under one datum whose
+        // windows overlap, each of a transaction the ledger accepts.
+        def kind(statement: Statement): ProofKind = artifactOf(check(statement, budget)).kind
+        assert(kind(validSpendWithoutADatum) == ProofKind.LeanNative)
+        assert(kind(validMintingIsNoSpending) == ProofKind.LeanNative)
+        assert(kind(validSpendOfNeitherAction) == ProofKind.LeanNative)
+        assert(kind(validRevealAndRefundOverlap) == ProofKind.LeanNative)
     }
 }
 
@@ -752,23 +899,126 @@ object HtlcVerificationTest {
     inline def signedBy(inline key: PubKeyHash): prelude.List[PubKeyHash] =
         prelude.List.Cons(key, prelude.List.Nil)
 
+    /** The script's hash, of the address the sample output is locked at. */
+    inline def htlcScript: ValidatorHash =
+        hex"44444444444444444444444444444444444444444444444444444444"
+
     /** The script context of spending the output locked under [[sample]], as the ledger's types
-      * build it: a transaction without inputs and outputs.
+      * build it, of a transaction the ledger accepts ([[Props.isValid]]): it spends the output, of
+      * 10 ada at the script's address with the datum inline, pays 9.8 ada to whoever signs first
+      * and 0.2 ada of fee, and has the redeemer for the spend. Its validity range is `range`, which
+      * is not empty, and its signatories, ascending, are `signatories`.
       */
-    inline def sampleSpending(
+    inline def validSpending(
         inline redeemer: Data,
         inline range: Interval,
         inline signatories: prelude.List[PubKeyHash]
-    ): Data = {
+    ): ScriptContext = {
+        val payee = signatories match
+            case prelude.List.Cons(first, _) => first
+            case prelude.List.Nil            => committer
         ScriptContext(
           TxInfo(
-            inputs = prelude.List.Nil,
+            inputs = prelude.List.singleton(
+              TxInInfo(
+                htlcRef,
+                TxOut(
+                  Address(Credential.ScriptCredential(htlcScript), prelude.Option.None),
+                  Value.lovelace(BigInt(10_000_000)),
+                  OutputDatum.OutputDatum(sample.toData)
+                )
+              )
+            ),
+            outputs = prelude.List.singleton(
+              TxOut(
+                Address(Credential.PubKeyCredential(payee), prelude.Option.None),
+                Value.lovelace(BigInt(9_800_000))
+              )
+            ),
+            fee = BigInt(200_000),
             validRange = range,
             signatories = signatories,
+            redeemers = prelude.AssocMap.singleton(ScriptPurpose.Spending(htlcRef), redeemer),
             id = TxId(hex"5555555555555555555555555555555555555555555555555555555555555555")
           ),
           redeemer,
           ScriptInfo.SpendingScript(htlcRef, prelude.Option.Some(sample.toData))
-        ).toData
+        )
     }
+
+    /** A script context the ledger accepts of spending an output at the script's address without a
+      * datum, with `redeemer`: as [[validSpending]], but the output has no datum.
+      */
+    inline def validSpendingWithoutDatum(inline redeemer: Data): ScriptContext =
+        ScriptContext(
+          TxInfo(
+            inputs = prelude.List.singleton(
+              TxInInfo(
+                htlcRef,
+                TxOut(
+                  Address(Credential.ScriptCredential(htlcScript), prelude.Option.None),
+                  Value.lovelace(BigInt(10_000_000))
+                )
+              )
+            ),
+            outputs = prelude.List.singleton(
+              TxOut(
+                Address(Credential.PubKeyCredential(committer), prelude.Option.None),
+                Value.lovelace(BigInt(9_800_000))
+              )
+            ),
+            fee = BigInt(200_000),
+            validRange = Interval.after(BigInt(1000)),
+            signatories = signedBy(committer),
+            redeemers = prelude.AssocMap.singleton(ScriptPurpose.Spending(htlcRef), redeemer),
+            id = TxId(hex"5555555555555555555555555555555555555555555555555555555555555555")
+          ),
+          redeemer,
+          ScriptInfo.SpendingScript(htlcRef, prelude.Option.None)
+        )
+
+    /** The policy of the sample minting. */
+    inline def samplePolicy: ValidatorHash =
+        hex"66666666666666666666666666666666666666666666666666666666"
+
+    /** A script context the ledger accepts of minting a token of [[samplePolicy]]: it spends 10 ada
+      * of the committer's, and pays 9.8 ada and the token back.
+      */
+    inline def validMinting: ScriptContext =
+        ScriptContext(
+          TxInfo(
+            inputs = prelude.List.singleton(
+              TxInInfo(
+                htlcRef,
+                TxOut(
+                  Address(Credential.PubKeyCredential(committer), prelude.Option.None),
+                  Value.lovelace(BigInt(10_000_000))
+                )
+              )
+            ),
+            outputs = prelude.List.singleton(
+              TxOut(
+                Address(Credential.PubKeyCredential(committer), prelude.Option.None),
+                Value.lovelace(BigInt(9_800_000)) + Value(samplePolicy, hex"01", BigInt(1))
+              )
+            ),
+            fee = BigInt(200_000),
+            mint = Value(samplePolicy, hex"01", BigInt(1)),
+            signatories = signedBy(committer),
+            redeemers = prelude.AssocMap.singleton(
+              ScriptPurpose.Minting(samplePolicy),
+              Action.Timeout.toData
+            ),
+            id = TxId(hex"5555555555555555555555555555555555555555555555555555555555555555")
+          ),
+          Action.Timeout.toData,
+          ScriptInfo.MintingScript(samplePolicy)
+        )
+
+    /** [[validSpending]] as the `Data` the script is given. */
+    inline def sampleSpending(
+        inline redeemer: Data,
+        inline range: Interval,
+        inline signatories: prelude.List[PubKeyHash]
+    ): Data = validSpending(redeemer, range, signatories).toData
 }

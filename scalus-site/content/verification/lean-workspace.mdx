@@ -9,7 +9,7 @@ import { Callout } from 'nextra/components'
 # The Lean Workspace
 
 Every check runs in a Lean workspace: a Lake package that requires Scalus's Lean library, with
-Blaster and PlutusCore. The workspace decides which Lean runs and what a check can import. The
+Blaster, PlutusCore and IOG's CardanoLedgerApi, whose ledger rules `isValid` states. The workspace decides which Lean runs and what a check can import. The
 first suite of proofs that runs creates it where it is missing, as `src/test/lean/<Project>`
 (see [Setup](/docs/verification/setup#the-lean-workspace)).
 
@@ -49,7 +49,8 @@ override protected def keptResultsFile: Option[Path] = Some(
 ```
 
 An entry has the hashes of what its result rests on: the statement as Lean gets it, the program of
-each test, and the Lean side, which is the toolchain, the revisions of Blaster and PlutusCore, and
+each test, and the Lean side, which is the toolchain, the revisions of Blaster, PlutusCore and
+CardanoLedgerApi, and
 the Lean sources of Scalus's library and of the workspace. How a run uses the entries depends on
 where it runs:
 

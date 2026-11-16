@@ -56,7 +56,21 @@ about the time of compiling the examples. Proving everything again
 The [hashed timelock contract](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/htlc)
 locks funds for a receiver who reveals a secret before a timeout, and lets the committer take
 them back after it. The suite states every rule of every script context the ledger can pass the
-validator (`forAllData[ScriptContext]`), with what it is about as a premise.
+validator: `forAllData[ScriptContext]`, with `isValid(ctx)` as the first premise and what the rule
+is about as the second:
+
+```scala
+forAllData[ScriptContext](ctx =>
+    isValid(ctx) ==>: (isRefund(ctx) && !startsFromTheTimeout(ctx)) ==>: fails(validator, ctx.toData)
+)
+```
+
+`isValid(ctx)` holds where the ledger's rules do, as IOG's
+[CardanoLedgerApi](https://github.com/input-output-hk/CardanoLedgerApiBlaster) states them in Lean:
+the transaction spends the output with its datum, is balanced, pays a fee, has a validity range
+that is not empty and the redeemer for the spend. Lean evaluates the rules; no program runs for
+them. With `isValid` as a premise, the context reaches Lean as a value of the library's type
+([How a Script Context Reaches Lean](/docs/verification/tuning#how-a-script-context-reaches-lean)).
 
 **Proved of every script context**, with no limit on its inputs, outputs or signatures:
 
@@ -82,8 +96,10 @@ signatures, with `_limited` in its name, where Lean proves it
   timeout the receiver can reveal;
 - whether a bound of the validity range is inclusive does not matter.
 
-Each property has a negative control beside it, and sample spends, decided by running the validator
-with the real hash, show that it accepts a refund and a reveal.
+Each property has a negative control beside it, of every context, valid or not: with `isValid`
+the solver would have to build a balanced transaction the validator accepts, which takes it too
+long. Sample spends, valid transactions decided by running the validator with the real hash, show
+that it accepts a refund and a reveal of a transaction the ledger accepts.
 
 The suite states what is **not** proved, in its header:
 

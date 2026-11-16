@@ -65,7 +65,11 @@ final class LeanProofs private (
     kept: Option[Path],
     notChecked: String => Nothing,
     running: () => String,
-    checksKeptIn: Option[Path]
+    checksKeptIn: Option[Path],
+    /** How the [[UplcBlaster]] tactics these proofs run map the variables, where a tactic does not
+      * say it itself ([[UplcBlaster.withMappingUnlessSet]]).
+      */
+    val mapping: VariableMapping
 ) extends AutoCloseable {
 
     /** The Lean servers of the workspace: none is started before a check asks for one. */
@@ -408,7 +412,12 @@ final class LeanProofs private (
                         checkedProof(artifact)
                         request.tactic match
                             case blaster: UplcBlaster =>
-                                exportProved(verifier, statement, result, blaster)
+                                exportProved(
+                                  verifier,
+                                  statement,
+                                  result,
+                                  blaster.withMappingUnlessSet(mapping)
+                                )
                             case _ =>
                     case _ =>
                 if !isTheorem then failed(s"$name: proved, and not among the verifier's theorems")
@@ -465,8 +474,9 @@ final class LeanProofs private (
         tactic: Tactic
     ): VerificationResult = {
         val writing = tactic match
-            case blaster: UplcBlaster => keepingChecks(blaster, statement)
-            case other                => other
+            case blaster: UplcBlaster =>
+                keepingChecks(blaster.withMappingUnlessSet(mapping), statement)
+            case other => other
         verifier.synchronized { verifier.verify(statement, writing) } match
             case VerificationResult.Inconclusive(reason) if reason.startsWith(KeptResults.stale) =>
                 notChecked(s"${statement.name}: $reason")
@@ -511,7 +521,7 @@ final class LeanProofs private (
           verifier,
           statement,
           result,
-          UplcBlaster(Budget.LeanSteps(artifact.budget), lean)
+          UplcBlaster(Budget.LeanSteps(artifact.budget), lean).withMapping(mapping)
         )
     }
 
@@ -588,7 +598,7 @@ final class LeanProofs private (
           statement,
           result,
           text,
-          UplcBlaster(Budget.LeanSteps(artifactOf(result).budget), lean)
+          UplcBlaster(Budget.LeanSteps(artifactOf(result).budget), lean).withMapping(mapping)
         ).getOrElse(
           failed(s"${statement.name} has no form in the Universal Annotation Language")
         )
@@ -855,7 +865,20 @@ object LeanProofs {
         running: () => String,
         checksKeptIn: Option[Path]
     ): LeanProofs =
-        new LeanProofs(workspace, kept, notChecked, running, checksKeptIn)
+        apply(workspace, kept, notChecked, running, checksKeptIn, VariableMapping.default)
+
+    /** Proofs as above, whose [[UplcBlaster]] tactics map the variables as `mapping` prefers, where
+      * a tactic does not say it itself ([[VariableMapping]]).
+      */
+    def apply(
+        workspace: Path,
+        kept: Option[Path],
+        notChecked: String => Nothing,
+        running: () => String,
+        checksKeptIn: Option[Path],
+        mapping: VariableMapping
+    ): LeanProofs =
+        new LeanProofs(workspace, kept, notChecked, running, checksKeptIn, mapping)
 
     private val cleaner = Cleaner.create()
 

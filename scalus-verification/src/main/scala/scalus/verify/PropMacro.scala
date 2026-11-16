@@ -346,6 +346,58 @@ private[verify] object PropMacro {
     def equal[A: Type](a: Expr[A], b: Expr[A])(using Quotes): Expr[Prop] =
         '{ Prop.Equal(${ leaf(a) }, ${ leaf(b) }) }
 
+    /** [[Prop.Satisfies]] of `predicate` and `value`: a statement variable itself, as a leaf over
+      * it, or a value without statement variables, whose `Data` is computed where the statement is
+      * built, as a constant. A Lean predicate is of a `Data` the tactic has as a term: a variable
+      * passed as one, or a constant, and not of an expression over variables, which only a program
+      * computes.
+      */
+    def satisfies[A: Type](value: Expr[A], predicate: Expr[LeanPredicate])(using
+        Quotes
+    ): Expr[Prop] = {
+        import quotes.reflect.*
+        rejectCompiledCode()
+        def bare(term: Term): Term = term match
+            case Inlined(_, Nil, inner) => bare(inner)
+            case Typed(inner, _)        => bare(inner)
+            case Block(Nil, inner)      => bare(inner)
+            case other                  => other
+        binderVariables(value.asTerm) match
+            case Nil =>
+                val encode = Expr
+                    .summon[scalus.uplc.builtin.ToData[A]]
+                    .getOrElse(
+                      report.errorAndAbort(
+                        s"no ToData of ${Type.show[A]}, to give Lean the Data of the value",
+                        value.asTerm.pos
+                      )
+                    )
+                '{
+                    Prop.Satisfies(
+                      $predicate,
+                      PropExpr.SIRExpr(
+                        scalus.compiler.sir.SIR.Const(
+                          scalus.uplc.Constant.Data($encode($value)),
+                          scalus.compiler.sir.SIRType.Data.tp,
+                          scalus.compiler.sir.AnnotationsDecl.empty
+                        )
+                      )
+                    )
+                }
+            case List(variable) if bare(value.asTerm) match
+                    case ident: Ident => ident.symbol == variable
+                    case _            => false
+                =>
+                '{ Prop.Satisfies($predicate, ${ leaf(value) }) }
+            case _ =>
+                report.errorAndAbort(
+                  "a Lean predicate, as isValid, is of a statement variable itself, as `ctx` of " +
+                      "`forAllData[ScriptContext](ctx => ...)`, or of a value without statement " +
+                      "variables: Lean has no term of an expression over them",
+                  value.asTerm.pos
+                )
+    }
+
     /** Passes the binders' identifiers and the statement of the lambda literal `body`
       * ([[statementOf]]) to `build`.
       */

@@ -159,9 +159,10 @@ trait Tactic {
 
     /** Runs the tactic on `prepared`, starting from `earlier`: what was kept of an earlier result,
       * where results are kept and there is one, as a budget that was found. It was kept for the
-      * same fingerprint, or for the same statement and programs with another side of the backend
-      * ([[KeptResults.keptOnAnotherSide]]), so it is a start, and stands for no result. A tactic
-      * that has no use for it ignores it.
+      * same fingerprint, for the same statement and programs with another side of the backend
+      * ([[KeptResults.keptOnAnotherSide]]), or else under the statement's name for another
+      * statement ([[KeptResults.keptUnderName]]), so it is a start, and stands for no result. A
+      * tactic that has no use for it ignores it.
       */
     def run(prepared: Prepared, earlier: Option[Kept] = None): ExecutionResult
 
@@ -188,6 +189,14 @@ trait Tactic {
       */
     def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] =
         Left(s"$name takes no result that was kept")
+
+    /** [[restore]] of a refutation kept with another side of the backend
+      * ([[KeptResults.keptOnAnotherSide]]), which the tactic replays without the backend. Where the
+      * refutation rests on what the old side computed, as Lean's evaluation of a predicate, it is
+      * none with the new side: the tactic says why, and the backend is asked again.
+      */
+    def restoreOnAnotherSide(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] =
+        restore(prepared, kept)
 }
 
 /** One reason a tactic cannot prepare a goal in its input language. */
@@ -762,10 +771,17 @@ final class Verifier private (results: Option[KeptResults]) {
                 lazy val restored: Option[Either[String, ExecutionResult]] =
                     earlier.map(tactic.restore(prepared, _))
                 lazy val formerRefutation: Option[Either[String, ExecutionResult]] =
-                    former.filter(_.result == Kept.Result.Refuted).map(tactic.restore(prepared, _))
+                    former
+                        .filter(_.result == Kept.Result.Refuted)
+                        .map(tactic.restoreOnAnotherSide(prepared, _))
                 def taken: Option[ExecutionResult] =
                     restored.flatMap(_.toOption).orElse(formerRefutation.flatMap(_.toOption))
-                def asked: ExecutionResult = tactic.run(prepared, earlier.orElse(former))
+                // Where neither is kept, what was kept under the statement's name for another
+                // statement is a start too, as the budget a search found for it: it is tried
+                // first, and stands for nothing where it decides nothing.
+                def start: Option[Kept] =
+                    earlier.orElse(former).orElse(kept.keptUnderName(name, tactic.name))
+                def asked: ExecutionResult = tactic.run(prepared, start)
                 def keeping(result: ExecutionResult): ExecutionResult = {
                     tactic
                         .keep(prepared, result)

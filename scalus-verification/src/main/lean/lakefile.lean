@@ -17,6 +17,11 @@ package «ScalusProofs» where
   -- the flake's shells have (`blasterZ3`).
   require Blaster from git
     "https://github.com/input-output-hk/Lean-blaster" @ "main"
+  -- IOG's ledger types and rules in Lean, for the `isValid` premise of a statement
+  -- (`ScalusProofs.Ledger`). Its own lakefile names PlutusCore and Blaster `main`, which the
+  -- requirements above take precedence over; it builds against them (3dd048e, 2026-11-12).
+  require CardanoLedgerApi from git
+    "https://github.com/input-output-hk/CardanoLedgerApiBlaster" @ "3dd048e3eb8619007a4bd7e2f5f9c03e18f2bf74"
 
 @[default_target]
 lean_lib «ScalusProofs» where

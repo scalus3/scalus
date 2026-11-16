@@ -14,7 +14,9 @@ class HtlcVerificationSupportTest extends AnyFunSuite {
 
     test("the samples the validator accepts meet the premises of the statements that it accepts") {
         // A statement whose premise no context meets would be proved for nothing. The samples
-        // are accepted on the Lean machine; here, on the JVM, they meet the premises.
+        // are accepted on the Lean machine; here, on the JVM, they meet the premises. That they
+        // are valid, the other premise, `isValid`, only Lean evaluates: the statements of the
+        // samples say it.
         val refund = sampleSpending(
           Action.Timeout.toData,
           Interval.after(BigInt(1000)),
