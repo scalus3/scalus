@@ -76,6 +76,13 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
       */
     protected def keptChecksDirectory: Option[Path] = None
 
+    /** How the suite's [[UplcBlaster]] checks map the variables, where a check's tactic does not
+      * say it itself ([[VariableMapping]]): [[VariableMapping.default]], a script context its
+      * statement assumes valid as CardanoLedgerApi's typed one, unless the suite prefers otherwise,
+      * as `VariableMapping.rules`.
+      */
+    protected def variableMapping: VariableMapping = VariableMapping.default
+
     /** Whether the suite holds the specifications of the functions of its verifier to being checked
       * ([[LeanProofs.checkSpecifications]]): after its last test, where every test but those tagged
       * [[Unfinished]] ran and passed, a clause of a function's code that no proof checks, and that
@@ -108,7 +115,8 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
               keptResultsFile,
               reason => cancel(reason),
               () => running,
-              keptChecksDirectory
+              keptChecksDirectory,
+              variableMapping
             )
         made = Some(proofs)
         proofs

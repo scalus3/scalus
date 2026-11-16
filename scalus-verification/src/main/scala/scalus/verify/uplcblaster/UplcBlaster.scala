@@ -16,12 +16,12 @@ import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, R
 import scalus.utils.{Hex, Utils}
 import scalus.verify.*
 import scalus.verify.SirTypes.*
-import scalus.verify.lean.{Directories, LeanServer, LeanServerProvider, LeanWorkspace}
+import scalus.verify.lean.{Directories, LeanServer, LeanServerProvider, LeanTypeBinding, LeanWorkspace}
 import scalus.verify.uplcblaster.MappingPlan.Quantifier
 
 import java.nio.file.{Files, Path}
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration, SECONDS}
+import scala.concurrent.duration.{Deadline, Duration, DurationInt, FiniteDuration, SECONDS}
 
 /** How far a check lets the program of each test run.
   *
@@ -81,7 +81,12 @@ final class UplcBlaster private (
     val maxHeartbeats: Int,
     val checksKeptIn: Option[Path],
     lastChecksOnly: Boolean,
-    fixedPlan: MappingPlan.Fixed
+    fixedPlan: MappingPlan.Fixed,
+    /** How the tactic prefers to map the variables' nodes ([[VariableMapping]]), or none where it
+      * was not said: [[VariableMapping.default]], unless whoever runs the tactic says otherwise for
+      * itself, as a suite of proofs does for its checks ([[withMappingUnlessSet]]).
+      */
+    val mapping: Option[VariableMapping] = None
 ) extends Tactic {
     override type Prepared = UplcBlaster.Lowered
 
@@ -111,7 +116,8 @@ final class UplcBlaster private (
           limit,
           checksKeptIn,
           lastChecksOnly,
-          fixedPlan
+          fixedPlan,
+          mapping
         )
 
     /** The same tactic with no time limit, of the whole run or of one attempt. A check then runs
@@ -127,7 +133,8 @@ final class UplcBlaster private (
           maxHeartbeats,
           checksKeptIn,
           lastChecksOnly,
-          fixedPlan
+          fixedPlan,
+          mapping
         )
 
     /** The same tactic with a time limit for one attempt, beside that of the whole run. A tactic
@@ -146,7 +153,8 @@ final class UplcBlaster private (
           maxHeartbeats,
           checksKeptIn,
           lastChecksOnly,
-          fixedPlan
+          fixedPlan,
+          mapping
         )
 
     /** The same tactic, writing every check it runs into `directory` as well, each in a directory
@@ -163,7 +171,8 @@ final class UplcBlaster private (
           maxHeartbeats,
           Some(directory),
           false,
-          fixedPlan
+          fixedPlan,
+          mapping
         )
 
     /** [[withChecksKeptIn]], keeping only the checks of the tactic's last run in `directory`: a run
@@ -180,7 +189,8 @@ final class UplcBlaster private (
           maxHeartbeats,
           Some(directory),
           true,
-          fixedPlan
+          fixedPlan,
+          mapping
         )
 
     /** Where the tactic writes the checks it runs: the directory it was told
@@ -201,8 +211,31 @@ final class UplcBlaster private (
           maxHeartbeats,
           checksKeptIn,
           lastChecksOnly,
-          plan
+          plan,
+          mapping
         )
+
+    /** The same tactic, mapping the variables' nodes as `preferred` prefers for their types
+      * ([[VariableMapping]]): `VariableMapping.rules.preferLeanTypes` passes a script context as
+      * CardanoLedgerApi's typed one. The mapping is part of every check's text, and so of what a
+      * kept result rests on.
+      */
+    def withMapping(preferred: VariableMapping): UplcBlaster =
+        new UplcBlaster(
+          budget,
+          servers,
+          timeout,
+          attemptTimeout,
+          maxHeartbeats,
+          checksKeptIn,
+          lastChecksOnly,
+          fixedPlan,
+          Some(preferred)
+        )
+
+    /** [[withMapping]] of `preferred` where no mapping was said, as a suite's default. */
+    def withMappingUnlessSet(preferred: VariableMapping): UplcBlaster =
+        if mapping.isDefined then this else withMapping(preferred)
 
     override val name: String = "uplc-blaster"
 
@@ -218,7 +251,9 @@ final class UplcBlaster private (
               // within the budget. The statement is checked as written.
               rejecting = UplcBlaster.rejectable(goal.statement.origin) && !budget.isInstanceOf[
                 Budget.Within
-              ]
+              ],
+              mapping.getOrElse(VariableMapping.default),
+              expectsRefutation = goal.statement.expected == ExpectedOutcome.Falsified
             )
             .flatMap(lowered =>
                 budget match
@@ -281,7 +316,8 @@ final class UplcBlaster private (
             }
 
     /** A search starts at the budget that was kept, also with another revision of Blaster or of the
-      * library: where the statement is still decided there, that is one check.
+      * library, or for another statement of its name: where the statement is still decided there,
+      * that is one check.
       */
     override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult = {
         val first = earlier.flatMap(_.notes.get(UplcBlaster.budgetNote)).flatMap(_.toIntOption)
@@ -367,6 +403,15 @@ final class UplcBlaster private (
 
     override def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] =
         UplcBlaster.restored(prepared, kept)
+
+    /** A refutation whose Lean predicates Lean evaluated is none with another side of the backend:
+      * the predicates, as the ledger's rules, are of that side, and may give another verdict now.
+      */
+    override def restoreOnAnotherSide(
+        prepared: Prepared,
+        kept: Kept
+    ): Either[String, ExecutionResult] =
+        UplcBlaster.restoredOnAnotherSide(prepared, kept)
 }
 
 object UplcBlaster {
@@ -403,7 +448,11 @@ object UplcBlaster {
         /** Whether the statement as written decided, where the rejecting form decided nothing
           * ([[Lowered.unrewritten]]).
           */
-        asWritten: Boolean = false
+        asWritten: Boolean = false,
+        /** Of a refutation, what Lean evaluated the statement's Lean predicates to on the
+          * counterexample, in the order they are in the statement ([[LeafFormula.Satisfies]]).
+          */
+        verdicts: List[Boolean] = Nil
     ) extends ProofArtifact
 
     /** A lowered statement over its leaves, retaining its quantifiers and connectives.
@@ -429,6 +478,29 @@ object UplcBlaster {
         case Implies(premise: LeafFormula, conclusion: LeafFormula)
         case Forall(binders: List[Int], body: LeafFormula)
         case Exists(binders: List[Int], body: LeafFormula)
+
+        /** A Lean predicate holds of a `Data` ([[Prop.Satisfies]]): no program, so no budget cuts
+          * it, and Lean reads it the same in a positive and in a negative position.
+          */
+        case Satisfies(predicate: LeanPredicate, argument: LeanArgument)
+    }
+
+    /** The `Data` a Lean predicate of a statement is of ([[LeafFormula.Satisfies]]): a binder, a
+      * variable passed as one `Data`, or a constant.
+      */
+    enum LeanArgument {
+
+        /** The binder at `index`, of the Lean type `typed` where it has one, else of `Data`. */
+        case Binder(index: Int, typed: Option[LeanTypeBinding] = None)
+        case Constant(data: Data)
+
+        /** Its `Data` among `values`, the values of the binders. */
+        def dataOf(values: List[scalus.uplc.Constant]): Either[String, Data] = this match
+            case Binder(index, _) =>
+                values.lift(index) match
+                    case Some(scalus.uplc.Constant.Data(data)) => Right(data)
+                    case other => Left(s"the binder x$index has the value $other, no Data")
+            case Constant(data) => Right(data)
     }
 
     /** A statement lowered for Lean: its primitive binders, its body, and one closed UPLC program
@@ -464,8 +536,17 @@ object UplcBlaster {
           */
         private[uplcblaster] val unrewritten: Option[Lowered] = None,
         /** The statement's name, which the trace says ([[UplcBlaster.tracing]]). */
-        private[uplcblaster] val name: String = ""
+        private[uplcblaster] val name: String = "",
+        /** For each binder, the Lean type it has where it is mapped as one
+          * ([[MappingPlan.Mapping.AsLeanType]]): its programs are given the value's `Data`, and no
+          * premise restricts it.
+          */
+        private[uplcblaster] val typed: Vector[Option[LeanTypeBinding]] = Vector.empty
     ) {
+
+        /** The Lean type of the binder at `index`, where it has one. */
+        private[uplcblaster] def typedAt(index: Int): Option[LeanTypeBinding] =
+            typed.lift(index).flatten
 
         /** The SHA-256 of each leaf's program CBOR, in the order of [[leaves]]. */
         def programHashes: List[String] = leaves.toList.map(UplcBlaster.programHash)
@@ -591,10 +672,10 @@ object UplcBlaster {
 
     /** What a check came to, for the trace. */
     private def described(probe: Probe): String = probe match
-        case Probe.Decided(result)        => described(result)
-        case Probe.Spurious(_, _, reason) => reason
-        case Probe.Unreplayed(reason)     => s"unreplayed: $reason"
-        case Probe.ClaimFails(reason)     => s"the claim fails: $reason"
+        case Probe.Decided(result)           => described(result)
+        case Probe.Spurious(_, _, reason, _) => reason
+        case Probe.Unreplayed(reason)        => s"unreplayed: $reason"
+        case Probe.ClaimFails(reason)        => s"the claim fails: $reason"
 
     private def described(result: ExecutionResult): String = result match
         case _: VerificationResult.Proven            => "proved"
@@ -658,7 +739,8 @@ object UplcBlaster {
     ): Either[String, Lowered] = lower(prop, functions, fixed, rejecting = true)
 
     /** [[lower]], with the rejecting form where `rejecting`. Without it, every implication is
-      * lowered as written, and there is no [[Lowered.unrewritten]].
+      * lowered as written, and there is no [[Lowered.unrewritten]]. The variables are mapped as a
+      * check maps them where nothing says otherwise ([[VariableMapping.default]]).
       */
     private[verify] def lower(
         prop: Prop,
@@ -666,20 +748,47 @@ object UplcBlaster {
         fixed: MappingPlan.Fixed,
         rejecting: Boolean
     ): Either[String, Lowered] =
-        lowering(prop, functions, fixed, rejecting).flatMap { (lowered, rewritten) =>
-            if !rewritten then Right(lowered)
-            else
-                // The implications the rejecting form rewrites quantify over nothing, so the
-                // statement as written has the same binders, and a counterexample's values are
-                // values of both.
-                lowering(prop, functions, fixed, rejecting = false).map { (unrewritten, _) =>
-                    if unrewritten.binders != lowered.binders then
-                        throw new IllegalStateException(
-                          s"the statement as written has the binders ${unrewritten.binders}, and " +
-                              s"its rejecting form ${lowered.binders}"
-                        )
-                    lowered.copy(unrewritten = Some(unrewritten))
-                }
+        lower(prop, functions, fixed, rejecting, VariableMapping.default)
+
+    /** [[lower]], with the nodes of the variables mapped as `mapping` prefers for their types,
+      * where the plan `fixed` does not map them ([[VariableMapping]]).
+      */
+    private[verify] def lower(
+        prop: Prop,
+        functions: FunctionTable,
+        fixed: MappingPlan.Fixed,
+        rejecting: Boolean,
+        mapping: VariableMapping
+    ): Either[String, Lowered] =
+        lower(prop, functions, fixed, rejecting, mapping, expectsRefutation = false)
+
+    /** [[lower]] of a statement that is expected to be refuted, a negative control, where
+      * `expectsRefutation`: [[VariableMapping.Choice.Auto]] maps its variables by that.
+      */
+    private[verify] def lower(
+        prop: Prop,
+        functions: FunctionTable,
+        fixed: MappingPlan.Fixed,
+        rejecting: Boolean,
+        mapping: VariableMapping,
+        expectsRefutation: Boolean
+    ): Either[String, Lowered] =
+        lowering(prop, functions, fixed, rejecting, mapping, expectsRefutation).flatMap {
+            (lowered, rewritten) =>
+                if !rewritten then Right(lowered)
+                else
+                    // The implications the rejecting form rewrites quantify over nothing, so the
+                    // statement as written has the same binders, and a counterexample's values are
+                    // values of both.
+                    lowering(prop, functions, fixed, rejecting = false, mapping, expectsRefutation)
+                        .map { (unrewritten, _) =>
+                            if unrewritten.binders != lowered.binders then
+                                throw new IllegalStateException(
+                                  s"the statement as written has the binders ${unrewritten.binders}, and " +
+                                      s"its rejecting form ${lowered.binders}"
+                                )
+                            lowered.copy(unrewritten = Some(unrewritten))
+                        }
         }
 
     /** [[lower]] without [[Lowered.unrewritten]]: with the rejecting form where `rejecting`, and
@@ -689,7 +798,9 @@ object UplcBlaster {
         prop: Prop,
         functions: FunctionTable,
         fixed: MappingPlan.Fixed,
-        rejecting: Boolean
+        rejecting: Boolean,
+        mapping: VariableMapping,
+        expectsRefutation: Boolean
     ): Either[String, (Lowered, Boolean)] =
         checkSignatures(prop, functions).flatMap { _ =>
             // How each variable reaches Lean: its decided nodes, each recorded as it is mapped, and
@@ -702,6 +813,9 @@ object UplcBlaster {
             val restricted = ArrayBuffer.empty[DataEncoding]
             // The binders whose predicate is not exact, which may stand only for every value.
             val inexact = scala.collection.mutable.Set.empty[Int]
+            // The Lean type of each binder mapped as one ([[VariableMapping.Choice.LeanType]]), by
+            // its position.
+            val typed = scala.collection.mutable.Map.empty[Int, LeanTypeBinding]
             // The binders whose quantifier asks for a witness, by its position.
             val asking = scala.collection.mutable.Set.empty[Int]
             val leaves = ArrayBuffer.empty[Program]
@@ -776,7 +890,8 @@ object UplcBlaster {
             def quantified(
                 ident: PropExpr.Ident[?],
                 quantifier: Quantifier,
-                polarity: Option[Boolean]
+                polarity: Option[Boolean],
+                body: Prop
             ): Either[String, (List[Int], List[Binding])] = {
                 val variable = quantifiedSoFar
                 quantifiedSoFar += 1
@@ -785,15 +900,38 @@ object UplcBlaster {
                 val witness = quantifier match
                     case Quantifier.ForAll => !polarity.contains(true)
                     case Quantifier.Exists => !polarity.contains(false)
+                // Where the mapping leaves it to the statement's form ([[VariableMapping.Choice.Auto]]):
+                // a Lean type of a negative control, whose refutation is of a value of the Scala
+                // type whatever the mapping, or of a variable the statement assumes valid, of which
+                // a statement over the Lean type is exactly the one over its `Data`.
+                def byForm(binding: LeanTypeBinding): Boolean =
+                    expectsRefutation || assumesSatisfied(body, ident.name, binding)
+                // The Lean type of a variable with limits, where one exists, the mapping prefers it,
+                // and the variable stands for every value: a Lean type that has more values than the
+                // Scala type is no witness.
+                def leanTypeOf(tp: SIRType): Option[LeanTypeBinding] =
+                    LeanTypeBinding
+                        .of(tp)
+                        .filter(binding =>
+                            !witness && (mapping.choiceFor(tp) match
+                                case VariableMapping.Choice.LeanType => true
+                                case VariableMapping.Choice.Auto     => byForm(binding)
+                                case _                               => false)
+                        )
                 val limits = DataEncoding.limits(ident.tp)
                 val mapped = DataEncoding.encoded(ident.tp) match
                     case Some((valueType, decoder)) if limits.all.nonEmpty =>
-                        quantifiedData(ident, valueType, decoder, limits).map { mapped =>
+                        // Its root is one variable, of `Data` or of the Lean type the mapping
+                        // prefers for its type: either way the guards walk its `Data`.
+                        val binding = leanTypeOf(valueType)
+                        quantifiedData(ident, valueType, decoder, limits, binding).map { mapped =>
                             planned += MappingPlan.Node(
                               variable,
                               ident.name,
                               valueType,
-                              MappingPlan.Mapping.AsData,
+                              binding.fold(MappingPlan.Mapping.AsData)(found =>
+                                  MappingPlan.Mapping.AsLeanType(found.leanType)
+                              ),
                               MappingPlan.Reason.Limited
                             )
                             mapped
@@ -813,7 +951,16 @@ object UplcBlaster {
                         val reason = MappingPlan.Reason.Quantified(quantifier)
                         quantifiedValues(
                           values,
-                          new Expansion(variable, reason, fixed, witness, sized = true, None)
+                          new Expansion(
+                            variable,
+                            reason,
+                            fixed,
+                            witness,
+                            sized = true,
+                            None,
+                            mapping,
+                            Option.when(LeanTypeBinding.of(values.tp).exists(byForm))(values.name)
+                          )
                         )
                 mapped.foreach((positions, _) => if witness then asking ++= positions)
                 mapped
@@ -828,7 +975,8 @@ object UplcBlaster {
                 ident: PropExpr.Ident[?],
                 valueType: SIRType,
                 decoder: SIR,
-                limits: Limits
+                limits: Limits,
+                binding: Option[LeanTypeBinding]
             ): Either[String, (List[Int], List[Binding])] =
                 val decoded = Props.openVariables(decoder, List(ident.name))
                 val withoutForm = DataLayout.withoutDataForm(valueType)
@@ -868,9 +1016,16 @@ object UplcBlaster {
                         val restriction = variableRestriction(Variable.EncodedData, ident.tp)
                         val position = binders.size
                         binders += new PropExpr.Ident[Any](ident.name, 0L, ident.tp)
-                        predicates += restriction.premise
-                        restricted ++= restriction.uses
-                        if !restriction.exact then inexact += position
+                        binding match
+                            // Of a Lean type, which says which values it has, and may have more.
+                            case Some(leanType) =>
+                                predicates += None
+                                typed(position) = leanType
+                                inexact += position
+                            case None =>
+                                predicates += restriction.premise
+                                restricted ++= restriction.uses
+                                if !restriction.exact then inexact += position
                         // A guard that checks less than the limits say leaves the variable more
                         // values than they allow, as a predicate that is not exact does.
                         guard.foreach { checked =>
@@ -885,10 +1040,18 @@ object UplcBlaster {
             ): Either[String, (List[Int], List[Binding])] =
                 expand(ident.name, ident.tp, Set.empty, expansion).map { (variables, built) =>
                     planned ++= expansion.nodes
+                    // A node as a Lean type is one variable of that type, named by its path: Lean's
+                    // type, not a premise, says which values it has.
+                    val leanTyped = expansion.nodes.collect {
+                        case MappingPlan.Node(_, path, tp, MappingPlan.Mapping.AsLeanType(_), _) =>
+                            path -> LeanTypeBinding.of(tp).get
+                    }.toMap
                     val restrictions = variables.map(v =>
-                        variableOf(v.tp)
-                            .filter(_.isLarger)
-                            .map(kind => variableRestriction(kind, v.tp))
+                        if leanTyped.contains(v.name) then None
+                        else
+                            variableOf(v.tp)
+                                .filter(_.isLarger)
+                                .map(kind => variableRestriction(kind, v.tp))
                     )
                     val from = binders.size
                     binders ++= variables
@@ -897,6 +1060,14 @@ object UplcBlaster {
                     inexact ++= variables.indices
                         .filter(i => restrictions(i).exists(!_.exact))
                         .map(from + _)
+                    // A Lean type may have more values than the Scala type, as a script context
+                    // with parts that are any `Data`.
+                    variables.zipWithIndex.foreach { (v, i) =>
+                        leanTyped.get(v.name).foreach { binding =>
+                            typed(from + i) = binding
+                            inexact += from + i
+                        }
+                    }
                     val positions = (from until binders.size).toList
                     positions -> built.map(Binding(ident.name, ident.tp, _)).toList
                 }
@@ -909,6 +1080,31 @@ object UplcBlaster {
                   withBuilt(built, sir),
                   functions
                 )
+
+            // The `Data` a Lean predicate is of, as Lean has it: a binder in scope that is a
+            // variable passed as one `Data`, as a script context is, or the constant the statement
+            // computed. Lean has no term of an expression over the variables, which only a program
+            // computes.
+            def leanArgument(value: PropExpr[?], scope: List[Int]): Either[String, LeanArgument] =
+                expressionSir(value) match
+                    case SIR.Const(Constant.Data(data), _, _) => Right(LeanArgument.Constant(data))
+                    case SIR.Var(name, _, _) =>
+                        scope.reverse.find(index => binders(index).name == name) match
+                            case Some(index)
+                                if variableOf(binders(index).tp).contains(Variable.EncodedData) =>
+                                Right(LeanArgument.Binder(index, typed.get(index)))
+                            case Some(_) | None =>
+                                Left(
+                                  s"a Lean predicate is of ${PropIdentity.written(name)}, which " +
+                                      "Lean does not have as one Data: it is passed by its fields. " +
+                                      "A predicate is of a variable passed as one Data, as a " +
+                                      "script context is"
+                                )
+                    case _ =>
+                        Left(
+                          "a Lean predicate is of a statement variable itself or of a constant, " +
+                              "and not of an expression over the variables"
+                        )
 
             // A test, compiled, as the leaf of the formula that `formula` makes of its index.
             def test(
@@ -973,6 +1169,8 @@ object UplcBlaster {
                         c <- loop(conclusion, scope, built, polarity)
                     yield LeafFormula.Implies(p, c)
                 case Prop.Rejects(premise, claim) => rejects(premise, claim, scope, built)
+                case Prop.Satisfies(predicate, value) =>
+                    leanArgument(value, scope).map(LeafFormula.Satisfies(predicate, _))
                 case Prop.Iff(left, right) =>
                     for
                         l <- loop(left, scope, built, None)
@@ -981,7 +1179,7 @@ object UplcBlaster {
                 // A binder with limits stands for the values that meet them: its guard, a test of
                 // its own, is the premise of the rest.
                 case Prop.Forall(ident, body) =>
-                    quantified(ident, Quantifier.ForAll, polarity).flatMap {
+                    quantified(ident, Quantifier.ForAll, polarity, body).flatMap {
                         (introduced, bindings) =>
                             loop(body, scope ++ introduced, built ++ bindings, polarity).map {
                                 inner =>
@@ -1006,7 +1204,7 @@ object UplcBlaster {
                           "limits of a binder are the premise of a forAll"
                     )
                 case Prop.Exists(ident, None, body) =>
-                    quantified(ident, Quantifier.Exists, polarity).flatMap {
+                    quantified(ident, Quantifier.Exists, polarity, body).flatMap {
                         (introduced, bindings) =>
                             loop(body, scope ++ introduced, built ++ bindings, polarity)
                                 .map(LeafFormula.Exists(introduced, _))
@@ -1173,7 +1371,8 @@ object UplcBlaster {
                             leafBinders.toVector,
                             predicates.toVector,
                             plan = MappingPlan(planned.toList),
-                            recursions = DataEncoding.leanRecursions(restricted)
+                            recursions = DataEncoding.leanRecursions(restricted),
+                            typed = binders.indices.map(typed.get).toVector
                           ) -> rewritten
                         )
                 }
@@ -1188,6 +1387,25 @@ object UplcBlaster {
     private[uplcblaster] def rejectable(origin: Origin): Boolean = origin match
         case _: Origin.Obligation => false
         case _                    => true
+
+    /** Whether `prop`, the body of the quantifier of the variable `name`, assumes that a Lean
+      * predicate holds of the variable that has its own form for `binding`'s type, as `isValid` of
+      * a script context: as a conjunct of the premise of an implication, of the body or of a
+      * conclusion of it, under other `forAll`s, and not under an `exists`
+      * ([[VariableMapping.Choice.Auto]]).
+      */
+    private def assumesSatisfied(prop: Prop, name: String, binding: LeanTypeBinding): Boolean = {
+        def premise(part: Prop): Boolean = part match
+            case Prop.Satisfies(predicate, PropExpr.SIRExpr(SIR.Var(variable, _, _))) =>
+                variable == name && predicate.typed.contains(binding.leanType)
+            case Prop.And(left, right) => premise(left) || premise(right)
+            case _                     => false
+        prop match
+            case Prop.Implies(left, right) =>
+                premise(left) || assumesSatisfied(right, name, binding)
+            case Prop.Forall(_, inner) => assumesSatisfied(inner, name, binding)
+            case _                     => false
+    }
 
     /** Whether `premise ==>: conclusion` is checked in the rejecting form: the premise is a
       * success, of an expression (`denotes`) or of a call (`succeeds`, a total call whose
@@ -1322,7 +1540,7 @@ object UplcBlaster {
                 case LeafFormula.Not(inner)       => loop(inner, polarity.turned)
                 case LeafFormula.Implies(premise, conclusion) =>
                     loop(premise, polarity.turned) ++ loop(conclusion, polarity)
-                case _: LeafFormula.Test | _: LeafFormula.Denotes => Nil
+                case _: LeafFormula.Test | _: LeafFormula.Denotes | _: LeafFormula.Satisfies => Nil
         loop(formula, Polarity.Positive)
     }
 
@@ -1485,7 +1703,7 @@ object UplcBlaster {
                           count
                         )
                     }
-                case MappingPlan.Mapping.AsData =>
+                case MappingPlan.Mapping.AsData | MappingPlan.Mapping.AsLeanType(_) =>
                     count.variables += 1
                     asData(name, product, node.reason)
         case sum @ SIRType.SumCaseClass(declaration, _) if declaration.constructors.isEmpty =>
@@ -1497,7 +1715,7 @@ object UplcBlaster {
                     nested(name, sum, enclosing).flatMap { inner =>
                         expandSum(name, sum, declaration, typeArguments, inner, count)
                     }
-                case MappingPlan.Mapping.AsData =>
+                case MappingPlan.Mapping.AsData | MappingPlan.Mapping.AsLeanType(_) =>
                     count.variables += 1
                     asData(name, sum, node.reason)
         case one @ SIRType.CaseClass(_, _, Some(parent)) =>
@@ -1541,7 +1759,12 @@ object UplcBlaster {
         fixed: MappingPlan.Fixed,
         witness: Boolean,
         sized: Boolean,
-        val limit: Option[Int]
+        val limit: Option[Int],
+        preference: VariableMapping = VariableMapping.rules,
+        /** The variable's root, by its path, where the statement's form makes it of a Lean type
+          * under [[VariableMapping.Choice.Auto]].
+          */
+        autoRoot: Option[String] = None
     ) {
         var parts: Int = 0
         var variables: Int = 0
@@ -1566,10 +1789,15 @@ object UplcBlaster {
           */
         def decide(path: String, tp: SIRType, enclosing: Set[String]): MappingPlan.Node = {
             val repeats = enclosing.contains(recursionKey(tp))
+            lazy val chosen = preferred(path, tp)
             val (mapping, why) = fixed.mapping(variable, PropIdentity.written(path), tp) match
                 case Some(chosen) if !(repeats && chosen == MappingPlan.Mapping.ByFields) =>
                     chosen -> MappingPlan.Reason.ByFixedPlan
                 case _ if repeats => MappingPlan.Mapping.AsData -> MappingPlan.Reason.ContainsItself
+                case _ if sized && chosen.isDefined => chosen.get
+                // Counted as it will be mapped: one variable, where the preference makes it one.
+                case _ if !sized && chosen.exists(_._1 != MappingPlan.Mapping.ByFields) =>
+                    chosen.get
                 case _ if sized && largerByFields(path, tp, enclosing) =>
                     notAsData(path, tp, enclosing) match
                         case None => MappingPlan.Mapping.AsData -> MappingPlan.Reason.Larger
@@ -1581,13 +1809,46 @@ object UplcBlaster {
             node
         }
 
+        /** The mapping [[preference]] chooses for a node of type `tp`, where it chooses one that
+          * can be taken: none for the rules. By fields is taken anywhere. `Data` and a Lean type
+          * are taken where the type has a `Data` form, and a Lean type where one exists; neither
+          * where the variable asks for a witness, which the solver finds over typed variables, and
+          * which a variable with more values than its type cannot stand for.
+          */
+        private def preferred(
+            path: String,
+            tp: SIRType
+        ): Option[(MappingPlan.Mapping, MappingPlan.Reason)] =
+            preference.choiceFor(tp) match
+                case VariableMapping.Choice.Rules => None
+                case VariableMapping.Choice.ByFields =>
+                    Some(MappingPlan.Mapping.ByFields -> MappingPlan.Reason.ByPreference)
+                case VariableMapping.Choice.AsData =>
+                    Option.when(!witness && withoutDataMapping(tp).isEmpty)(
+                      MappingPlan.Mapping.AsData -> MappingPlan.Reason.ByPreference
+                    )
+                case VariableMapping.Choice.LeanType => leanType(tp)
+                // Of the variable itself where its statement's form says so, and the rules else.
+                case VariableMapping.Choice.Auto =>
+                    if autoRoot.contains(path) then leanType(tp) else None
+
+        private def leanType(tp: SIRType): Option[(MappingPlan.Mapping, MappingPlan.Reason)] =
+            LeanTypeBinding
+                .of(tp)
+                .filter(_ => !witness && withoutDataMapping(tp).isEmpty)
+                .map(binding =>
+                    MappingPlan.Mapping
+                        .AsLeanType(binding.leanType) -> MappingPlan.Reason.ByPreference
+                )
+
         /** Whether the node at `path` would be more Lean variables than
           * [[MappingPlan.mostByFields]] with every node below it by fields but where its type
           * repeats. The count stops past the most. A node whose expansion fails otherwise is not
           * larger: its own expansion says why it fails.
           */
         private def largerByFields(path: String, tp: SIRType, enclosing: Set[String]): Boolean = {
-            val counting = Expansion.counting(variable, Some(MappingPlan.mostByFields))
+            val counting =
+                Expansion.counting(variable, Some(MappingPlan.mostByFields), preference, witness)
             expand(path, tp, enclosing, counting) match
                 case Right((variables, _)) => variables.size > MappingPlan.mostByFields
                 case Left(_)               => counting.overLimit
@@ -1632,13 +1893,25 @@ object UplcBlaster {
           * node by fields but where a type repeats, and stops once it has made more than `limit`.
           */
         def counting(variable: Int, limit: Option[Int]): Expansion =
+            counting(variable, limit, VariableMapping.rules, witness = false)
+
+        /** [[counting]], with a node that `preference` maps as one variable, as `Data` or as a Lean
+          * type, counted as one: as it will be mapped.
+          */
+        def counting(
+            variable: Int,
+            limit: Option[Int],
+            preference: VariableMapping,
+            witness: Boolean
+        ): Expansion =
             new Expansion(
               variable,
               MappingPlan.Reason.ByFixedPlan,
               MappingPlan.Fixed.none,
-              witness = false,
+              witness,
               sized = false,
-              limit
+              limit,
+              preference
             )
     }
 
@@ -1934,8 +2207,10 @@ object UplcBlaster {
             case Prop.Or(left, right)      => Prop.Or(loop(left), loop(right))
             case Prop.Implies(left, right) => Prop.Implies(loop(left), loop(right))
             case Prop.Rejects(left, right) => Prop.Rejects(loop(left), loop(right))
-            case Prop.Iff(left, right)     => Prop.Iff(loop(left), loop(right))
-            case Prop.Not(inner)           => Prop.Not(loop(inner))
+            case Prop.Satisfies(predicate, value) =>
+                Prop.Satisfies(predicate, expression(value))
+            case Prop.Iff(left, right) => Prop.Iff(loop(left), loop(right))
+            case Prop.Not(inner)       => Prop.Not(loop(inner))
 
         loop(prop)
     }
@@ -2023,6 +2298,8 @@ object UplcBlaster {
                     )
                 case Prop.Rejects(premise, claim) =>
                     Prop.Rejects(loop(premise, inScope, renames), loop(claim, inScope, renames))
+                case Prop.Satisfies(predicate, value) =>
+                    Prop.Satisfies(predicate, expression(value, renames))
                 case Prop.Iff(left, right) =>
                     Prop.Iff(loop(left, inScope, renames), loop(right, inScope, renames))
                 case Prop.Not(inner) => Prop.Not(loop(inner, inScope, renames))
@@ -2330,6 +2607,7 @@ object UplcBlaster {
             case Prop.Or(left, right)      => usedFunctions(left) ++ usedFunctions(right)
             case Prop.Implies(left, right) => usedFunctions(left) ++ usedFunctions(right)
             case Prop.Rejects(left, right) => usedFunctions(left) ++ usedFunctions(right)
+            case Prop.Satisfies(_, value)  => expression(value)
             case Prop.Iff(left, right)     => usedFunctions(left) ++ usedFunctions(right)
             case Prop.Not(inner)           => usedFunctions(inner)
     }
@@ -2514,7 +2792,7 @@ object UplcBlaster {
         }
 
     /** What one check of a statement came to, at one budget. */
-    private enum Probe {
+    private[uplcblaster] enum Probe {
 
         /** The statement's result, which another budget would not change, or would not help. */
         case Decided(result: ExecutionResult)
@@ -2524,7 +2802,13 @@ object UplcBlaster {
           * with the `renaming` they were read with undone ([[counted]]): the program of a test
           * needs more steps, or the values are not those Lean falsified the statement with.
           */
-        case Spurious(values: List[Constant], renaming: SmtValues.Renaming, reason: String)
+        case Spurious(
+            values: List[Constant],
+            renaming: SmtValues.Renaming,
+            reason: String,
+            /** What the statement's Lean predicates came to on `values`. */
+            verdicts: Verdicts
+        )
 
         /** Lean falsified the statement under the budget, and gave no values to replay: the
           * statement asks for a witness, or the values are no values at all, or not Lean's own.
@@ -2542,10 +2826,10 @@ object UplcBlaster {
           * for decides nothing.
           */
         def toResult: ExecutionResult = this match
-            case Decided(result)        => result
-            case Spurious(_, _, reason) => VerificationResult.Inconclusive(reason)
-            case Unreplayed(reason)     => VerificationResult.Inconclusive(reason)
-            case ClaimFails(reason)     => VerificationResult.Inconclusive(reason)
+            case Decided(result)           => result
+            case Spurious(_, _, reason, _) => VerificationResult.Inconclusive(reason)
+            case Unreplayed(reason)        => VerificationResult.Inconclusive(reason)
+            case ClaimFails(reason)        => VerificationResult.Inconclusive(reason)
     }
 
     /** Runs the check of a lowered statement in `server`, and reads what Lean reported.
@@ -2648,8 +2932,15 @@ object UplcBlaster {
     ): ExecutionResult = {
         keep.foreach(keepCheck(goal, budget, maxHeartbeats, _))
         val started = System.nanoTime()
+        val deadline = timeout.map(_.fromNow)
         val checked = server.check(checkSource(goal, budget, maxHeartbeats, _), timeout)
-        val probe = probed(goal, budget, checked, timeout.mkString)
+        val probe = probed(
+          goal,
+          budget,
+          checked,
+          timeout.mkString,
+          Evaluation.in(server, maxHeartbeats, deadline)
+        )
         trace(goal, s"at $budget steps${limited(timeout)}: ${described(probe)}, ${since(started)}")
 
         // The budget was given, so no other is tried. Lean's machine says whether the budget is
@@ -2658,7 +2949,8 @@ object UplcBlaster {
         def explained(
             values: List[Constant],
             renaming: SmtValues.Renaming,
-            reason: String
+            reason: String,
+            verdicts: Verdicts
         ): ExecutionResult = {
             keepCount(goal, values, renaming, maxHeartbeats, keep)
             val count = server.check(
@@ -2672,7 +2964,7 @@ object UplcBlaster {
                   ),
               timeout
             )
-            val why = runs(goal, count).map(counted(goal, _, budget, renaming)) match
+            val why = runs(goal, count).map(counted(goal, _, verdicts, budget, renaming)) match
                 case Right(Right(more)) =>
                     s"On Lean's machine it holds there from $more steps on, so a test needs " +
                         s"more than $budget steps"
@@ -2688,7 +2980,7 @@ object UplcBlaster {
         probe match
             // Within a budget a run the budget cuts counts for the statement, and a run that ends
             // within it ends so with more steps: the budget is not at fault.
-            case Probe.Spurious(_, _, reason) if goal.within.isDefined =>
+            case Probe.Spurious(_, _, reason, _) if goal.within.isDefined =>
                 VerificationResult.Inconclusive(
                   s"$reason. Within a budget a run the budget cuts counts for the statement, so " +
                       "more steps change nothing: the values read from Lean's counterexample do " +
@@ -2696,10 +2988,11 @@ object UplcBlaster {
                 )
             // The rejecting form is an attempt ([[attempted]]): the statement as written is
             // checked next, and Lean's machine is asked about the budget there.
-            case Probe.Spurious(_, _, reason) if goal.unrewritten.isDefined =>
+            case Probe.Spurious(_, _, reason, _) if goal.unrewritten.isDefined =>
                 VerificationResult.Inconclusive(reason)
-            case Probe.Spurious(values, renaming, reason) => explained(values, renaming, reason)
-            case probe                                    => probe.toResult
+            case Probe.Spurious(values, renaming, reason, verdicts) =>
+                explained(values, renaming, reason, verdicts)
+            case probe => probe.toResult
     }
 
     /** A directory of its own under `kept`, for one check that is kept. */
@@ -2722,14 +3015,16 @@ object UplcBlaster {
         goal: Lowered,
         budget: Int,
         checked: LeanServer.Result,
-        limit: String
+        limit: String,
+        evaluation: Evaluation
     ): Probe = checked match
         case LeanServer.Result.Finished(messages) =>
             probed(
               goal,
               budget,
               messages.exists(_.severity == LeanServer.Severity.Error),
-              messages.map(_.text).mkString("\n")
+              messages.map(_.text).mkString("\n"),
+              evaluation
             )
         // Only a check with a time limit is given up for it.
         case LeanServer.Result.TimedOut(progress) =>
@@ -2841,7 +3136,14 @@ object UplcBlaster {
                     val text = renderCheck(goal, flats, steps, maxHeartbeats)
                     keep.foreach(keepCheck(goal, steps, maxHeartbeats, _))
                     val started = System.nanoTime()
-                    val came = probed(goal, steps, server.check(text, wait), limit)
+                    val deadline = wait.map(_.fromNow)
+                    val came = probed(
+                      goal,
+                      steps,
+                      server.check(text, wait),
+                      limit,
+                      Evaluation.in(server, maxHeartbeats, deadline)
+                    )
                     trace(
                       goal,
                       s"at $steps steps${limited(wait)}: ${described(came)}, ${since(started)}"
@@ -2853,6 +3155,7 @@ object UplcBlaster {
         def counted(
             values: List[Constant],
             renaming: SmtValues.Renaming,
+            verdicts: Verdicts,
             steps: Int,
             tried: List[Int],
             reason: String
@@ -2865,6 +3168,7 @@ object UplcBlaster {
                       flats,
                       values,
                       renaming,
+                      verdicts,
                       steps,
                       maxHeartbeats,
                       servers,
@@ -2895,8 +3199,8 @@ object UplcBlaster {
                             if steps * 2 <= maxDoubledBudget then
                                 at(steps * 2, steps :: tried, last)
                             else inconclusive(reason, steps :: tried, last)
-                        case Probe.Spurious(values, renaming, reason) =>
-                            counted(values, renaming, steps, steps :: tried, reason) match
+                        case Probe.Spurious(values, renaming, reason, verdicts) =>
+                            counted(values, renaming, verdicts, steps, steps :: tried, reason) match
                                 case Right(more) =>
                                     trace(
                                       goal,
@@ -3003,6 +3307,7 @@ object UplcBlaster {
         flats: Vector[Path],
         values: List[Constant],
         renaming: SmtValues.Renaming,
+        verdicts: Verdicts,
         steps: Int,
         maxHeartbeats: Int,
         servers: LeanServerProvider,
@@ -3011,7 +3316,8 @@ object UplcBlaster {
     ): Either[ExecutionResult, Int] =
         measured(goal, flats, values, renaming, maxHeartbeats, servers, wait, keep).flatMap {
             runs =>
-                counted(goal, runs, steps, renaming).left.map(VerificationResult.Inconclusive(_))
+                counted(goal, runs, verdicts, steps, renaming).left
+                    .map(VerificationResult.Inconclusive(_))
         }
 
     /** What the runs of the tests' programs on Lean's counterexample to a check at `steps` come to,
@@ -3021,19 +3327,20 @@ object UplcBlaster {
     private def counted(
         goal: Lowered,
         runs: Vector[Run],
+        verdicts: Verdicts,
         steps: Int,
         renaming: SmtValues.Renaming
     ): Either[String, Int] =
         // Lean falsified the statement at `steps`. Where the runs do not, the values read from
         // its model are not those it falsified the statement with.
-        if holdsWithin(goal.body, runs, steps, positive = true) then
+        if holdsWithin(goal.body, runs, steps, positive = true, verdicts) then
             Left(
               s"on the values read from Lean's counterexample the statement holds within " +
                   s"$steps steps of Lean's machine, so they do not show what Lean found" +
                   unknownTo(goal)
             )
         else
-            needed(goal.body, runs, steps) match
+            needed(goal.body, runs, steps, verdicts) match
                 case Some(more) => Right(more)
                 case None if runs.exists(_.end == End.Running) =>
                     Left(
@@ -3185,6 +3492,281 @@ object UplcBlaster {
         }
     }
 
+    /** What the Lean predicates of a statement ([[LeafFormula.Satisfies]]) come to on one
+      * assignment of its variables, as Lean evaluated them.
+      */
+    private[uplcblaster] type Verdicts = Map[LeafFormula.Satisfies, Boolean]
+
+    /** Lean's evaluation, for the replay of a counterexample, of what no program runs: each Lean
+      * predicate's verdict on its `Data` ([[LeafFormula.Satisfies]]), and the `Data` of a value of
+      * a Lean type ([[Lowered.typed]]). Only Lean evaluates them ([[Evaluation.in]]).
+      */
+    private[uplcblaster] trait Evaluation {
+
+        /** The verdict of each predicate on its `Data`, in order, or why there is none. */
+        def apply(predicates: List[(LeanPredicate, Data)]): Either[String, List[Boolean]]
+
+        /** The `Data` of `term`, a Lean term of `binding`'s type, as its encoder gives it. */
+        def encode(binding: LeanTypeBinding, term: String): Either[SmtValues.Unreadable, Data]
+    }
+
+    private[uplcblaster] object Evaluation {
+
+        /** Where there is no Lean: a statement without Lean predicates or types needs none. */
+        val none: Evaluation = new Evaluation {
+            def apply(predicates: List[(LeanPredicate, Data)]): Either[String, List[Boolean]] = {
+                if predicates.isEmpty then Right(Nil)
+                else
+                    Left(
+                      "only Lean evaluates a Lean predicate, as isValid, and no Lean server " +
+                          s"evaluated ${predicates.map(_._1.name).distinct.mkString(", ")} here"
+                    )
+            }
+            def encode(
+                binding: LeanTypeBinding,
+                term: String
+            ): Either[SmtValues.Unreadable, Data] = noEncoding(binding)
+        }
+
+        /** The verdicts a refutation kept, in the order of the statement's predicates
+          * ([[Artifact.verdicts]]): what Lean evaluated them to when it found the counterexample.
+          * Its values are kept as `Data`, so none is encoded.
+          */
+        def kept(verdicts: List[Boolean]): Evaluation = new Evaluation {
+            def apply(predicates: List[(LeanPredicate, Data)]): Either[String, List[Boolean]] = {
+                if predicates.size == verdicts.size then Right(verdicts)
+                else
+                    Left(
+                      s"the refutation keeps ${verdicts.size} verdicts of Lean predicates, and " +
+                          s"the statement has ${predicates.size}"
+                    )
+            }
+            def encode(
+                binding: LeanTypeBinding,
+                term: String
+            ): Either[SmtValues.Unreadable, Data] = noEncoding(binding)
+        }
+
+        private def noEncoding(binding: LeanTypeBinding): Either[SmtValues.Unreadable, Data] =
+            Left(
+              SmtValues.Unreadable.NotEncoded(
+                s"only Lean encodes a value of ${binding.leanType}, and no Lean server is here"
+              )
+            )
+
+        /** The evaluation by `#eval` in `server`, each in the time left until `deadline`, that of
+          * the check whose counterexample it reads, and at least a second.
+          */
+        def in(
+            server: LeanServer,
+            maxHeartbeats: Int,
+            deadline: Option[Deadline]
+        ): Evaluation = new Evaluation {
+            private def left: Option[FiniteDuration] =
+                deadline.map(time => time.timeLeft max 1.second)
+            def apply(predicates: List[(LeanPredicate, Data)]): Either[String, List[Boolean]] = {
+                if predicates.isEmpty then Right(Nil)
+                else
+                    server.check(evaluationSource(predicates, maxHeartbeats), left) match
+                        case LeanServer.Result.Finished(messages) =>
+                            evaluated(predicates.size, messages)
+                        case LeanServer.Result.TimedOut(_) =>
+                            Left("Lean did not evaluate the Lean predicates in the time it had")
+                        case LeanServer.Result.Failed(reason) =>
+                            Left(s"Lean did not evaluate the Lean predicates: $reason")
+            }
+            def encode(
+                binding: LeanTypeBinding,
+                term: String
+            ): Either[SmtValues.Unreadable, Data] = {
+                def notEncoded(reason: String) = Left(SmtValues.Unreadable.NotEncoded(reason))
+                server.check(encodingSource(binding, term, maxHeartbeats), left) match
+                    case LeanServer.Result.Finished(messages) => encoded(messages)
+                    case LeanServer.Result.TimedOut(_) =>
+                        notEncoded(s"Lean did not encode a value of ${binding.leanType} in time")
+                    case LeanServer.Result.Failed(reason) =>
+                        notEncoded(s"Lean did not encode a value of ${binding.leanType}: $reason")
+            }
+        }
+    }
+
+    /** The Lean definitions that write a `Data` for [[readDataText]]: `(I n)`, `(B hex)`,
+      * `(C tag d…)`, `(L d…)` and `(M (P k v)…)`. A character of a byte string that is no byte is
+      * `!!`. Lean's own `toString` writes a byte string's characters as they are, which a reader
+      * cannot tell from the rest.
+      */
+    private val dataTextDefinitions: String = List(
+      "def scalusHexByte (c : Char) : String := " +
+          "let n := c.toNat; " +
+          "let digit := fun (d : Nat) => if d < 10 then Char.ofNat (48 + d) else Char.ofNat (87 + d); " +
+          "if n < 256 then String.mk [digit (n / 16), digit (n % 16)] else \"!!\"",
+      // One line each: the text of a check has a margin, which a line that begins with `|` loses.
+      "partial def scalusDataText (d : Data) : String := match d with " +
+          "| .Constr t fs => \"(C \" ++ toString t ++ " +
+          "String.join (fs.map (fun x => \" \" ++ scalusDataText x)) ++ \")\" " +
+          "| .Map ps => \"(M\" ++ String.join (ps.map (fun p => \" (P \" ++ scalusDataText p.1 ++ " +
+          "\" \" ++ scalusDataText p.2 ++ \")\")) ++ \")\" " +
+          "| .List xs => \"(L\" ++ String.join (xs.map (fun x => \" \" ++ scalusDataText x)) ++ \")\" " +
+          "| .I i => \"(I \" ++ toString i ++ \")\" " +
+          "| .B b => \"(B \" ++ String.join (b.data.toList.map scalusHexByte) ++ \")\""
+    ).mkString("\n\n")
+
+    /** The text that has Lean write the `Data` of `term`, a term of `binding`'s type. */
+    private[uplcblaster] def encodingSource(
+        binding: LeanTypeBinding,
+        term: String,
+        maxHeartbeats: Int
+    ): String =
+        document(
+          Vector.empty,
+          s"$dataTextDefinitions\n\n#eval scalusDataText " +
+              binding.toData(s"($term : ${binding.leanType})"),
+          maxHeartbeats,
+          List(binding.module)
+        )
+
+    /** The `Data` Lean wrote of [[encodingSource]]. */
+    private[uplcblaster] def encoded(
+        messages: List[LeanServer.Message]
+    ): Either[SmtValues.Unreadable, Data] = {
+        val errors = messages.filter(_.severity == LeanServer.Severity.Error)
+        val written =
+            messages.map(_.text.trim).find(text => text.startsWith("\"(") && text.endsWith(")\""))
+        written match
+            case Some(text) if errors.isEmpty => readDataText(text.drop(1).dropRight(1))
+            case _ =>
+                Left(
+                  SmtValues.Unreadable.NotEncoded(
+                    "Lean did not encode the value: " + concise(messages.map(_.text).mkString("\n"))
+                  )
+                )
+    }
+
+    /** The `Data` that `text` writes as [[dataTextDefinitions]] does. A byte that is none is a
+      * value of Lean's that no `Data` of Plutus has.
+      */
+    private[uplcblaster] def readDataText(text: String): Either[SmtValues.Unreadable, Data] = {
+        def malformed(reason: String) = Left(SmtValues.Unreadable.Malformed(reason))
+        def integer(text: String): Either[SmtValues.Unreadable, BigInt] =
+            if text.matches("-?[0-9]+") then Right(BigInt(text))
+            else Left(SmtValues.Unreadable.Malformed(s"no integer: $text"))
+        val tokens =
+            text.replace("(", " ( ").replace(")", " ) ").split("\\s+").filter(_.nonEmpty).toList
+        // A value, and the tokens after it.
+        def value(tokens: List[String]): Either[SmtValues.Unreadable, (Data, List[String])] =
+            tokens match
+                case "(" :: "I" :: number :: ")" :: rest =>
+                    integer(number).map(Data.I(_) -> rest)
+                case "(" :: "B" :: ")" :: rest => Right(Data.B(ByteString.empty) -> rest)
+                case "(" :: "B" :: hex :: ")" :: rest =>
+                    if hex.contains('!') then
+                        Left(
+                          SmtValues.Unreadable.OutsideType(
+                            s"a byte string of Lean's has a character that is no byte: $hex"
+                          )
+                        )
+                    else Right(Data.B(ByteString.fromHex(hex)) -> rest)
+                case "(" :: "C" :: tag :: rest =>
+                    integer(tag).flatMap(index =>
+                        items(rest).map((fields, after) =>
+                            Data.Constr(index, PList.from(fields)) -> after
+                        )
+                    )
+                case "(" :: "L" :: rest =>
+                    items(rest).map((elements, after) => Data.List(PList.from(elements)) -> after)
+                case "(" :: "M" :: rest => entries(rest, Nil)
+                case other              => malformed(s"no Data at ${other.take(4).mkString(" ")}")
+        // Values up to a closing parenthesis, and the tokens after it.
+        def items(tokens: List[String]): Either[SmtValues.Unreadable, (List[Data], List[String])] =
+            tokens match
+                case ")" :: rest => Right(Nil -> rest)
+                case _ =>
+                    value(tokens).flatMap { (first, rest) =>
+                        items(rest).map((others, after) => (first :: others) -> after)
+                    }
+        def entries(
+            tokens: List[String],
+            found: List[(Data, Data)]
+        ): Either[SmtValues.Unreadable, (Data, List[String])] = tokens match
+            case ")" :: rest => Right(Data.Map(PList.from(found.reverse)) -> rest)
+            case "(" :: "P" :: rest =>
+                value(rest).flatMap { (key, afterKey) =>
+                    value(afterKey).flatMap { (item, afterItem) =>
+                        afterItem match
+                            case ")" :: after => entries(after, (key, item) :: found)
+                            case other =>
+                                malformed(s"an entry not closed at ${other.take(4).mkString(" ")}")
+                    }
+                }
+            case other => malformed(s"no entry at ${other.take(4).mkString(" ")}")
+        value(tokens).flatMap {
+            case (data, Nil) => Right(data)
+            case (_, rest)   => malformed(s"text after the Data: ${rest.take(4).mkString(" ")}")
+        }
+    }
+
+    /** The text that has Lean evaluate `predicates`, each of its `Data`, as one list of Booleans.
+      */
+    private[uplcblaster] def evaluationSource(
+        predicates: List[(LeanPredicate, Data)],
+        maxHeartbeats: Int
+    ): String = {
+        val terms = predicates.map((predicate, data) => s"${predicate.name} ${leanData(data)}")
+        document(
+          Vector.empty,
+          s"#eval [${terms.mkString(", ")}]",
+          maxHeartbeats,
+          predicates.map(_._1.module).distinct.sorted
+        )
+    }
+
+    private val evaluatedList = """\[((?:true|false)(?:, (?:true|false))*)\]""".r
+
+    /** The `count` verdicts of an evaluation, from what Lean reported of [[evaluationSource]]. */
+    private[uplcblaster] def evaluated(
+        count: Int,
+        messages: List[LeanServer.Message]
+    ): Either[String, List[Boolean]] = {
+        val errors = messages.exists(_.severity == LeanServer.Severity.Error)
+        // Lean breaks a list wider than its line over lines: the reading is of one line.
+        val read = messages.map(_.text.trim.replaceAll("""\s+""", " ")).collectFirst {
+            case evaluatedList(list) => list.split(", ").toList.map(_ == "true")
+        }
+        read match
+            case Some(verdicts) if !errors && verdicts.size == count => Right(verdicts)
+            case _ =>
+                Left(
+                  "Lean did not evaluate the Lean predicates: " +
+                      concise(messages.map(_.text).mkString("\n"))
+                )
+    }
+
+    /** The Lean predicates of `goals`, each once, in the order a refutation keeps their verdicts.
+      */
+    private def satisfiedOf(goals: List[Lowered]): List[LeafFormula.Satisfies] =
+        goals.flatMap(goal => satisfied(goal.body)).distinct
+
+    /** What the Lean predicates of `goals` come to on `values`, the values of their binders, as
+      * `evaluation` has Lean say. A statement without them asks for nothing.
+      */
+    private def verdictsOf(
+        goals: List[Lowered],
+        values: List[Constant],
+        evaluation: Evaluation
+    ): Either[String, Verdicts] = {
+        val leaves = satisfiedOf(goals)
+        val arguments = leaves.foldRight[Either[String, List[Data]]](Right(Nil)) { (leaf, rest) =>
+            for
+                data <- leaf.argument.dataOf(values)
+                others <- rest
+            yield data :: others
+        }
+        for
+            data <- arguments
+            truths <- evaluation(leaves.map(_.predicate).zip(data))
+        yield leaves.zip(truths).toMap
+    }
+
     /** How a run ended, from the word `measureRun` says it with. */
     private def ended(word: String): End = word match
         case "true"     => End.Returned(Some(true))
@@ -3209,7 +3791,8 @@ object UplcBlaster {
                 scope.map(index => s"Term.Const (${leanValue(values(index), renaming)})")
             s"#eval measureRun leaf$leaf.script [${arguments.mkString(", ")}] $maxSearchedBudget"
         }
-        document(flats, counts.mkString("\n"), maxHeartbeats)
+        // The imports of the check, so that the server's header stays the one it has loaded.
+        document(flats, counts.mkString("\n"), maxHeartbeats, leanImports(goal))
     }
 
     /** A value of a variable as a Lean constant, to give a counterexample back to Lean as the terms
@@ -3287,9 +3870,9 @@ object UplcBlaster {
         value.bytes
             .map { byte =>
                 characters.get(byte & 0xff) match
-                    case Some(character) if character <= 0xffff => f"\\u$character%04x"
+                    case Some(character) if character <= 0xffff => SmtValues.leanEscape(character)
                     case Some(character)                        => Character.toString(character)
-                    case None                                   => f"\\x${byte & 0xff}%02x"
+                    case None                                   => SmtValues.leanEscape(byte & 0xff)
             }
             .mkString("(ByteString.mk \"", "", "\")")
     }
@@ -3308,11 +3891,12 @@ object UplcBlaster {
         formula: LeafFormula,
         runs: Vector[Run],
         budget: Int,
-        positive: Boolean
+        positive: Boolean,
+        verdicts: Verdicts
     ): Boolean = {
         def end(leaf: Int): End = if runs(leaf).steps <= budget then runs(leaf).end else End.Running
         def within(inner: LeafFormula, positive: Boolean): Boolean =
-            holdsWithin(inner, runs, budget, positive)
+            holdsWithin(inner, runs, budget, positive, verdicts)
         formula match
             case LeafFormula.Test(leaf) =>
                 if positive then end(leaf) == End.Returned(Some(true))
@@ -3327,6 +3911,14 @@ object UplcBlaster {
             // One assignment, as in `holds`: a quantifier here ranges over all values.
             case LeafFormula.Forall(_, body) => within(body, positive)
             case LeafFormula.Exists(_, body) => within(body, positive)
+            // No budget cuts a Lean predicate: it is what Lean evaluated it to.
+            case leaf: LeafFormula.Satisfies =>
+                verdicts.getOrElse(
+                  leaf,
+                  throw new IllegalStateException(
+                    s"no verdict of the Lean predicate ${leaf.predicate.name}"
+                  )
+                )
     }
 
     /** The least budget above `above` at which the formula holds on `runs`, read as Lean reads it
@@ -3335,12 +3927,13 @@ object UplcBlaster {
     private[uplcblaster] def needed(
         formula: LeafFormula,
         runs: Vector[Run],
-        above: Int
+        above: Int,
+        verdicts: Verdicts
     ): Option[Int] = {
         val ends = runs.collect {
             case Run(steps, end) if end != End.Running && steps > above => steps
         }
-        ends.distinct.sorted.find(holdsWithin(formula, runs, _, positive = true))
+        ends.distinct.sorted.find(holdsWithin(formula, runs, _, positive = true, verdicts))
     }
 
     private val symbolicRun = """#prep_uplc_run prepared(\d+) .*""".r
@@ -3401,14 +3994,15 @@ object UplcBlaster {
         budget: Int,
         errors: Boolean,
         output: String
-    ): ExecutionResult = probed(goal, budget, errors, output).toResult
+    ): ExecutionResult = probed(goal, budget, errors, output, Evaluation.none).toResult
 
     /** [[verdict]], with what the check came to. */
-    private def probed(
+    private[uplcblaster] def probed(
         goal: Lowered,
         budget: Int,
         errors: Boolean,
-        output: String
+        output: String,
+        evaluation: Evaluation
     ): Probe = {
         val closed = goal.binders.isEmpty
         val artifact = Artifact(
@@ -3437,7 +4031,7 @@ object UplcBlaster {
         if closed then
             if !errors then Probe.Decided(proved)
             else if output.contains("`native_decide` evaluated that the proposition") then
-                replay(goal, artifact)
+                replay(goal, artifact, evaluation)
             else Probe.Decided(failure)
         // Lean's server goes on after a command fails, so Blaster can call a goal valid in a
         // document with an error, such as a definition the goal uses that did not elaborate. Only
@@ -3451,7 +4045,7 @@ object UplcBlaster {
                       "a finite certificate that the Scalus CEK can replay to establish that no " +
                       "witness exists"
                 )
-            else replay(goal, artifact)
+            else replay(goal, artifact, evaluation)
         else if output.contains("⚠️ Undetermined") then
             Probe.Decided(VerificationResult.Inconclusive("UPLC Blaster was undetermined"))
         else Probe.Decided(failure)
@@ -3474,8 +4068,8 @@ object UplcBlaster {
       * the predicate needs more steps. Only a counterexample under which the statement is false
       * without the budget is a refutation.
       */
-    private def replay(goal: Lowered, artifact: Artifact): Probe =
-        counterexample(goal, artifact.output) match
+    private def replay(goal: Lowered, artifact: Artifact, evaluation: Evaluation): Probe =
+        counterexample(goal, artifact.output, evaluation) match
             case Left(SmtValues.Unreadable.Malformed(error)) =>
                 Probe.Decided(
                   VerificationResult.Failed(s"cannot read Lean's counterexample: $error")
@@ -3487,10 +4081,16 @@ object UplcBlaster {
                 Probe.Unreplayed(
                   s"Lean's counterexample is no value of its variable's type: $error"
                 )
+            // A value of a Lean type that Lean did not encode: the counterexample is not read, and
+            // another budget would not read it either.
+            case Left(SmtValues.Unreadable.NotEncoded(error)) =>
+                Probe.Decided(
+                  VerificationResult.Inconclusive(s"Lean's counterexample is not read: $error")
+                )
             // A value of Lean's variable that may be none of its type's, as a map whose keys' order
             // is not checked, is replayed as any: the CEK says whether the budget is at fault.
-            case Right(ReadValues(values, renaming, outside)) =>
-                replayValues(goal, artifact, values, renaming, outside)
+            case Right(ReadValues(values, renaming, outside, repaired)) =>
+                replayValues(goal, artifact, values, renaming, outside, evaluation, repaired)
 
     /** Replays `values` on the Scalus CEK. They were read from Lean's counterexample with
       * `renaming` for the characters that are none of their type. Where a value may be no value of
@@ -3498,21 +4098,32 @@ object UplcBlaster {
       * order it does not check, or it is none. Such values refute nothing, but Lean's variable
       * ranges over them: where the statement holds there, the budget is at fault, as of any
       * spurious counterexample, and where it is false there, no budget proves the statement.
+      *
+      * The statement's Lean predicates no program runs: `evaluation` has Lean evaluate them on the
+      * values, and where it cannot, the counterexample decides nothing.
       */
     private def replayValues(
         goal: Lowered,
         artifact: Artifact,
         values: List[Constant],
         renaming: SmtValues.Renaming,
-        outside: Option[String]
+        outside: Option[String],
+        evaluation: Evaluation,
+        repaired: List[String] = Nil
     ): Probe = {
-        val read =
+        val renamedRead =
             if renaming.isEmpty then ""
             else
                 val renamed = renaming.bytes.toList.sorted.map((from, to) =>
                     f"U+$from%04X as the byte 0x$to%02x"
                 ) ++ renaming.text.toList.sorted.map((from, to) => f"U+$from%04X as U+$to%04X")
                 s"reading the solver's ${renamed.mkString(", ")}, which no value of the type has"
+        val repairedRead =
+            if repaired.isEmpty then ""
+            else
+                s"with the parts of ${repaired.mkString(", ")} that no value of the type has, " +
+                    "which its Lean type has, replaced by values of them"
+        val read = List(renamedRead, repairedRead).filter(_.nonEmpty).mkString("; ")
         val shown = goal.binders
             .zip(values)
             .map((binder, value) => s"${binder.name} = ${display(value)}")
@@ -3528,72 +4139,94 @@ object UplcBlaster {
         val untold = outside.fold("")(why =>
             s"; it is no value of its variable's type, or one the tactic cannot tell is: $why"
         )
-        def decided(written: Option[Boolean]): Probe = written match
-            case Some(false) if outside.isDefined =>
-                Probe.Decided(
-                  VerificationResult.Inconclusive(
-                    s"$falsification is false on the Scalus CEK$untold. It refutes the statement " +
-                        "only if it is a value of the type; Lean's variable ranges over it, so no " +
-                        "budget proves it"
-                  )
-                )
-            case Some(false) =>
-                Probe.Decided(
-                  VerificationResult.Refuted(
-                    Proof(
-                      // A kept refutation says how its values were read when they were found.
-                      artifact.copy(
-                        counterexample = goal.binders.map(_.name).zip(values),
-                        read = if renaming.isEmpty then artifact.read else read
+        // The statement's Lean predicates, which no program runs, as Lean evaluates them on the
+        // values. The statement as written has the rejecting form's.
+        val forms = goal :: goal.unrewritten.toList
+        def replayedWith(verdicts: Verdicts, kept: List[Boolean]): Probe = {
+            def decided(written: Option[Boolean]): Probe = written match
+                case Some(false) if outside.isDefined =>
+                    Probe.Decided(
+                      VerificationResult.Inconclusive(
+                        s"$falsification is false on the Scalus CEK$untold. It refutes the " +
+                            "statement only if it is a value of the type; Lean's variable ranges " +
+                            "over it, so no budget proves it"
                       )
                     )
-                  )
-                )
-            // Renamed values are not those Lean ran: Lean's machine counts its own, with the
-            // renaming undone, where they can be written. A surrogate cannot, and the search goes
-            // on as for a falsification without values.
-            case Some(true) if !countable(renaming) =>
-                Probe.Unreplayed(
-                  s"$falsification is spurious: the statement holds there on the Scalus CEK" +
-                      s"$untold, and values that are not Lean's say nothing of the budget"
-                )
-            case Some(true) =>
-                Probe.Spurious(
-                  values,
-                  renaming,
-                  s"$falsification is spurious: the statement holds there on the Scalus CEK$untold"
-                )
-            case None =>
-                Probe.Decided(
-                  VerificationResult.Inconclusive(
-                    s"replaying $falsification exhausted the replay budget"
-                  )
-                )
+                case Some(false) =>
+                    Probe.Decided(
+                      VerificationResult.Refuted(
+                        Proof(
+                          // A kept refutation says how its values were read when they were found.
+                          artifact.copy(
+                            counterexample = goal.binders.map(_.name).zip(values),
+                            read = if read.isEmpty then artifact.read else read,
+                            verdicts = kept
+                          )
+                        )
+                      )
+                    )
+                // Renamed values are not those Lean ran: Lean's machine counts its own, with the
+                // renaming undone, where they can be written. A surrogate cannot, and the search
+                // goes on as for a falsification without values.
+                // What else makes it spurious, as an opaque builtin, is said too.
+                case Some(true) if !countable(renaming) || repaired.nonEmpty =>
+                    Probe.Unreplayed(
+                      s"$falsification is spurious: the statement holds there on the Scalus CEK" +
+                          s"$untold, and values that are not Lean's say nothing of the budget" +
+                          unknownTo(goal)
+                    )
+                case Some(true) =>
+                    Probe.Spurious(
+                      values,
+                      renaming,
+                      s"$falsification is spurious: the statement holds there on the Scalus " +
+                          s"CEK$untold",
+                      verdicts
+                    )
+                case None =>
+                    Probe.Decided(
+                      VerificationResult.Inconclusive(
+                        s"replaying $falsification exhausted the replay budget"
+                      )
+                    )
 
-        // The statement as written decides. Where the rejecting form rewrote it, Lean's reading can
-        // be false where the statement holds: where a claim fails, and its premise does not hold.
-        val written = goal.unrewritten.getOrElse(goal)
-        val writtenOutcomes = outcomes(written)
-        val asWritten = holds(written.body, writtenOutcomes)
-        trace(written, s"replayed $falsification: ${ran(writtenOutcomes)}; it holds: $asWritten")
-        // Lean's reading, of the rejecting form: only where the statement as written holds is it
-        // more than the statement's.
-        def rewritten: Option[Boolean] = {
-            val rewrittenOutcomes = outcomes(goal)
-            val reading = holds(goal.body, rewrittenOutcomes)
-            trace(goal, s"replayed: ${ran(rewrittenOutcomes)}; it holds: $reading")
-            reading
-        }
-        if goal.unrewritten.isDefined && asWritten.contains(true) && rewritten.contains(false)
-        then
-            Probe.ClaimFails(
-              s"$falsification: a claim does not return there, where the function it is " +
-                  "claimed of does not succeed either, so the statement holds there. It is " +
-                  "checked in the rejecting form, `if claim then error else function`, which " +
-                  "fails wherever the claim fails: a claim that returns false where it does " +
-                  "not hold makes it true of every value"
+            // The statement as written decides. Where the rejecting form rewrote it, Lean's reading
+            // can be false where the statement holds: where a claim fails, and its premise does not
+            // hold.
+            val written = goal.unrewritten.getOrElse(goal)
+            val writtenOutcomes = outcomes(written)
+            val asWritten = holds(written.body, writtenOutcomes, verdicts)
+            trace(
+              written,
+              s"replayed $falsification: ${ran(writtenOutcomes)}; it holds: $asWritten"
             )
-        else decided(asWritten)
+            // Lean's reading, of the rejecting form: only where the statement as written holds is
+            // it more than the statement's.
+            def rewritten: Option[Boolean] = {
+                val rewrittenOutcomes = outcomes(goal)
+                val reading = holds(goal.body, rewrittenOutcomes, verdicts)
+                trace(goal, s"replayed: ${ran(rewrittenOutcomes)}; it holds: $reading")
+                reading
+            }
+            if goal.unrewritten.isDefined && asWritten.contains(true) && rewritten.contains(false)
+            then
+                Probe.ClaimFails(
+                  s"$falsification: a claim does not return there, where the function it is " +
+                      "claimed of does not succeed either, so the statement holds there. It is " +
+                      "checked in the rejecting form, `if claim then error else function`, which " +
+                      "fails wherever the claim fails: a claim that returns false where it does " +
+                      "not hold makes it true of every value"
+                )
+            else decided(asWritten)
+        }
+
+        verdictsOf(forms, values, evaluation) match
+            case Left(reason) =>
+                Probe.Decided(
+                  VerificationResult.Inconclusive(s"$falsification is not replayed: $reason")
+                )
+            case Right(verdicts) =>
+                replayedWith(verdicts, satisfiedOf(forms).map(verdicts))
     }
 
     /** Whether `prop` holds on `values`, the values of its variables in the order it quantifies
@@ -3628,6 +4261,11 @@ object UplcBlaster {
                 if lowered.binders.size != values.size then
                     Left(
                       s"the statement has ${lowered.binders.size} variables, and ${values.size} values were given"
+                    )
+                else if satisfied(lowered.body).nonEmpty then
+                    Left(
+                      "the statement has Lean predicates, as isValid, which only Lean evaluates, " +
+                          "and not the Scalus CEK"
                     )
                 else
                     val outcomes = lowered.leaves
@@ -3762,7 +4400,12 @@ object UplcBlaster {
     private final case class ReadValues(
         values: List[Constant],
         renaming: SmtValues.Renaming,
-        outside: Option[String]
+        outside: Option[String],
+        /** The variables of a Lean type whose values were repaired: the parts of Lean's value that
+          * no value of the Scala type has, as a script context of CardanoLedgerApi's keeps as any
+          * `Data`, replaced by examples of them ([[DataEncoding.repaired]]).
+          */
+        repaired: List[String] = Nil
     )
 
     /** The values of Blaster's counterexample to `goal` ([[ReadValues]]), or why they cannot be
@@ -3775,9 +4418,11 @@ object UplcBlaster {
       */
     private def counterexample(
         goal: Lowered,
-        output: String
+        output: String,
+        evaluation: Evaluation
     ): Either[SmtValues.Unreadable, ReadValues] = {
         val binders = goal.binders
+        val repairs = ArrayBuffer.empty[String]
         // The values found so far; the last one goes on while its term is not whole.
         val found = output.linesIterator.foldLeft(List.empty[(Int, String)]) { (found, line) =>
             line match
@@ -3802,39 +4447,88 @@ object UplcBlaster {
             .foldRight[Either[SmtValues.Unreadable, List[(Constant, Option[String])]]](Right(Nil)) {
                 case ((binder, index), rest) =>
                     val text = reported.get(index)
-                    val value: Either[SmtValues.Unreadable, Constant] = variableOf(binder.tp) match
-                        case Some(Variable.Integer) =>
-                            text.fold(Right(BigInt(0)))(SmtValues.integer).map(Constant.Integer(_))
-                        case Some(Variable.Boolean) =>
-                            text.fold(Right(false))(SmtValues.boolean).map(Constant.Bool(_))
-                        case Some(Variable.ByteString) =>
-                            text.fold(Right(ByteString.empty))(SmtValues.bytes(_, renamed))
-                                .map(Constant.ByteString(_))
-                        case Some(Variable.String) =>
-                            text.fold(Right(""))(SmtValues.string(_, renamed))
-                                .map(Constant.String(_))
-                        case Some(Variable.WholeData) =>
-                            text.fold(Right(Data.I(0)))(SmtValues.data(_, renamed))
-                                .map(Constant.Data(_))
-                        // A value Lean leaves out is any value, and one of the type is taken.
-                        case Some(Variable.EncodedData) =>
-                            val example = variableEncoding(binder.tp).example
-                            text.fold(Right(example.getOrElse(Data.I(0))))(
-                              SmtValues.data(_, renamed)
-                            ).map(Constant.Data(_))
-                        case Some(Variable.DataList) =>
-                            text.fold(Right(Nil))(SmtValues.dataList(_, renamed)).map(dataList)
-                        case Some(Variable.PairList) =>
-                            text.fold(Right(Nil))(SmtValues.dataPairs(_, renamed)).map(pairList)
-                        case Some(Variable.DataMap) =>
-                            text.fold(Right(Nil))(SmtValues.dataPairs(_, renamed))
-                                .map(pairs => Constant.Data(Data.Map(PList.from(pairs))))
-                        case None =>
-                            Left(
-                              SmtValues.Unreadable.Malformed(
-                                s"a ${binder.tp.show} binder has no counterexample value"
-                              )
-                            )
+                    // A value of a Lean type is a term of Lean's, which Lean encodes as its type's
+                    // encoder does: a value Lean leaves out is any, and one of the type is taken.
+                    def ofLeanType(
+                        binding: LeanTypeBinding
+                    ): Either[SmtValues.Unreadable, Constant] =
+                        text match
+                            case None =>
+                                Right(
+                                  Constant.Data(
+                                    variableEncoding(binder.tp).example.getOrElse(Data.I(0))
+                                  )
+                                )
+                            // A part of Lean's value that no value of the Scala type has is
+                            // repaired: the replay is of a value of the type, or refutes nothing.
+                            case Some(term) =>
+                                SmtValues
+                                    .leanTerm(term, renamed)
+                                    // The solver's term of a Lean type is of that type's
+                                    // sorts, which the reader knows some of: one it does not
+                                    // read is a value it does not encode, not a malformed one.
+                                    .left
+                                    .map {
+                                        case SmtValues.Unreadable.Malformed(reason) =>
+                                            SmtValues.Unreadable.NotEncoded(
+                                              s"the solver's term is not read: $reason"
+                                            )
+                                        case other => other
+                                    }
+                                    .flatMap(evaluation.encode(binding, _))
+                                    .map { data =>
+                                        if outsideType(Constant.Data(data), binder.tp).isEmpty then
+                                            data
+                                        else
+                                            variableEncoding(binder.tp).repaired(data) match
+                                                case Some(fixed)
+                                                    if outsideType(
+                                                      Constant.Data(fixed),
+                                                      binder.tp
+                                                    ).isEmpty =>
+                                                    repairs += binder.name
+                                                    fixed
+                                                case _ => data
+                                    }
+                                    .map(Constant.Data(_))
+                    def untyped: Either[SmtValues.Unreadable, Constant] =
+                        variableOf(binder.tp) match
+                            case Some(Variable.Integer) =>
+                                text.fold(Right(BigInt(0)))(SmtValues.integer)
+                                    .map(Constant.Integer(_))
+                            case Some(Variable.Boolean) =>
+                                text.fold(Right(false))(SmtValues.boolean).map(Constant.Bool(_))
+                            case Some(Variable.ByteString) =>
+                                text.fold(Right(ByteString.empty))(SmtValues.bytes(_, renamed))
+                                    .map(Constant.ByteString(_))
+                            case Some(Variable.String) =>
+                                text.fold(Right(""))(SmtValues.string(_, renamed))
+                                    .map(Constant.String(_))
+                            case Some(Variable.WholeData) =>
+                                text.fold(Right(Data.I(0)))(SmtValues.data(_, renamed))
+                                    .map(Constant.Data(_))
+                            // A value Lean leaves out is any value, and one of the type is taken.
+                            case Some(Variable.EncodedData) =>
+                                val example = variableEncoding(binder.tp).example
+                                text.fold(Right(example.getOrElse(Data.I(0))))(
+                                  SmtValues.data(_, renamed)
+                                ).map(Constant.Data(_))
+                            case Some(Variable.DataList) =>
+                                text.fold(Right(Nil))(SmtValues.dataList(_, renamed)).map(dataList)
+                            case Some(Variable.PairList) =>
+                                text.fold(Right(Nil))(SmtValues.dataPairs(_, renamed)).map(pairList)
+                            case Some(Variable.DataMap) =>
+                                text.fold(Right(Nil))(SmtValues.dataPairs(_, renamed))
+                                    .map(pairs => Constant.Data(Data.Map(PList.from(pairs))))
+                            case None =>
+                                Left(
+                                  SmtValues.Unreadable.Malformed(
+                                    s"a ${binder.tp.show} binder has no counterexample value"
+                                  )
+                                )
+                    val value: Either[SmtValues.Unreadable, Constant] = goal.typedAt(index) match
+                        case Some(binding) => ofLeanType(binding)
+                        case None          => untyped
                     // A list's or a map's items are any `Data` to Lean, and need not be the type's:
                     // a value that is not is read all the same, with why, as Lean ran it.
                     val typed = value.map(v =>
@@ -3846,10 +4540,14 @@ object UplcBlaster {
                             SmtValues.Unreadable.Malformed(s"${binder.name}: $reason")
                         case SmtValues.Unreadable.OutsideType(reason) =>
                             SmtValues.Unreadable.OutsideType(s"${binder.name}: $reason")
+                        case SmtValues.Unreadable.NotEncoded(reason) =>
+                            SmtValues.Unreadable.NotEncoded(s"${binder.name}: $reason")
                     }
                     for v <- named; r <- rest yield v :: r
             }
-        read.map(read => ReadValues(read.map(_._1), renamed, read.flatMap(_._2).headOption))
+        read.map(read =>
+            ReadValues(read.map(_._1), renamed, read.flatMap(_._2).headOption, repairs.toList)
+        )
     }
 
     /** Reads each character of a counterexample that is none of its value's type as one that is
@@ -3949,7 +4647,13 @@ object UplcBlaster {
     /** The truth of a formula under the semantics of §3.3, or `None` when a predicate it depends on
       * did not finish within the replay budget.
       */
-    private def holds(formula: LeafFormula, outcomes: Vector[Outcome]): Option[Boolean] =
+    private def holds(
+        formula: LeafFormula,
+        outcomes: Vector[Outcome],
+        verdicts: Verdicts = Map.empty
+    ): Option[Boolean] = {
+        def holds(formula: LeafFormula, outcomes: Vector[Outcome]): Option[Boolean] =
+            UplcBlaster.holds(formula, outcomes, verdicts)
         formula match {
             case LeafFormula.Test(leaf) =>
                 outcomes(leaf) match
@@ -3981,7 +4685,10 @@ object UplcBlaster {
             // `forAll` in a positive position, an `exists` in a negative one.
             case LeafFormula.Forall(_, body) => holds(body, outcomes)
             case LeafFormula.Exists(_, body) => holds(body, outcomes)
+            // What Lean evaluated it to, on the values replayed: none where it was not.
+            case leaf: LeafFormula.Satisfies => verdicts.get(leaf)
         }
+    }
 
     /** Lean's output, without the lines that report each imported program, and shortened. */
     private def concise(output: String): String = {
@@ -4009,8 +4716,7 @@ object UplcBlaster {
                     throw new IllegalArgumentException(
                       s"the string has the surrogate U+${surrogate.toHexString}, no character"
                     )
-                case byte if byte <= 0xff     => f"\\x$byte%02x"
-                case basic if basic <= 0xffff => f"\\u$basic%04x"
+                case basic if basic <= 0xffff => SmtValues.leanEscape(basic)
                 case other                    => Character.toString(other)
             }
             .mkString
@@ -4022,6 +4728,55 @@ object UplcBlaster {
     /** The kind of Lean variable of a binder that [[expand]] left, which has one. */
     private def variable(tp: SIRType): Variable =
         variableOf(tp).getOrElse(throw new IllegalStateException(s"unexpected ${tp.show} binder"))
+
+    /** The Lean term of the `Data` a Lean predicate is of: the variable `x<index>` of a binder, as
+      * every text of a check names it, or a constant.
+      */
+    private def leanArgument(argument: LeanArgument): String = argument match
+        case LeanArgument.Binder(index, None)          => s"x$index"
+        case LeanArgument.Binder(index, Some(binding)) => binding.toData(s"x$index")
+        case LeanArgument.Constant(data)               => leanData(data)
+
+    /** `predicate` of `argument`, as Lean reads it: of a binder of a Lean type, the predicate's own
+      * function of that type where it has one, else the predicate of its `Data`.
+      */
+    private def leanSatisfies(predicate: LeanPredicate, argument: LeanArgument): String =
+        argument match
+            case LeanArgument.Binder(index, Some(binding))
+                if predicate.typed.contains(binding.leanType) =>
+                s"(${predicate.typed(binding.leanType)} x$index = true)"
+            case other => s"(${predicate.name} ${leanArgument(other)} = true)"
+
+    /** The library's module that every check imports: the run of a program, and what it imports. */
+    private val libraryRun = "ScalusProofs.Run"
+
+    /** The library's modules that [[libraryRun]] imports itself, so a check imports them through it
+      * (`ScalusProofs/Run.lean`): a workspace that builds the run builds them.
+      */
+    private val importedByRun = Set("ScalusProofs.Ledger")
+
+    /** The Lean modules a check of `goal` imports besides the library's run: those of its Lean
+      * predicates ([[LeafFormula.Satisfies]]) and of the Lean types of its binders
+      * ([[Lowered.typed]]).
+      */
+    private[uplcblaster] def leanImports(goal: Lowered): List[String] =
+        (satisfied(goal.body).map(_.predicate.module) ++ goal.typed.flatten.map(
+          _.module
+        )).distinct.sorted
+
+    /** The Lean predicates of a formula, each once, in the order they are in it. */
+    private def satisfied(formula: LeafFormula): List[LeafFormula.Satisfies] = {
+        def loop(formula: LeafFormula): List[LeafFormula.Satisfies] = formula match
+            case leaf: LeafFormula.Satisfies                  => List(leaf)
+            case LeafFormula.And(left, right)                 => loop(left) ++ loop(right)
+            case LeafFormula.Or(left, right)                  => loop(left) ++ loop(right)
+            case LeafFormula.Implies(premise, conclusion)     => loop(premise) ++ loop(conclusion)
+            case LeafFormula.Not(inner)                       => loop(inner)
+            case LeafFormula.Forall(_, body)                  => loop(body)
+            case LeafFormula.Exists(_, body)                  => loop(body)
+            case _: LeafFormula.Test | _: LeafFormula.Denotes => Nil
+        loop(formula).distinct
+    }
 
     /** Another reading of the leaves of a formula than that of a check ([[renderFormula]]): the
       * Lean text of a test and of a `denotes`, by the leaf and whether its position is positive.
@@ -4092,7 +4847,8 @@ object UplcBlaster {
             case LeafFormula.Not(inner) => s"(¬ ${render(inner, !positive)})"
             case LeafFormula.Implies(premise, conclusion) =>
                 s"(${render(premise, !positive)} → ${render(conclusion, positive)})"
-            case LeafFormula.Forall(binders, body) => quantified("∀", binders, body)
+            case LeafFormula.Forall(binders, body)          => quantified("∀", binders, body)
+            case LeafFormula.Satisfies(predicate, argument) => leanSatisfies(predicate, argument)
             // Blaster accepts Exists directly, but the equivalent ¬∀¬ form keeps generated
             // quantifiers uniform and lets the ordinary universal path handle their binders.
             case LeafFormula.Exists(binders, body) =>
@@ -4111,7 +4867,7 @@ object UplcBlaster {
         flats: Vector[Path],
         budget: Int,
         maxHeartbeats: Int
-    ): String = document(flats, checkBody(goal, budget), maxHeartbeats)
+    ): String = document(flats, checkBody(goal, budget), maxHeartbeats, leanImports(goal))
 
     /** The commands of a check after its programs: the symbolic runs and the statement, or the
       * closed statement.
@@ -4150,14 +4906,20 @@ object UplcBlaster {
                 )
             else
                 val names = goal.binders.indices.map(index => s"x$index").toList
-                val declarations = goal.binders.zip(names).map { (binder, name) =>
-                    s"($name : ${leanType(binder.tp)})"
-                }
+                // A binder of a Lean type is a variable of it, whose `Data` its programs are given.
+                val declarations =
+                    goal.binders.zip(names).zipWithIndex.map { case ((binder, name), index) =>
+                        val tp = goal.typedAt(index).fold(leanType(binder.tp))(_.leanType)
+                        s"($name : $tp)"
+                    }
                 val arguments = goal.leafBinders.zipWithIndex.map { (scope, leaf) =>
                     val parameters = scope.map(declarations)
                     val terms = scope.map { index =>
                         val binder = goal.binders(index)
-                        variable(binder.tp).argument(names(index))
+                        goal.typedAt(index) match
+                            case Some(binding) =>
+                                s"Term.Const (Const.Data ${binding.toData(names(index))})"
+                            case None => variable(binder.tp).argument(names(index))
                     }
                     ((s"def arguments$leaf" +: parameters) :+
                         s": List Term := [${terms.mkString(", ")}]").mkString(" ")
@@ -4219,7 +4981,12 @@ object UplcBlaster {
         val statement = Fingerprint.hash(
           checked
               .map(lowered =>
-                  document(Vector.empty, checkBody(lowered, lowered.within.getOrElse(0)), 0)
+                  document(
+                    Vector.empty,
+                    checkBody(lowered, lowered.within.getOrElse(0)),
+                    0,
+                    leanImports(lowered)
+                  )
               )
               .mkString("\n")
         )
@@ -4236,6 +5003,11 @@ object UplcBlaster {
     private val kindNote = "kind"
     private val readNote = "read"
 
+    /** The note of a refutation that has what Lean evaluated the statement's Lean predicates to on
+      * its counterexample, `true` or `false` each, in order ([[Artifact.verdicts]]).
+      */
+    private val verdictsNote = "lean-predicates"
+
     /** The note of a result the statement as written decided, where the rejecting form decided
       * nothing: a later run checks it so at once.
       */
@@ -4248,7 +5020,10 @@ object UplcBlaster {
         def notes(artifact: Artifact) =
             Map(budgetNote -> artifact.budget.toString, kindNote -> artifact.kind.toString) ++
                 Option.when(artifact.read.nonEmpty)(readNote -> artifact.read) ++
-                Option.when(artifact.asWritten)(formNote -> asWrittenForm)
+                Option.when(artifact.asWritten)(formNote -> asWrittenForm) ++
+                Option.when(artifact.verdicts.nonEmpty)(
+                  verdictsNote -> artifact.verdicts.mkString(" ")
+                )
         result match
             case VerificationResult.Proven(proof) =>
                 proof.artifact match
@@ -4274,6 +5049,17 @@ object UplcBlaster {
       * proof is taken as it was kept. A refutation is replayed on the Scalus CEK, as one that Lean
       * has just given, and is a result only where the statement is false on its values.
       */
+    /** [[restored]] of what was kept with another side of the backend: a refutation that keeps what
+      * Lean evaluated its Lean predicates to is not, as that was the old side's evaluation.
+      */
+    private[uplcblaster] def restoredOnAnotherSide(
+        goal: Lowered,
+        kept: Kept
+    ): Either[String, ExecutionResult] =
+        if kept.notes.contains(verdictsNote) then
+            Left("its Lean predicates were evaluated with another side of the backend")
+        else restored(goal, kept)
+
     private[uplcblaster] def restored(goal: Lowered, kept: Kept): Either[String, ExecutionResult] =
         for
             budget <- kept.notes
@@ -4333,11 +5119,23 @@ object UplcBlaster {
                                 others <- rest
                             yield value :: others
                     }
+                // What Lean evaluated the Lean predicates to, as the refutation keeps it: without
+                // Lean they are not evaluated again, as a proof is not made again.
+                val verdicts = kept.notes
+                    .get(verdictsNote)
+                    .fold(Nil)(_.split(' ').toList.filter(_.nonEmpty).map(_ == "true"))
                 read.flatMap { values =>
-                    replayValues(goal, artifact, values, SmtValues.Renaming.none, None) match
+                    replayValues(
+                      goal,
+                      artifact.copy(verdicts = verdicts),
+                      values,
+                      SmtValues.Renaming.none,
+                      None,
+                      Evaluation.kept(verdicts)
+                    ) match
                         case Probe.Decided(refuted: VerificationResult.Refuted) => Right(refuted)
                         case Probe.Decided(VerificationResult.Inconclusive(reason)) => Left(reason)
-                        case Probe.Spurious(_, _, _) =>
+                        case Probe.Spurious(_, _, _, _) =>
                             Left("the statement holds on its counterexample")
                         case other => Left(s"its counterexample gives $other")
                 }
@@ -4448,22 +5246,31 @@ object UplcBlaster {
     private val integerJson = """-?\d+""".r
     private val hexJson = """"([0-9a-fA-F]{2})*"""".r
 
-    /** The text of a check: the library, the limit of Lean's work, the programs in `flats` as
-      * `leaf<n>`, and the commands of `body`. The lines up to the programs are the same in every
-      * check, so the server elaborates them once.
+    /** The text of a check: the library, and the modules of `modules`, the limit of Lean's work,
+      * the programs in `flats` as `leaf<n>`, and the commands of `body`. The lines up to the
+      * programs are the same in every check of the same modules, so the server elaborates them
+      * once.
       */
-    private def document(flats: Vector[Path], body: String, maxHeartbeats: Int): String =
+    private def document(
+        flats: Vector[Path],
+        body: String,
+        maxHeartbeats: Int,
+        modules: List[String] = Nil
+    ): String =
         document(
           flats.map(_.toAbsolutePath.toString),
           body,
           maxHeartbeats,
           "ScalusProofs.Runtime",
           "",
-          ""
+          "",
+          modules
         )
 
     /** [[document]] in the namespace `namespace`, with the programs at the paths `flats` as they
-      * are written, and `header` after the import: a comment, or nothing.
+      * are written, and `header` after the imports: a comment, or nothing. `modules` are imported
+      * besides the library's `ScalusProofs.Run`: those of the Lean predicates of the statement
+      * ([[leanImports]]).
       */
     private def document(
         flats: Vector[String],
@@ -4471,12 +5278,18 @@ object UplcBlaster {
         maxHeartbeats: Int,
         namespace: String,
         header: String,
-        prefix: String
+        prefix: String,
+        modules: List[String]
     ): String = {
         val imports = flats.zipWithIndex.map { (flat, index) =>
             s"""#import_uplc ${prefix}leaf$index PlutusV3 single_cbor_hex "${leanString(flat)}""""
         }
-        s"""import ScalusProofs.Run
+        // `ScalusProofs.Run` imports the library's ledger module itself: every check has the one
+        // header, which a server loads once, whether it reads the ledger's rules or not, and a
+        // workspace that builds `Run` builds them.
+        val imported =
+            (libraryRun :: modules.filterNot(importedByRun.contains)).distinct
+        s"""${imported.map(module => s"import $module").mkString("\n")}
            |$header
            |set_option maxHeartbeats $maxHeartbeats
            |
@@ -4546,7 +5359,8 @@ object UplcBlaster {
             maxHeartbeats,
             module,
             header,
-            prefix
+            prefix,
+            leanImports(goal)
           ),
           paths.zip(goal.leaves)
         )
@@ -4598,6 +5412,18 @@ object UplcBlaster {
     def ualStatement(goal: Lowered, budget: Int, id: String): Either[String, UalStatement] = {
         if goal.within.isDefined then
             Left("a statement checked within a budget is no theorem, and is not exported")
+        // Its predicates are of Scalus's Lean library, which a consumer does not have: they are to
+        // be the library's of the language, CardanoLedgerApi's own, of its types.
+        else if satisfied(goal.body).nonEmpty then
+            Left(
+              "a statement with Lean predicates, as isValid, is not exported yet: they are " +
+                  "defined in Scalus's Lean library, of Data"
+            )
+        else if goal.typed.exists(_.isDefined) then
+            Left(
+              "a statement with a variable of a Lean type, as CardanoLedgerApi's script context, " +
+                  "is not exported yet"
+            )
         else {
             val names = goal.binders.indices.map(index => s"x$index").toList
             val kinds = goal.binders.map(binder => variable(binder.tp))

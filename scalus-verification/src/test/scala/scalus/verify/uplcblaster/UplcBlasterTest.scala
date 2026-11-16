@@ -1759,31 +1759,59 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         // Values the premise is false of. It is seen to be false after 300 steps, and that is
         // enough, though the program runs for 12000: its budget is the oversized one.
         val accepted = Vector(Run(300, End.Returned(Some(false))), Run(12000, End.Returned(None)))
-        assert(UplcBlaster.needed(rejects, accepted, above = 100).contains(300))
+        assert(
+          UplcBlaster.needed(rejects, accepted, above = 100, verdicts = Map.empty).contains(300)
+        )
 
         // Values the premise is true of: the statement holds once the program has failed.
         val rejected = Vector(Run(300, End.Returned(Some(true))), Run(1610, End.Failed))
-        assert(UplcBlaster.needed(rejects, rejected, above = 300).contains(1610))
-        assert(!UplcBlaster.holdsWithin(rejects, rejected, 1609, positive = true))
-        assert(UplcBlaster.holdsWithin(rejects, rejected, 1610, positive = true))
+        assert(
+          UplcBlaster.needed(rejects, rejected, above = 300, verdicts = Map.empty).contains(1610)
+        )
+        assert(
+          !UplcBlaster.holdsWithin(rejects, rejected, 1609, positive = true, verdicts = Map.empty)
+        )
+        assert(
+          UplcBlaster.holdsWithin(rejects, rejected, 1610, positive = true, verdicts = Map.empty)
+        )
         // Under a smaller budget the premise, not ended, counts as holding, and the program, not
         // ended, as not having failed.
-        assert(!UplcBlaster.holdsWithin(rejects, rejected, 100, positive = true))
+        assert(
+          !UplcBlaster.holdsWithin(rejects, rejected, 100, positive = true, verdicts = Map.empty)
+        )
 
         // A program that has not ended within what is counted gives no budget.
         val endless = Vector(Run(300, End.Returned(Some(true))), Run(100000, End.Running))
-        assert(UplcBlaster.needed(rejects, endless, above = 300).isEmpty)
+        assert(UplcBlaster.needed(rejects, endless, above = 300, verdicts = Map.empty).isEmpty)
 
         // A test that is claimed has to return `true` within the budget.
         val returns = LeafFormula.Test(0)
         def one(end: End): Vector[Run] = Vector(Run(57, end))
-        assert(UplcBlaster.needed(returns, one(End.Returned(Some(true))), above = 10).contains(57))
-        assert(UplcBlaster.needed(returns, one(End.Returned(Some(false))), above = 10).isEmpty)
-        assert(UplcBlaster.needed(returns, one(End.Returned(Some(true))), above = 57).isEmpty)
+        assert(
+          UplcBlaster
+              .needed(returns, one(End.Returned(Some(true))), above = 10, verdicts = Map.empty)
+              .contains(57)
+        )
+        assert(
+          UplcBlaster
+              .needed(returns, one(End.Returned(Some(false))), above = 10, verdicts = Map.empty)
+              .isEmpty
+        )
+        assert(
+          UplcBlaster
+              .needed(returns, one(End.Returned(Some(true))), above = 57, verdicts = Map.empty)
+              .isEmpty
+        )
         // `denotes` asks only that the program returns.
         val denoted = LeafFormula.Denotes(0)
-        assert(UplcBlaster.needed(denoted, one(End.Returned(None)), above = 10).contains(57))
-        assert(UplcBlaster.needed(denoted, one(End.Failed), above = 10).isEmpty)
+        assert(
+          UplcBlaster
+              .needed(denoted, one(End.Returned(None)), above = 10, verdicts = Map.empty)
+              .contains(57)
+        )
+        assert(
+          UplcBlaster.needed(denoted, one(End.Failed), above = 10, verdicts = Map.empty).isEmpty
+        )
     }
 
     test("a counterexample goes back to Lean as the terms it is made of") {
@@ -2022,12 +2050,14 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         val goal = lowered(forAll[BigInt](x => x + BigInt(0) == x), FunctionTable.empty)
         val fingerprint = UplcBlaster.fingerprint(goal, leanWorkspace)
         assert(fingerprint == UplcBlaster.fingerprint(goal, leanWorkspace))
-        // Lean's side: its toolchain, the packages the workspace clones, and Scalus's library.
+        // Lean's side: its toolchain, the packages the workspace clones, CardanoLedgerApi among
+        // them for the ledger's rules, and Scalus's library.
         assert(
           fingerprint.environment.keySet == Set(
             "toolchain",
             "Blaster",
             "PlutusCore",
+            "CardanoLedgerApi",
             "ScalusProofs"
           )
         )
@@ -2128,7 +2158,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             ) match
                 case VerificationResult.Inconclusive(reason) =>
                     assert(reason.startsWith(KeptResults.stale), reason)
-                    assert(reason.contains("the program of test 1"), reason)
+                    assert(reason.contains("program of test 1"), reason)
                 case other => fail(s"expected a stale statement, got $other")
 
             // A run that recalculates asks Lean, and comes to the same.

@@ -1,7 +1,7 @@
 ---
-title: Tuning Your Proof - Budgets, Data Limits and Time Limits
+title: Tuning Your Proof - Budgets, Data Limits, Script Contexts and Time Limits
 sidebarTitle: Tuning Your Proof
-description: What to do when a Scalus proof comes back inconclusive or does not finish. Let the tactic find the budget of steps, give one yourself, limit the length of a script context's collections with forAllDataLimited, and set the time a check may take.
+description: What to do when a Scalus proof comes back inconclusive or does not finish. Let the tactic find the budget of steps, give one yourself, limit the length of a script context's collections with forAllDataLimited, choose how a script context reaches Lean, and set the time a check may take.
 ---
 
 import { Callout } from 'nextra/components'
@@ -9,8 +9,9 @@ import { Callout } from 'nextra/components'
 # Tuning Your Proof
 
 Not every statement is decided at once. A check can come back inconclusive, or run until its time
-limit. Three things can be tuned: the **budget** of steps Lean's machine runs each program, the
-**data** the statement ranges over, and the **time** a check may take.
+limit. Four things can be tuned: the **budget** of steps Lean's machine runs each program, the
+**data** the statement ranges over, the **form** in which a script context reaches Lean, and the
+**time** a check may take.
 
 ## The Budget
 
@@ -105,6 +106,85 @@ private val refundRejectedUnlessTheCommitterSignsLimited = verifier.statement(
 
 The rules that the validator decides by the time, before it reads the signatories, need no limit:
 see [Your First Proof](/docs/verification/first-proof#why-no-limit-is-needed-here).
+
+## How a Script Context Reaches Lean
+
+A script context that a statement quantifies over reaches Lean in one of two forms:
+
+- **As `Data`:** one Lean `Data`, restricted by a premise to the encodings of Scalus's
+  `ScriptContext`. This form assumes nothing, but Lean decodes the context for every rule that
+  reads it.
+- **As a typed value:** a value of the `ScriptContext` type of IOG's
+  [CardanoLedgerApi](https://github.com/input-output-hk/CardanoLedgerApiBlaster), a Lean structure
+  of the Plutus V3 context, with its transaction, redeemer and script purpose. The programs get
+  its `Data`, which the library encodes as Plutus does. The solver then searches structured
+  contexts instead of arbitrary `Data`.
+
+The programs are the same in both forms. What differs is what the statement ranges over, and how
+fast Lean decides it.
+
+### Auto: The Default
+
+By default (`VariableMapping.auto`) the statement's form chooses, so that the choice assumes
+nothing:
+
+| The statement | The context is | Why |
+|---|---|---|
+| has `isValid(ctx)` as a premise | typed | `isValid` holds only of the `Data` of a valid value of the library's type, so the statement over typed values says exactly what the one over `Data` does |
+| is a negative control (`refute`) | typed | the replay checks the counterexample on Scalus's own value, so the mapping cannot make a refutation wrong |
+| anything else | `Data` | a typed value would assume that the library's type has a counterpart of every Scalus context, which is checked of samples, not proved |
+| asks for a witness (`exists`) | by fields | the solver builds the witness, and neither form above can stand for one |
+
+Only the variable itself is typed, not a part of another variable. A context is typed with limits
+too ([Limit the Data](#limit-the-data)): the guard reads its `Data`.
+
+`Auto` was chosen by measuring the example suites with every context as `Data`, and with every
+context typed:
+
+- **With `isValid`, typed is faster.** Over `Data`, Lean evaluates the ledger's rules on a
+  decoded `Data`, which cost 5 to 11 seconds a check on the HTLC validator; typed, the rules read
+  the value. Several statements with limits got two to three times faster, the HTLC suite's
+  statements as a whole about a quarter faster, and a few small ones a second or two slower.
+- **Negative controls typed:** those with limits three to four times faster, the others about the
+  same.
+- **Without `isValid`, typed is not reliably faster.** It was faster for 7 of 10 statements, but
+  the largest statement of the payment splitter took twice as long (170 s, then 341 s), and the
+  statement would rest on an assumption.
+
+### Writing Statements for It
+
+- **Put `isValid(ctx)` in a premise:** `isValid(ctx) ==>: premise ==>: claim`. `Auto` finds it in
+  any premise of the chain, inside `&&` too, and under further `forAll`s, but not under an
+  `exists`. `isValid` in a claim is no premise, and leaves the context as `Data`.
+- **Leave `isValid` out of a negative control.** Its refutation would need a balanced transaction
+  the validator accepts, and the solver does not find one in time. State it of every context,
+  valid or not.
+- **State a sample as valid too:** `isValid(sample) && succeeds(validator, sample.toData)` shows
+  that the ledger accepts the transaction, and Lean evaluates both.
+
+### Choosing Otherwise
+
+A suite overrides `variableMapping`; a tactic takes `withMapping`:
+
+```scala
+class SomeVerificationTest extends AnyFunSuite with LeanProofsSuite {
+    // Every context typed, with or without isValid.
+    override protected def variableMapping = VariableMapping.rules.preferLeanTypes
+```
+
+| Mapping | What it does |
+|---|---|
+| `VariableMapping.auto` | the default, as above |
+| `VariableMapping.rules` | `Data` for every context, by fields for small case classes |
+| `VariableMapping.rules.preferLeanTypes` | a typed value wherever the library has a type, also without `isValid` |
+| `VariableMapping.rules.forType[A](choice)` | `choice` for the type `A` only, one of `VariableMapping.Choice`: `Auto`, `Rules`, `ByFields`, `AsData` or `LeanType` |
+
+A mapping is part of what a kept result rests on: a result kept under one mapping is checked
+again under another.
+
+**A typed counterexample is repaired.** The library's type keeps some parts of a context as any
+`Data`, so it has values that no Scalus context has. Where Lean's counterexample is one of them,
+the replay repairs those parts, says so, and decides on the repaired value.
 
 ## The Time Limit
 

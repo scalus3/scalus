@@ -63,9 +63,10 @@ validator actually runs on chain.
   script contexts and withdrawals. The JVM tests of `scalus-examples` depend on
   `scalus-verification-scalatest`, as a project outside these sources does.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala` -
-  properties of the hashed timelock contract, over real script contexts (`forAllData`, or
-  `forAllDataLimited` of at most two signatures): who refunds and who reveals, when, and of what,
-  and that there is no time at which both can.
+  properties of the hashed timelock contract, over real script contexts the ledger accepts
+  (`forAllData`, or `forAllDataLimited` of at most two signatures, with `isValid(ctx)` as a
+  premise): who refunds and who reveals, when, and of what, and that there is no time at which
+  both can.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala`
   - properties of the two payment splitters, for two payees, over real script contexts of a few
   inputs and outputs: for the optimized one, that a spend's redeemer names its input, that a spend
@@ -123,7 +124,11 @@ on how many elements the collections of `x` have, as `maxCollectionLength(x) <= 
 `x.txInfo.inputs.length <= 3`, `isEmpty`, `nonEmpty`, and `forall` over a list or a map's keys or
 values, joined with `&&` (`Limits`). Each test checks them first, with a walk that ends, so a loop
 over a limited list runs to its end, and the statement of the values within the limits is proved
-as a theorem. Each test becomes
+as a theorem. `isValid(ctx)`, of a `v3.ScriptContext`, is a premise that Lean evaluates and no
+program runs: the ledger's rules of the context, as IOG's CardanoLedgerApi states them
+(`validScriptContext`), of the context's `Data` (`ScalusProofs/Ledger.lean`). It is of a
+statement variable, which the tactic passes as one `Data`, or of a value without variables; the
+replay of a counterexample has Lean evaluate it on the values. Each test becomes
 its own closed UPLC predicate over the quantified values in its scope. The tactic writes them
 to files, gives its Lean server a check that imports them, and reads Blaster's verdict from
 what Lean reports. The server loads the workspace once, so a small check takes a fraction of a

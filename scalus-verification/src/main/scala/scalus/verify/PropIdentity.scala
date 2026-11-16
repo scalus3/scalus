@@ -126,8 +126,10 @@ private[verify] object PropIdentity {
             case Prop.Or(a, b)      => node("or") { this.prop(a); this.prop(b) }
             case Prop.Implies(a, b) => node("implies") { this.prop(a); this.prop(b) }
             case Prop.Rejects(a, b) => node("rejects") { this.prop(a); this.prop(b) }
-            case Prop.Iff(a, b)     => node("iff") { this.prop(a); this.prop(b) }
-            case Prop.Not(a)        => node("not")(this.prop(a))
+            case Prop.Satisfies(predicate, value) =>
+                node("satisfies") { atom(predicate.name); atom(predicate.module); expr(value) }
+            case Prop.Iff(a, b) => node("iff") { this.prop(a); this.prop(b) }
+            case Prop.Not(a)    => node("not")(this.prop(a))
         }
 
         private def expr(expr: PropExpr[?]): Unit = expr match

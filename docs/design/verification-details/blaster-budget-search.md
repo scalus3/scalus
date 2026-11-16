@@ -151,14 +151,19 @@ result, and any run of a statement whose result was not kept.
 
 ### A run that asks Lean
 
-1. No entry under the name, or one with another fingerprint: search from the start, and keep the
-   result with the budget it was found at. A change of a program means a search, once.
-2. An entry with the statement's fingerprint: check at its budget.
+1. No entry under the name: search from the start, and keep the result with the budget it was
+   found at.
+2. An entry under the name with another fingerprint, of another statement, other programs or
+   another side of the backend: it is no result, but its budget is tried first, with half of the
+   time at most. Where it decides nothing, search from the start. A change of a program, or one
+   that every statement has, as a line that every check imports, is then one check of each
+   statement where the budget still decides it, and not a search of each.
+3. An entry with the statement's fingerprint: check at its budget.
    - A proof, or a refutation: done, in one check.
    - Anything else, a spurious counterexample or a check that is given up: the kept budget does
      not serve any more. Search from the start, and keep what is found. A change of the solver
      can come to this, where it leaves the fingerprint as it was.
-3. A search that finds no budget leaves the entry as it is. The result is inconclusive, and for
+4. A search that finds no budget leaves the entry as it is. The result is inconclusive, and for
    the run that recalculates, a proof that no longer comes out.
 
 ## Tests
@@ -181,8 +186,11 @@ result, and any run of a statement whose result was not kept.
    side, with the statement and its programs as they were: after an update of Blaster every
    entry is stale at once, and searching each statement from the start went over the time limit
    for one of the payment splitter's (budget 5168; 2026-10-20). A search starts at the budget
-   kept with the old side (`KeptResults.keptOnAnotherSide`). A change of the programs still
-   searches from the start.
+   kept with the old side (`KeptResults.keptOnAnotherSide`). Since 2026-11-13 also at a budget
+   kept under the statement's name for another statement or other programs
+   (`KeptResults.keptUnderName`): a module that every check imports made every statement's text
+   another, and searching each from the start went over the time limit for the minting policy's
+   `mints_of_distinct_token_names` (2920 steps, as written), which its old budget proves in 27 s.
 2. **A step over the least.** The search ends at the least budget, and so makes a check for
    every place the validator can stop. A budget a few percent above each counterexample's
    would skip some of them, and could step over a narrow window. Measured on Vesting's "every

@@ -16,7 +16,7 @@ dependencies, and a Lean workspace, which the Scalus sbt plugin creates for you.
 | Tool                                         | What it is for                                      | Version                                                                     |
 | -------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------- |
 | JDK and sbt                                  | as for any Scalus project                           |                                                                             |
-| Git                                          | Lake, Lean's build tool, clones Blaster and PlutusCore | any                                                                      |
+| Git                                          | Lake, Lean's build tool, clones Blaster, PlutusCore and CardanoLedgerApi | any                                                    |
 | [elan](https://github.com/leanprover/elan)   | installs Lean 4 and Lake                            | elan fetches the toolchain that the workspace's `lean-toolchain` names (Lean 4.24.0 today) |
 | [Z3](https://github.com/Z3Prover/z3)         | the SMT solver that Blaster calls                   | 5.4.0 or later: the Blaster that Scalus pins needs it                       |
 
@@ -81,8 +81,8 @@ proofs that runs does, and `sbt verify` also builds it.
 sbt verify
 ```
 
-The first run takes several minutes and needs the network: Lake clones and compiles Blaster and
-PlutusCore. Later runs build it in seconds. `verify` runs two tasks you can also run on their own:
+The first run takes several minutes and needs the network: Lake clones and compiles Blaster,
+PlutusCore and CardanoLedgerApi. Later runs build it in seconds. `verify` runs two tasks you can also run on their own:
 
 - **`sbt leanInit`** creates the workspace, `src/test/lean/<Project>`, where it does not exist,
   and unpacks Scalus's Lean library from the `scalus-verification` jar into `.scalus/` at the root
@@ -96,7 +96,7 @@ my-contracts/
 └── src/test/lean/MyContracts/      the workspace
     ├── lakefile.lean
     ├── lean-toolchain
-    ├── lake-manifest.json          the revisions of Blaster and PlutusCore
+    ├── lake-manifest.json          the revisions of Blaster, PlutusCore and CardanoLedgerApi
     ├── MyContracts.lean            the root module: what a check imports
     └── .gitignore                  /.lake
 ```

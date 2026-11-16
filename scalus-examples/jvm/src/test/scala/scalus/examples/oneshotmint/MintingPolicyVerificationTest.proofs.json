@@ -2,8 +2,9 @@
   "environment": {
     "uplc-blaster": {
       "Blaster": "a06919767488",
+      "CardanoLedgerApi": "3dd048e3eb86",
       "PlutusCore": "71872c19a90b",
-      "ScalusProofs": "5a10c6146b425009",
+      "ScalusProofs": "16c4f79c84fecfd5",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },
@@ -127,29 +128,29 @@
         "3e98557b2aa2392a"
       ],
       "notes": {
-        "budget": "2098",
+        "budget": "1595",
         "kind": "Blaster"
       },
       "counterexample": {
-        "m.amount": 3,
-        "m.firstId": "213321",
+        "m.amount": 2,
+        "m.firstId": "213021",
         "m.firstIdx": 0,
         "m.firstQuantity": 0,
         "m.firstToken": "",
-        "m.name": "213421",
-        "m.otherPolicy": "41",
+        "m.name": "213121",
+        "m.otherPolicy": "",
         "m.ownSymbol": "41",
         "m.policy": "41",
         "m.quantity": 0,
         "m.secondId": "",
-        "m.secondIdx": 1,
+        "m.secondIdx": 0,
         "m.secondQuantity": 0,
         "m.secondToken": "",
-        "m.seedId": "213321",
+        "m.seedId": "213021",
         "m.seedIdx": 0,
-        "m.token": "213421",
+        "m.token": "213121",
         "m.twoInputs": false,
-        "m.twoPolicies": false
+        "m.twoPolicies": true
       },
       "tests": [
         "the transaction that spends the seed mints the tokens"

@@ -7,7 +7,8 @@ hand ([overview §6.4](../verification-overview.md#64-lean-manual)).
 
 Status: the types are built. `LeanTypes` is in `scalus.verify.lean`; the linear vesting example
 has its types in `scalus-examples/jvm/src/test/lean/LinearVesting/LinearVesting/Generated/Types.lean`.
-"What comes next" is proposed.
+"What comes next" is proposed, but for the ledger's validity in a check, which is built, and a
+check over a library's type, which is built for a script context.
 
 ## Why
 
@@ -188,9 +189,12 @@ What it costs, and why it is not the default:
   `ctx.txInfo.inputs`; rendered over the library's type it has to select
   `ctx.scriptContextTxInfo.txInfoInputs`, by a table of names that someone keeps.
 
-The binding is built and tested with a stand-in type; CardanoLedgerApiBlaster is not required by
-any workspace of `scalus.verify` yet. It belongs with the export to the Universal Annotation
-Language ("What comes next"), whose consumers have that library.
+The binding is built and tested with a stand-in type. CardanoLedgerApiBlaster is required by
+Scalus's Lean library now, for the ledger's validity in a check ("What comes next", item 3), and
+`LeanPredicateTest` checks that it reads the `Data` Scalus gives a script context as the same
+context, and encodes it back the same, of sample contexts. Binding the generated types to its
+types belongs with the export to the Universal Annotation Language, whose consumers have that
+library.
 
 ## Tests
 
@@ -216,26 +220,31 @@ Language ("What comes next"), whose consumers have that library.
    predicate and one over the typed variable are the same statement. Proposed.
 2. **Statements over the types.** A statement is written into the workspace as a Lean module
    ([statements as Lean modules](lean-export.md)), over the variables the tactic quantifies:
-   fields and `Data`, not yet the types here. A statement over a typed variable passes `toData x`
-   to its programs, with `wellFormed x` as a premise. Proposed.
-3. **The ledger's validity in a check.** `UplcBlaster`'s check restricts a context variable `x0`
-   to the encodings of its type only. A statement of valid contexts would add the library's
-   predicate as a premise of the check, `match IsData.fromData x0 with | some c =>
-   validSpendingContext c | none => false` (`validMintingContext` and the others alike), so that
-   Lean's counterexamples are transactions the ledger accepts and a statement may rest on what
-   only a valid context has, as the balance of the transaction. It needs:
-   - CardanoLedgerApiBlaster in the workspace the check runs in. It builds against the revisions
-     of Blaster and PlutusCore pinned there (2026-11-11), and Blaster translates all of
-     `validSpendingContext` as a premise of such a check: the one pinned before, 6c27ff9, did not
-     translate its `isBalanced`, whose `merge` recurses on two lists. A check that holds took 35 s
-     with it; one Lean refutes without it did not finish in 15 minutes with it, as the solver has
-     to build a balanced transaction;
-   - a quantifier, or an option of `forAllData`, that says the contexts are valid. Its premise is
-     a Lean predicate beside the type's, not a program Lean runs, so no budget cuts it;
-   - the replay of a counterexample to check validity too, so that a context the premise
-     excludes is not reported as a refutation: by Lean's predicate evaluated on the values, as
-     Lean evaluates a closed statement, or by one written in Scala, which is then a second
-     reading of the ledger's rules to keep in agreement.
+   fields and `Data`, and a Lean type where the tactic's mapping prefers one that exists. A
+   statement over a typed variable passes `toData x` to its programs. Built for a type a library
+   has, a script context as CardanoLedgerApi's (`VariableMapping.Choice.LeanType`,
+   [A mapping the tactic prefers](uplc-blaster.md#a-mapping-the-tactic-prefers)), without a
+   premise, as the Lean type says the values; HTLC's suite is so. The types written here are not
+   yet types a check has: a check would import the workspace's generated module, and pass
+   `T.toData x` with `T.wellFormed x` as a premise. Proposed.
+3. **The ledger's validity in a check.** Built, as `Props.isValid(ctx)`, a premise of a statement
+   rather than a quantifier: `Prop.Satisfies` of `ScalusProofs.Ledger.validScriptContextV3`, which
+   is `match IsData.fromData d with | some c => validScriptContext c | none => false` over
+   CardanoLedgerApi's V3 context ([Lean predicates](uplc-blaster.md#lean-predicates-the-ledgers-validity)).
+   Lean's counterexamples are then transactions the ledger accepts, and a statement may rest on
+   what only a valid context has, as the balance of the transaction.
+   - CardanoLedgerApiBlaster is in the library's workspace, at `3dd048e`, built against the
+     revisions of Blaster and PlutusCore pinned there. Blaster translates all of
+     `validScriptContext` as a premise: the one pinned before, 6c27ff9, did not translate its
+     `isBalanced`, whose `merge` recurses on two lists.
+   - The premise is a Lean predicate beside the type's, not a program Lean runs, so no budget
+     cuts it.
+   - The replay of a counterexample has Lean evaluate it on the values, as Lean evaluates a
+     closed statement, so that a context the premise excludes is not reported as a refutation.
+     No second reading of the ledger's rules in Scala is kept.
+   - `validScriptContext` is of any purpose; the purpose is the statement's other premise, as
+     `isSpending(ctx)`. The predicates of one purpose (`validSpendingContext`, …) and those of
+     Plutus V1 and V2, over a datum and a redeemer apart, are not bound yet.
 
    Validity bounds no list: the signatories are ascending, of any number. A statement that walks
-   a list still needs its limits (`forAllDataLimited`). Proposed.
+   a list still needs its limits (`forAllDataLimited`).

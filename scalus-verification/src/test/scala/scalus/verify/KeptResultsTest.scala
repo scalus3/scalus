@@ -25,6 +25,8 @@ class KeptResultsTest extends AnyFunSuite {
         var programs = List("p-1", "p-2")
         var found = "5"
         var stands = true
+        // Whether a refutation rests on what the backend's side computed.
+        var sideBound = false
 
         def proved: ExecutionResult = VerificationResult.Proven(Proof(Evidence, Nil))
         def refuted: ExecutionResult = VerificationResult.Refuted(Proof(Evidence, Nil))
@@ -56,6 +58,11 @@ class KeptResultsTest extends AnyFunSuite {
                       refuted,
                       "the counterexample is none of the statement"
                     )
+        override def restoreOnAnotherSide(
+            prepared: Prepared,
+            kept: Kept
+        ): Either[String, ExecutionResult] =
+            if sideBound then Left("it rests on the old side") else restore(prepared, kept)
     }
 
     /** A test with a file for the results, which is not there at its start. */
@@ -129,8 +136,8 @@ class KeptResultsTest extends AnyFunSuite {
         tactic.programs = List("p-1", "p-9")
         assert(proved(verify(file, KeptResults.Mode.Use, tactic)))
         assert(tactic.runs == 2)
-        // The run did not start from what was kept for other programs.
-        assert(tactic.started.isEmpty)
+        // The run started from what was kept for other programs, which is no result.
+        assert(tactic.started.map(_.notes) == List(Map("budget" -> "160")))
         val text = Files.readString(file)
         assert(text.contains("\"p-9\"") && !text.contains("\"p-2\""), text)
         // And kept again for the programs as they are now.
@@ -175,10 +182,10 @@ class KeptResultsTest extends AnyFunSuite {
 
         // Each part of the fingerprint that moved is named.
         tactic.text = "s-2"
-        assert(stale().contains("was proved with another the statement"))
+        assert(stale().contains("was proved with another statement"))
         tactic.text = "s-1"
         tactic.programs = List("p-1", "p-9")
-        assert(stale().contains("with another the program of test 2"))
+        assert(stale().contains("with another program of test 2"))
         tactic.programs = List("p-1", "p-2")
         tactic.backend = "2.0"
         assert(stale().contains("with another backend of the backend"))
@@ -284,7 +291,7 @@ class KeptResultsTest extends AnyFunSuite {
         verify(file, KeptResults.Mode.Frozen, tactic, "second") match
             case VerificationResult.Inconclusive(reason) =>
                 assert(
-                  reason.endsWith("with an earlier side of the backend, and another the statement"),
+                  reason.endsWith("with an earlier side of the backend, and another statement"),
                   reason
                 )
             case other => fail(s"expected a stale statement, got $other")
@@ -327,12 +334,41 @@ class KeptResultsTest extends AnyFunSuite {
             // Kept for the new side, a result is taken as it is.
             assert(proved(verify(file, KeptResults.Mode.Use, tactic, "second")))
             assert(tactic.runs == 4)
-            // What was kept for other programs is no start, whatever the side.
+            // What was kept for other programs, on whatever side, is no result, but a start.
             tactic.backend = "3.0"
             tactic.programs = List("p-1", "p-9")
             assert(proved(verify(file, KeptResults.Mode.Use, tactic, "first")))
             assert(tactic.runs == 5)
-            assert(tactic.started.size == 2)
+            assert(tactic.started.map(_.notes) == List.fill(3)(Map("budget" -> "160")))
+    }
+
+    kept("a statement that changed starts from what was kept under its name, and takes nothing") {
+        file =>
+            val tactic = new Counting
+            verify(file, KeptResults.Mode.Use, tactic)
+            // Another statement of the name, with the same side, asks the tactic, which starts
+            // from what was kept: a change every statement of a file has, as a line every check
+            // imports, is no search of each from the start.
+            tactic.text = "s-2"
+            assert(proved(verify(file, KeptResults.Mode.Use, tactic)))
+            assert(tactic.runs == 2)
+            assert(tactic.started.map(_.notes) == List(Map("budget" -> "160")))
+            // A refutation kept for another statement is a start, and no result: it is not
+            // replayed for the statement as it is now, and the tactic is asked.
+            tactic.answer = () => tactic.refuted
+            verify(file, KeptResults.Mode.Use, tactic, "is false")
+            tactic.text = "s-3"
+            tactic.answer = () => tactic.proved
+            assert(proved(verify(file, KeptResults.Mode.Use, tactic, "is false")))
+            assert(tactic.runs == 4)
+            assert(tactic.started.head.result == Kept.Result.Refuted)
+            // Without a backend, nothing kept for another statement counts.
+            tactic.text = "s-4"
+            verify(file, KeptResults.Mode.Frozen, tactic) match
+                case VerificationResult.Inconclusive(reason) =>
+                    assert(reason.startsWith(KeptResults.stale), reason)
+                case other => fail(s"expected a stale statement, got $other")
+            assert(tactic.runs == 4)
     }
 
     kept("a refutation kept with the old side of the backend is checked again without it") { file =>
@@ -360,6 +396,17 @@ class KeptResultsTest extends AnyFunSuite {
             case VerificationResult.Inconclusive(reason) =>
                 assert(reason.startsWith(KeptResults.stale), reason)
             case other => fail(s"expected a stale statement, got $other")
+        // A refutation that rests on what the old side computed is none with the new one: the
+        // tactic says why, a run without the backend finds it stale, and one with it asks.
+        tactic.sideBound = true
+        verify(file, KeptResults.Mode.Frozen, tactic) match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(reason.endsWith("it rests on the old side"), reason)
+            case other => fail(s"expected a stale statement, got $other")
+        val asked = tactic.runs
+        tactic.answer = () => tactic.refuted
+        assert(verify(file, KeptResults.Mode.Use, tactic).isInstanceOf[VerificationResult.Refuted])
+        assert(tactic.runs == asked + 1)
     }
 
     kept("an entry says the tests that state it, and goes when none is left") { file =>

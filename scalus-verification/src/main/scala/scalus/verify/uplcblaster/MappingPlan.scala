@@ -70,6 +70,12 @@ object MappingPlan {
           * the values of the node's type, and decoded in every test that uses it.
           */
         case AsData
+
+        /** The node and all below it are one Lean variable of `leanType`, a Lean type that exists
+          * for the node's type ([[scalus.verify.lean.LeanTypeBinding]]). The tests are given its
+          * `Data`, and decode it as they decode a node mapped as `Data`.
+          */
+        case AsLeanType(leanType: String)
     }
 
     /** The quantifier that introduces a variable. */
@@ -96,6 +102,9 @@ object MappingPlan {
         /** The plan the check was given maps the node so ([[MappingPlan.Fixed]]). */
         case ByFixedPlan
 
+        /** The tactic's [[VariableMapping]] prefers it for the node's type. */
+        case ByPreference
+
         /** The node's type contains itself and repeats at the node: by fields it would have no end,
           * so it is one `Data` variable (rule 1).
           */
@@ -116,8 +125,9 @@ object MappingPlan {
             case Quantified(quantifier) =>
                 s"${word(quantifier)}, which maps a case class or an enum of at most " +
                     s"$mostByFields Lean variables by fields"
-            case Limited     => "forAllDataLimited, whose guards walk the variable's Data"
-            case ByFixedPlan => "fixed by the plan the check was given"
+            case Limited      => "forAllDataLimited, whose guards walk the variable's Data"
+            case ByFixedPlan  => "fixed by the plan the check was given"
+            case ByPreference => "the tactic's mapping prefers it for the type"
             case ContainsItself =>
                 "its type contains itself and repeats here, so by fields it would have no end"
             case Larger => s"by fields it would be more than $mostByFields Lean variables"
@@ -167,8 +177,8 @@ object MappingPlan {
 
     /** Mappings fixed for a check in place of the tactic's own decisions: for the tactic's tests,
       * and for measuring its rules on the suites (docs/design/verification-details/uplc-blaster.md,
-      * "Mapping a variable", step 4). A statement has no way to choose a mapping, and a user none
-      * to fix one.
+      * "Mapping a variable", step 4). A statement has no way to choose a mapping; a user prefers
+      * one by type ([[VariableMapping]]), and fixes none node by node.
       *
       * It is asked about each decided node of a `forAll` or an `exists` variable, of `forAllData`
       * too, from the root down, before the node is expanded: a node it maps as `Data` is not
