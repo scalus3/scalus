@@ -110,24 +110,8 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         var current = uniqueBinders(term, Map.empty)
         var changed = false
         val sizeOf = cachedTermBits()
-        val hashes = new java.util.IdentityHashMap[Term, java.lang.Integer]()
-        val keys = new java.util.IdentityHashMap[Term, AlphaTermKey]()
-        def hashOf(t: Term): Int = {
-            val cached = hashes.get(t)
-            if cached != null then cached.intValue
-            else
-                val hash = structuralHash(t, hashOf, ignoreNames = true)
-                hashes.put(t, hash)
-                hash
-        }
-        def keyOf(t: Term): AlphaTermKey = {
-            val cached = keys.get(t)
-            if cached != null then cached
-            else
-                val key = new AlphaTermKey(t, hashOf(t))
-                keys.put(t, key)
-                key
-        }
+        // Both caches are per run and keyed by term instance, so they survive extraction rounds.
+        val keyOf = new AlphaIds
         var candidate = collect(current, sizeOf, keyOf)
         while candidate.nonEmpty do
             val (tree, c) = candidate.get
@@ -157,6 +141,12 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
     // In Constr(0, [e, Delay(e)]), the first e supplies the group's region. In
     // Constr(0, [Delay(e), Delay(e)]), the common ancestor contains no occurrence of e itself.
     private final class Group(val region: Int, val occurrences: mutable.ArrayBuffer[Int])
+
+    /** All groups of one key; `expr` is the first occurrence in preorder. */
+    private final class KeyGroups(val expr: Term) {
+        val groups = mutable.ArrayBuffer.empty[Group]
+    }
+
     private final class Candidate(
         val expr: Term,
         val occurrences: mutable.ArrayBuffer[Int],
@@ -175,13 +165,13 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
     private def collect(
         term: Term,
         sizeOf: Term => Option[Int],
-        keyOf: Term => AlphaTermKey
+        keyOf: AlphaIds
     ): Option[(TreeIndex, Candidate)] = {
         val tree = new TreeIndex(term.nodeCount)
-        val groups = mutable.LinkedHashMap.empty[AlphaTermKey, mutable.ArrayBuffer[Group]]
+        val groups = mutable.LinkedHashMap.empty[Int, KeyGroups]
 
         def add(t: Term, node: Int, region: Int): Unit = {
-            val entries = groups.getOrElseUpdate(keyOf(t), mutable.ArrayBuffer.empty)
+            val entries = groups.getOrElseUpdate(keyOf(t), new KeyGroups(t)).groups
             entries.find(g => tree.isAncestorOrSelf(g.region, region)) match
                 case Some(ancestor) =>
                     // A strict occurrence was already found in this region or an enclosing one.
@@ -247,11 +237,11 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         // immediate lambda function positions, so replacing a lambda cannot turn an ignored let
         // into a counted Apply(Var(...), arg). Alpha-equivalent copies have the same node structure.
         var best: Option[Candidate] = None
-        for (key, entries) <- groups do
-            for group <- entries if group.occurrences.size >= 2 do
-                sizeOf(key.term).foreach { bits =>
+        for key <- groups.valuesIterator do
+            for group <- key.groups if group.occurrences.size >= 2 do
+                sizeOf(key.expr).foreach { bits =>
                     val saving = SharingCost.savingLovelace(bits, group.occurrences.size)
-                    val eligible = saving > 0 || preferComputationSharing(key.term)
+                    val eligible = saving > 0 || preferComputationSharing(key.expr)
                     if eligible && best.forall(saving > _.savedLovelace) then
                         // Unique binders ensure all uses of an expression with a bound variable
                         // lie within that binder's body. Their LCA therefore keeps its
@@ -260,7 +250,7 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
                         // lam a. Constr(0, [other, Constr(0, [f(a), f(a)])]), bind f(a) only
                         // around the inner Constr: a stays in scope and other stays outside.
                         val bindAt = tree.lca(group.occurrences.min, group.occurrences.max)
-                        best = Some(new Candidate(key.term, group.occurrences, bindAt, saving))
+                        best = Some(new Candidate(key.expr, group.occurrences, bindAt, saving))
                 }
         best.map((tree, _))
     }
