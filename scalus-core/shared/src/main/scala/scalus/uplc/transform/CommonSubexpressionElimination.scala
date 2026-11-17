@@ -67,12 +67,13 @@ import scala.util.Try
   * saved minus the extra binding's execution fee for values. Repeated computations such as `f(xs)`
   * are also shared when that estimate is negative: the callee's avoided work is unknown, so this is
   * a runtime-sharing preference, not a prediction of lower total fees. Each round takes the
-  * greatest eligible estimate, then recollects on the changed tree. For example, three uses of a
-  * 54-bit constant save `(3 - 1) * 54 - 3 * 12 - 8 = 64` estimated bits: remove two copies, insert
-  * three variables, and pay the Apply/LamAbs tags. The default fee estimate subtracts about 20.77
-  * lovelace of binding work from 120 lovelace of reference-size savings. Two uses of an 18-bit
-  * integer constant instead save `18 - 24 - 8 = -14` bits and are rejected. See
-  * `docs/design/cse-placement.md` for the contract and pricing assumptions.
+  * greatest eligible estimate, and with it every candidate that does not nest with a better-ranked
+  * one, then recollects on the changed tree. For example, three uses of a 54-bit constant save
+  * `(3 - 1) * 54 - 3 * 12 - 8 = 64` estimated bits: remove two copies, insert three variables, and
+  * pay the Apply/LamAbs tags. The default fee estimate subtracts about 20.77 lovelace of binding
+  * work from 120 lovelace of reference-size savings. Two uses of an 18-bit integer constant instead
+  * save `18 - 24 - 8 = -14` bits and are rejected. See `docs/design/cse-placement.md` for the
+  * contract and pricing assumptions.
   */
 class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimizer {
     import CommonSubexpressionElimination.*
@@ -112,21 +113,24 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         val sizeOf = cachedTermBits()
         // Both caches are per run and keyed by term instance, so they survive extraction rounds.
         val keyOf = new AlphaIds
-        var candidate = collect(current, sizeOf, keyOf)
-        while candidate.nonEmpty do
-            val (tree, c) = candidate.get
-            val name = freshName(s"__cse_${TermNaming.termDescription(c.expr)}")
-            current = extract(current, tree, c, name)
+        var selection = collect(current, sizeOf, keyOf)
+        while selection._2.nonEmpty do
+            val (tree, picked) = selection
+            val named = picked.map { c =>
+                val name = freshName(s"__cse_${TermNaming.termDescription(c.expr)}")
+                logger.log(
+                  s"CSE: extracted ${c.expr.showShort} (${c.occurrences.size} occurrences, size/binding estimate=${c.savedLovelace} lovelace) as $name"
+                )
+                (c, name)
+            }
+            current = extract(current, tree, named)
             changed = true
-            logger.log(
-              s"CSE: extracted ${c.expr.showShort} (${c.occurrences.size} occurrences, size/binding estimate=${c.savedLovelace} lovelace) as $name"
-            )
-            // Extraction changes both occurrence counts and node numbers. For example, sharing
-            // f(e) removes copies of the e inside it. A second candidate from the old tree would
-            // have stale uses and stale savings, so select again from the rewritten tree:
+            // Extraction changes occurrence counts. For example, sharing f(e) removes copies of
+            // the e inside it. The candidates that `collect` held back may have stale uses and
+            // stale savings, so select again from the rewritten tree:
             // Constr(0, [f(e), f(e)]) => let x = f(e) in Constr(0, [x, x]).
-            // There is now just one e, and the new let shifts the numbers of the nodes after it.
-            candidate = collect(current, sizeOf, keyOf)
+            // There is now just one e.
+            selection = collect(current, sizeOf, keyOf)
 
         // Alpha-renaming alone is not an optimization, and should not change a no-op result.
         // For example, lam x. lam x. x needs internal renaming but has nothing to share;
@@ -150,11 +154,11 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
     private final class Candidate(
         val expr: Term,
         val occurrences: mutable.ArrayBuffer[Int],
-        val bindAt: Int,
         val savedLovelace: Double
     )
 
-    /** Collect equal expressions into groups with safe placement, then choose one profitable group.
+    /** Collect equal expressions into groups with safe placement, then choose the profitable groups
+      * that one extraction pass can share together.
       *
       * A node is identified by its preorder number in `tree`; `region` is the number of the root of
       * its evaluation region. These are different: many nodes share a region, but the binding
@@ -166,7 +170,7 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         term: Term,
         sizeOf: Term => Option[Int],
         keyOf: AlphaIds
-    ): Option[(TreeIndex, Candidate)] = {
+    ): (TreeIndex, Vector[Candidate]) = {
         val tree = new TreeIndex(term.nodeCount)
         val groups = mutable.LinkedHashMap.empty[Int, KeyGroups]
 
@@ -236,23 +240,58 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         // Thus (non-let structural nodes, termBits) decreases lexicographically. Collection skips
         // immediate lambda function positions, so replacing a lambda cannot turn an ignored let
         // into a counted Apply(Var(...), arg). Alpha-equivalent copies have the same node structure.
-        var best: Option[Candidate] = None
+        val eligible = mutable.ArrayBuffer.empty[Candidate]
         for key <- groups.valuesIterator do
             for group <- key.groups if group.occurrences.size >= 2 do
                 sizeOf(key.expr).foreach { bits =>
                     val saving = SharingCost.savingLovelace(bits, group.occurrences.size)
-                    val eligible = saving > 0 || preferComputationSharing(key.expr)
-                    if eligible && best.forall(saving > _.savedLovelace) then
-                        // Unique binders ensure all uses of an expression with a bound variable
-                        // lie within that binder's body. Their LCA therefore keeps its
-                        // dependencies in scope. Placing here also avoids wrapping unrelated
-                        // parts of the enclosing region. In
-                        // lam a. Constr(0, [other, Constr(0, [f(a), f(a)])]), bind f(a) only
-                        // around the inner Constr: a stays in scope and other stays outside.
-                        val bindAt = tree.lca(group.occurrences.min, group.occurrences.max)
-                        best = Some(new Candidate(key.expr, group.occurrences, bindAt, saving))
+                    if saving > 0 || preferComputationSharing(key.expr) then
+                        eligible += new Candidate(key.expr, group.occurrences, saving)
                 }
-        best.map((tree, _))
+        // Stable sort: the traversal order breaks ties.
+        val ranked = eligible.sortBy(c => -c.savedLovelace)(using Ordering.Double.TotalOrdering)
+        (tree, independent(tree, ranked))
+    }
+
+    /** The ranked candidates that one pass can extract together: those whose occurrences neither
+      * contain nor lie inside an occurrence of any better-ranked candidate.
+      *
+      * Extracting one candidate changes only the candidates whose occurrences nest with its own.
+      * For example, sharing f(e) leaves one copy of e. Such a candidate waits for the next pass,
+      * which counts it again. So do all candidates ranked below it that nest with it, even when it
+      * was not taken: with its new count it can still outrank them. Every other candidate keeps its
+      * occurrences and saving until the one-at-a-time greedy loop would reach it, so taking them
+      * all now gives the bindings that loop gives.
+      *
+      * Two things can differ from that loop. Ties can break the other way. And when a held-back
+      * candidate binds at the same node as a taken one, it goes inside the taken one's let, even if
+      * the loop would have extracted it first. Both lets run before the body, so only the order of
+      * their two right-hand sides changes; the size and the budget do not.
+      *
+      * In Constr(0, [f(e), f(e), e, g, g]), ranked f(e), e, g: take f(e), hold back e (inside
+      * f(e)), take g.
+      */
+    private def independent(tree: TreeIndex, ranked: Iterable[Candidate]): Vector[Candidate] = {
+        // inside(n): n is in the subtree of an occurrence seen so far, or is one.
+        // holds(n): n has such an occurrence in its subtree, or is one.
+        val inside = new Array[Boolean](tree.size)
+        val holds = new Array[Boolean](tree.size)
+        def block(occurrence: Int): Unit = {
+            if !inside(occurrence) then
+                var n = occurrence
+                while n < tree.end(occurrence) do
+                    inside(n) = true
+                    n += 1
+            var n = occurrence
+            while n != NoNode && !holds(n) do
+                holds(n) = true
+                n = tree.parent(n)
+        }
+        val picked = Vector.newBuilder[Candidate]
+        for c <- ranked do
+            if c.occurrences.forall(o => !inside(o) && !holds(o)) then picked += c
+            c.occurrences.foreach(block)
+        picked.result()
     }
 
     /** Prefer evaluating repeated computations once, independently of their unknown runtime cost.
@@ -265,20 +304,32 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         case _: Apply | _: Force | _: Case | _: Constr => !t.isValueForm
         case _                                         => false
 
-    /** Replace uses and insert their binding in one traversal, numbering nodes as `collect` did.
+    /** Replace uses and insert their bindings in one traversal, numbering nodes as `collect` did.
       *
       * For a subtree `Constr(0, [e, e])`, first build `Constr(0, [x, x])`, then wrap it in
       * `[(lam x ...) e]`. The binding's right-hand side is the original e: visiting it with the
-      * replacement rule would incorrectly replace it with x and create a self-reference.
+      * replacement rule would incorrectly replace it with x and create a self-reference. The
+      * candidates' occurrences do not nest, so no right-hand side contains another candidate's
+      * variable.
       */
-    private def extract(term: Term, tree: TreeIndex, candidate: Candidate, name: String): Term = {
-        val replaced = new Array[Boolean](tree.size)
-        candidate.occurrences.foreach(replaced(_) = true)
+    private def extract(term: Term, tree: TreeIndex, picked: Vector[(Candidate, String)]): Term = {
+        val replacement = new Array[String](tree.size)
+        val bindings = mutable.HashMap.empty[Int, mutable.ArrayBuffer[(Candidate, String)]]
+        for (c, name) <- picked do
+            c.occurrences.foreach(replacement(_) = name)
+            // Unique binders ensure all uses of an expression with a bound variable lie within
+            // that binder's body. Their LCA therefore keeps its dependencies in scope. Placing
+            // here also avoids wrapping unrelated parts of the enclosing region. In
+            // lam a. Constr(0, [other, Constr(0, [f(a), f(a)])]), bind f(a) only around the
+            // inner Constr: a stays in scope and other stays outside the new binding.
+            val bindAt = tree.lca(c.occurrences.min, c.occurrences.max)
+            bindings.getOrElseUpdate(bindAt, mutable.ArrayBuffer.empty) += ((c, name))
         var next = 0
         def go(t: Term): Term = {
             val node = next
             tree.checkNode(node, t)
-            if replaced(node) then
+            val name = replacement(node)
+            if name != null then
                 next = tree.end(node) // the whole subtree goes
                 Var(NamedDeBruijn(name), t.annotation)
             else {
@@ -286,9 +337,14 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
                 // Unchanged subtrees keep their identity, so the per-pass size and key caches
                 // survive extraction rounds.
                 val body = t.mapChildren(go)
-                if node == candidate.bindAt then
-                    Apply(LamAbs(name, body, t.annotation), candidate.expr, t.annotation)
-                else body
+                // The better-ranked binding goes outside, as if it had been extracted first:
+                // let x = e1 in let y = e2 in body.
+                bindings.get(node) match
+                    case Some(here) =>
+                        here.foldRight(body) { case ((c, name), inner) =>
+                            Apply(LamAbs(name, inner, t.annotation), c.expr, t.annotation)
+                        }
+                    case None => body
             }
         }
         go(term)
@@ -394,6 +450,8 @@ object CommonSubexpressionElimination {
         def exit(node: Int): Unit = ends(node) = next
 
         def end(node: Int): Int = ends(node)
+
+        def parent(node: Int): Int = parents(node)
 
         def isAncestorOrSelf(ancestor: Int, node: Int): Boolean =
             ancestor <= node && node < ends(ancestor)
