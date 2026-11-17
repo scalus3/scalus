@@ -2,12 +2,24 @@
 
 ## Unreleased
 
+### Upgrading
+
+- CSE can now nest two of its `let` bindings in the other order. Some compiled scripts get new
+  bytes, so a new script hash and address, with the same size and execution budget. Update any
+  script hash or address that a test pins.
+
 ### Added
 
 - `scalus-plugin` is published for Scala 3.10.1. Scala 3.10.0 is not supported: its compiler
   crashes on some Scalus code (scala/scala3#27039).
 - `PositionalMerkleTree`: fixed-depth commitments by position with SSZ multiproofs, and on-chain
   `verifyMembership`, `delete` and `deleteMany`.
+
+### Changed
+
+- `CommonSubexpressionElimination` is about 100 times faster on large scripts: 14 ms instead of
+  2.1 s on a 7,400-node validator, 18 ms instead of 13.5 s on the stablecoin use case. Each pass
+  extracts all candidates that do not nest with a better one, and keys compare as ints.
 
 ### Fixed
 

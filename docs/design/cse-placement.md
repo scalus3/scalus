@@ -29,10 +29,12 @@ the scope of each variable it references, their structural common ancestor is in
 too. This achieves the innermost placement of Plutus's `placeCseBinding`, including descent into
 immediately applied lambda bodies.
 
-Paths contain child positions. Each round collects from the current term and applies exactly one
-extraction, using those paths in a single substitution-and-insertion walk. Later rounds collect
-again. No traversal counter has to be synchronized after an edit. Candidates are ranked by their
-estimated lovelace saving; ties use deterministic traversal order, not names or hash-map iteration order.
+Nodes are numbered in preorder, so a subtree is a range of numbers and the ancestor test is two
+comparisons. Candidate keys are alpha-equivalence class numbers, built bottom-up by `AlphaIds`, so
+comparing two keys compares two ints. Candidates are ranked by their estimated lovelace saving;
+ties use deterministic traversal order, not names or hash-map iteration order. Each round collects
+from the current term and extracts a batch of candidates in a single substitution-and-insertion
+walk, which numbers the nodes as the collection did. Later rounds collect again.
 
 ## Candidate selection
 
@@ -60,7 +62,13 @@ computation once, rather than treating its small encoded size as evidence that i
 `Apply(LamAbs(...), arg)` expressions retain the fee gate too. No name or builtin-prefix rule
 establishes safety.
 
-Each round chooses the greatest eligible estimate and recollects after applying it. Termination
+Each round extracts the greatest eligible estimate and, with it, every candidate whose occurrences
+neither contain nor lie inside an occurrence of a better-ranked candidate; then it recollects.
+Extraction changes only the candidates that nest with it, so each batched candidate keeps its
+occurrences and estimate until one-at-a-time extraction would reach it, and the bindings are the
+same. Two things can differ: ties, and the nesting order of two lets at one node. Both lets run
+before the body, so only the order of their right-hand sides changes, not the size or the budget.
+A batch of 70 candidates replaces 70 collections of the whole term. Termination
 uses the lexicographic pair (non-let structural nodes, estimated bits). The first component counts
 nodes other than leaves and administrative Apply/LamAbs pairs. Runtime sharing removes at least
 one counted node; its new binding contributes none. Fee-only leaf sharing decreases bits instead.
