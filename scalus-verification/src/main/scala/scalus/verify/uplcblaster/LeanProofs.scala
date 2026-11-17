@@ -476,6 +476,10 @@ final class LeanProofs private (
         val writing = tactic match
             case blaster: UplcBlaster =>
                 keepingChecks(blaster.withMappingUnlessSet(mapping), statement)
+            case manual: LeanManual =>
+                val mapped = manual.withMappingUnlessSet(mapping)
+                writtenForHand(verifier, statement, mapped)
+                mapped
             case other => other
         verifier.synchronized { verifier.verify(statement, writing) } match
             case VerificationResult.Inconclusive(reason) if reason.startsWith(KeptResults.stale) =>
@@ -489,9 +493,30 @@ final class LeanProofs private (
       * to fail its test, not to stand on that result from then on.
       */
     def inconclusive(statement: Statement, tactic: UplcBlaster): String = {
+        val (own, declared) = ownStatement(statement)
+        inconclusive(own, declared, tactic)
+    }
+
+    /** A verifier of its own, with the functions of [[verifier]] and nothing kept, and `statement`
+      * declared in it under its name: a check there makes no theorem and keeps no result.
+      */
+    private def ownStatement(statement: Statement): (Verifier, Statement) = {
         val own = Verifier.empty
         own.addFunctions(verifier.functions)
-        inconclusive(own, own.statement(statement.name, statement.prop), tactic)
+        own -> own.statement(statement.name, statement.prop)
+    }
+
+    /** Why `tactic` fails on `statement`, declared in [[verifier]]: Lean reported an error, as one
+      * of a program Blaster cannot translate. As [[inconclusive]], the check runs in a verifier of
+      * its own, which keeps nothing, and a statement that gets a result here fails its test: the
+      * test is to be changed to prove it.
+      */
+    def failure(statement: Statement, tactic: Tactic): String = {
+        val (own, declared) = ownStatement(statement)
+        run(own, declared, tactic) match
+            case VerificationResult.Failed(reason) => reason
+            case other =>
+                failed(s"${statement.name}: expected a failure, got ${LeanProofs.describe(other)}")
     }
 
     /** That `statement`, declared in [[verifier]], holds on `values` read with `==>:` for each
@@ -503,6 +528,99 @@ final class LeanProofs private (
             case Right(Some(holds)) => holds
             case Right(None)  => failed(s"${statement.name} did not end within the replay budget")
             case Left(reason) => failed(s"${statement.name} cannot be run: $reason")
+
+    /** [[check]] with [[LeanManual]]: `statement` is proved by `theorem`, a theorem written by hand
+      * in the module `module` of the workspace, of the statement as written at `budget` steps. The
+      * statement's module is written where these proofs export ([[writtenForHand]]).
+      */
+    def checkByHand(
+        statement: Statement,
+        module: String,
+        theorem: String,
+        budget: Int
+    ): VerificationResult =
+        check(VerificationRequest(statement, LeanManual(module, theorem, budget, lean)))
+
+    /** The module of `statement` that `tactic` checks a proof by hand of: written where these
+      * proofs export, as the modules of the statements proved are, and held to the code where they
+      * do not, its text and its programs. A proof by hand of a module of other programs, or of
+      * another budget, would be checked against programs that are not the code's: where Lean can
+      * run, or is required, that fails, and says to write the module again; where it cannot, as on
+      * a build of another Scala version, whose programs differ, the statement is not checked, as a
+      * stale result is not. A statement the tactic cannot lower is left to the tactic to report.
+      */
+    private def writtenForHand(verifier: Verifier, statement: Statement, tactic: LeanManual): Unit =
+        tactic.prepare(verifier.goalOf(statement)).foreach { prepared =>
+            val written = tactic.statementModule(prepared, workspace)
+            claimed(statement, written.module, written.file)
+            if leanExport then writeModule(written.file, written.directory, written.written)
+            else
+                def read(path: Path): Option[String] =
+                    Option.when(Files.isRegularFile(path))(
+                      Files.readString(path, StandardCharsets.UTF_8)
+                    )
+                val programs = written.written.programs.forall((path, program) =>
+                    read(workspace.resolve(path)).contains(UplcBlaster.programHex(program))
+                )
+                val now = read(written.file)
+                if !now.contains(written.written.text) || !programs then
+                    val reason =
+                        s"${statement.name}: the Lean module ${written.module}, which a proof by " +
+                            "hand is of, " +
+                            (if now.isEmpty then "is not in the workspace"
+                             else "or its programs, are not the statement's as the code has it") +
+                            ". Write it with `sbt leanExport`."
+                    if leanAvailable || sys.env.contains("SCALUS_REQUIRE_LEAN") || requiredByBuild
+                    then failed(reason)
+                    else notChecked(reason)
+        }
+
+    /** Fails where the module `module`, in `file`, may not be `statement`'s: it is the module of
+      * the Lean types, or the workspace has it as the module of another statement whose name is the
+      * same Lean name. Neither takes the other's module.
+      */
+    private def claimed(statement: Statement, module: String, file: Path): Unit = {
+        if module.split('.').lastOption.exists(_.equalsIgnoreCase(LeanProofs.typesModule)) then
+            failed(
+              s"${statement.name}: its module would be $module, the module of the Lean types: " +
+                  "rename it"
+            )
+        if Files.isRegularFile(file) then
+            UplcBlaster
+                .statementModuleName(Files.readString(file, StandardCharsets.UTF_8))
+                .filter(_ != statement.name)
+                .foreach(other =>
+                    failed(
+                      s"${statement.name}: its module $module is the module of $other, whose " +
+                          "name is the same as a Lean name: rename one"
+                    )
+                )
+    }
+
+    /** Writes `written`, a statement's module, into `file`, and its programs into `directory`, a
+      * path from the workspace's: each file where its text differs.
+      */
+    private def writeModule(
+        file: Path,
+        directory: String,
+        written: UplcBlaster.StatementModule
+    ): Unit = {
+        // The programs as text are to be read, and Lean does not read them: they are large, change
+        // with every change of the code, and are not committed. `leanExport` writes them again.
+        LeanWorkspace.write(
+          file.getParent.resolve(".gitignore"),
+          "# Written by Scalus. The programs as text, to be read: `leanExport` writes them.\n" +
+              "*.uplc\n"
+        )
+        LeanWorkspace.write(file, written.text)
+        written.programs.zipWithIndex.foreach { case ((path, program), index) =>
+            LeanWorkspace.write(workspace.resolve(path), UplcBlaster.programHex(program))
+            LeanWorkspace.write(
+              workspace.resolve(directory).resolve(s"Leaf$index.uplc"),
+              program.show
+            )
+        }
+    }
 
     /** Writes `statement`, which `result` proved, into the workspace as a Lean module, and returns
       * the module's name: `<Package>.Generated.<name>`, where the name is the statement's, as a
@@ -544,41 +662,13 @@ final class LeanProofs private (
                       s"got ${LeanProofs.describe(other)}"
                 )
         val id = LeanProofs.moduleName(statement.name)
-        if id.equalsIgnoreCase(LeanProofs.typesModule) then
-            failed(
-              s"${statement.name}: its module would be $id, the module of the Lean types: rename it"
-            )
         val (module, file) = LeanWorkspace.generated(workspace, id)
-        if Files.isRegularFile(file) then
-            UplcBlaster
-                .statementModuleName(Files.readString(file, StandardCharsets.UTF_8))
-                .filter(_ != statement.name)
-                .foreach(other =>
-                    failed(
-                      s"${statement.name}: its module $module is the module of $other, whose " +
-                          "name is the same as a Lean name: rename one"
-                    )
-                )
+        claimed(statement, module, file)
         val directory = workspace.relativize(file.getParent.resolve(id)).toString
         tactic.statementModule(verifier.goalOf(statement), artifact, module, directory) match
-            case Left(reason)   => failed(reason)
+            case Left(reason) => failed(reason)
             case Right(written) =>
-                // The programs as text are to be read, and Lean does not read them: they are
-                // large, change with every change of the code, and are not committed. `leanExport`
-                // writes them again.
-                LeanWorkspace.write(
-                  file.getParent.resolve(".gitignore"),
-                  "# Written by Scalus. The programs as text, to be read: `leanExport` writes them.\n" +
-                      "*.uplc\n"
-                )
-                LeanWorkspace.write(file, written.text)
-                written.programs.zipWithIndex.foreach { case ((path, program), index) =>
-                    LeanWorkspace.write(workspace.resolve(path), UplcBlaster.programHex(program))
-                    LeanWorkspace.write(
-                      workspace.resolve(directory).resolve(s"Leaf$index.uplc"),
-                      program.show
-                    )
-                }
+                writeModule(file, directory, written)
                 module
     }
 

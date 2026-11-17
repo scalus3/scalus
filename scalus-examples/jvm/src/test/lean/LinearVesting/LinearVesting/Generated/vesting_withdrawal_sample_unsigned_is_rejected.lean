@@ -26,4 +26,9 @@ open ScalusProofs.Run
 def statement : Prop :=
   (¬ (fromFrameToBool (runProgramFor LinearVesting_Generated_vesting_withdrawal_sample_unsigned_is_rejected_leaf0.script [] 20000) ≠ some false ∧ failed (runProgramFor LinearVesting_Generated_vesting_withdrawal_sample_unsigned_is_rejected_leaf0.script [] 20000) = false))
 
+/-- That `statement` holds, as Scalus proved it: by the tactic `blaster-uplc`, at 20000
+    steps, a proof of the kind `LeanNative`. An axiom, and no proof that Lean checks: a
+    theorem that uses it rests on that result, and `#print axioms` names it. -/
+axiom proved : statement
+
 end LinearVesting.Generated.vesting_withdrawal_sample_unsigned_is_rejected

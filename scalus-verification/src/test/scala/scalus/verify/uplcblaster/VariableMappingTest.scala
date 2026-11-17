@@ -6,7 +6,7 @@ import scalus.cardano.onchain.plutus.v3.{ScriptContext, TxOutRef}
 import scalus.uplc.Constant
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
-import scalus.verify.{FunctionTable, LeanPredicate, Prop, VerificationResult}
+import scalus.verify.{FunctionTable, LeanPredicate, ProofKind, Prop, VerificationResult}
 import scalus.verify.Props.*
 import scalus.verify.lean.LeanTypeBinding
 import scalus.verify.uplcblaster.MappingPlan.{Mapping, Reason}
@@ -38,6 +38,7 @@ class VariableMappingTest extends AnyFunSuite with LeanProofsSuite {
             .statementModule(
               goal,
               600,
+              Some(ProofKind.Blaster),
               400000,
               "Probe.statement",
               // The module names where its programs would be, and writes nothing there.

@@ -8,9 +8,10 @@ tactic lowered it, so they are about the same compiled programs as the check.
 
 Status: built, in part. The modules and the documents are written, and the Scalus sbt plugin has
 `leanExport` and `ualExport`. The linear vesting example has its statements in its workspace, and
-two proofs by hand of them. Not built: the `lean-manual` tactic, which would check a proof by hand
-and keep its result ([overview §6.4](../verification-overview.md#64-lean-manual)); a script of a
-blueprint as a property's scope; a consumer of the language that checks the documents here.
+two proofs by hand of them; the AMM example has a proof by hand that the `lean-manual` tactic
+checks and keeps ([overview §6.4](../verification-overview.md#64-lean-manual), phase 2a of §9).
+Not built: a script of a blueprint as a property's scope; a consumer of the language that checks
+the documents here.
 
 ## A statement as a Lean module
 
@@ -41,6 +42,13 @@ def statement : Prop :=
   `<Package>/Generated/.gitignore` leaves them out, and `leanExport` writes them again. The
   module's header has the SHA-256 of each program: Lake does not see what `#import_uplc` reads,
   and the header makes a changed program a changed module, which Lake builds again.
+- **What the proof found is the module's axiom `proved : statement`.** A statement is written
+  where it is proved, and the axiom says so, with the tactic, the budget and the kind of the
+  proof in its comment. A proof by hand may use it as a lemma, and then rests on that result:
+  `#print axioms` names `<Package>.Generated.<name>.proved` among the axioms of the proof. So a
+  proof by hand of one statement can stand on what Blaster proved of another, and says which.
+  The axiom is about the programs beside the module, of which the proof was made: where the code
+  changes, the module is no longer the code's, and its test fails (below).
 - **The names of the programs have the module's name.** `#import_uplc` and `#prep_uplc_run`
   declare their names outside the namespace they are written in, so two modules whose programs
   were both named `leaf0` could not be imported by one proof.
@@ -85,8 +93,64 @@ it, and a proof that no longer holds no longer builds. The two proofs there are 
 finds valid: they show the mechanism, and are no kernel proof. A proof by other means, an
 induction over a list of any length, is what the statements tagged `Unfinished` want.
 
-Nothing checks yet that a proof by hand exists for a statement, or what it rests on: that is the
-`lean-manual` tactic (overview §6.4), with `#print axioms` and a kept result.
+A proof by hand may cite what Blaster proved, as a lemma, by the axiom of its module:
+
+```lean
+theorem by_the_proof : vesting_schedule_zero_before_start.statement :=
+  vesting_schedule_zero_before_start.proved
+-- 'by_the_proof' depends on axioms: [propext, Classical.choice, Quot.sound,
+--   LinearVesting.Generated.vesting_schedule_zero_before_start.proved]
+```
+
+## Checking a proof by hand: `lean-manual`
+
+A statement no proof of Scalus found is written for a proof by hand: the same module, without the
+axiom `proved`, and with a header that says it is to be proved by hand. A suite names the theorem
+that proves it, with the tactic `lean-manual` (`LeanManual`):
+
+```scala
+checkByHand(
+  depositDilutesNoToken,                         // the statement, declared as any other
+  "Amm.Proofs.Deposit",                          // the module of the proof
+  "Amm.Proofs.Deposit.deposit_dilutes_no_token", // the theorem
+  800                                            // the steps of the statement's module
+)
+```
+
+- **The statement's module is written as the others are.** Where the proofs export, `leanExport`
+  writes it; where they do not, the workspace's module is held to the code, as the text the
+  tactic would write now. A module that is missing, or of other programs, fails the test, and says
+  to run `leanExport`.
+- **Lake builds the proof's module first**, `lake build <module>`, and with it the statement's
+  module. Lean's server does not build an import that is out of date, as one `leanExport` has just
+  written again: it says "Imports are out of date and must be rebuilt", as it tells an editor to
+  restart the file. A proof that Lake does not build is none, with Lake's errors.
+- **Lean elaborates a check of the theorem**, in the workspace's server: `import <module>`,
+  `import <the statement's module>`, `example : <the statement's module>.statement := <theorem>`,
+  `#print axioms <theorem>`. An error, as a theorem of another statement (`type mismatch`), is no
+  proof.
+- **The axioms say what the proof rests on.** Lean's own only: `LeanKernelOfOptimizedRuns`, the
+  kernel, of the runs as Blaster's optimizer gives them (overview §6.4). `Lean.ofReduceBool`:
+  `LeanNative`. `<Package>.Generated.<name>.proved`: a lemma, the statement of that module, which is
+  to be among the verifier's theorems, and which the proof records as used; a second check has Lean
+  take each such axiom as that of its statement's module, so a proof cannot declare its own of the
+  name. `sorry`, the result of the proof's own statement, or another axiom: no proof. Nor is
+  Blaster's `blasterProven`: it proves any proposition where it is used without the tactic, and its
+  uses do not tell one from the other. What Blaster proves, a proof by hand cites by the `proved` of
+  a statement Scalus checked.
+- **The proof's module is under `<Package>/Proofs`**, whose Lean files the result is kept by; one
+  elsewhere would change no kept result.
+- **The result is kept** as a check's is. Its fingerprint has, beside the workspace's environment,
+  a hash of the Lean files under `<Package>/Proofs`, which the environment leaves out: a change of
+  any proof by hand makes the results of the proofs by hand stale, and those of the checks not. It
+  keeps the hash of the module of each statement it cites, and stands no longer where one changed.
+- **The statement's module, and its programs, are held to the code.** Where they are not the code's
+  and Lean can run, or is required, the test fails, and says to run `leanExport`; where Lean cannot
+  run, as on a build of another Scala version, whose programs differ, the test is not run, as a
+  stale result is not.
+- **The first check of a proof may take minutes**: Lean builds the statement's module, whose
+  programs it runs symbolically, before it elaborates the check. The AMM's deposit statement
+  takes about ten minutes, most of it the branch of the first deposit, which its proof passes over.
 
 Two costs of the modules, measured on the vesting workspace (2026-11-10):
 

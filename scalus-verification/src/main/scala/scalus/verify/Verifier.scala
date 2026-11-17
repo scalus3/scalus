@@ -113,6 +113,12 @@ enum ProofKind {
       * `Lean.ofReduceBool`.
       */
     case LeanNative
+
+    /** Checked by the Lean kernel, of the programs' runs as Blaster's optimizer gives them
+      * (`#prep_uplc_run`): a proof written by hand of a statement written into a workspace. It
+      * trusts that optimization, which Lean does not check, and no solver.
+      */
+    case LeanKernelOfOptimizedRuns
 }
 
 /** Backend-specific proof material retained with a theorem.
