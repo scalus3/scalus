@@ -22,7 +22,7 @@
     "amm.deposit.dilutes_no_token": {
       "tactic": "lean-manual",
       "result": "proved",
-      "statement": "948fe45671ade9d5",
+      "statement": "a89fc1090fad39e5",
       "programs": [
         "d607d60fe905d494",
         "fcc56f8985150c26",

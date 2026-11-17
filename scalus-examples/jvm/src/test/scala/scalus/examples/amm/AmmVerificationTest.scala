@@ -151,9 +151,12 @@ class AmmVerificationTest extends AnyFunSuite with LeanProofsSuite {
       ).prop
     )
 
-    /** The steps of the statement proved by hand: they cover a deposit into a pool with liquidity.
+    /** The steps of the statement proved by hand: they cover a deposit into a pool with liquidity,
+      * whose claim takes 473 steps of Lean's machine, whatever the numbers (`measureRun`). Its
+      * module runs the square root of a first deposit symbolically for as many steps, which the
+      * proof never reads: a larger budget only makes the module take longer to build.
       */
-    private val depositByHandBudget = 800
+    private val depositByHandBudget = 500
 
     test("a deposit into a pool with liquidity dilutes no LP token: a proof by hand") {
         val result = checkByHand(
