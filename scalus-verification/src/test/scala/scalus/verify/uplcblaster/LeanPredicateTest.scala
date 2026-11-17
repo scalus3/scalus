@@ -8,7 +8,7 @@ import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
 import scalus.cardano.onchain.plutus.v3.{ScriptContext, ScriptInfo, ScriptPurpose, TxId, TxInInfo, TxInfo, TxOutRef}
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
-import scalus.verify.{FunctionTable, Kept, LeanPredicate, Prop, VerificationResult}
+import scalus.verify.{FunctionTable, Kept, LeanPredicate, ProofKind, Prop, VerificationResult}
 import scalus.verify.Props.*
 import scalus.verify.lean.LeanServer.{Message, Result, Severity}
 
@@ -35,7 +35,16 @@ class LeanPredicateTest extends AnyFunSuite with LeanProofsSuite {
     /** The Lean module of `prop`, whose text is that of its check without the Blaster command. */
     private def moduleText(prop: Prop): String =
         // The module names where its programs would be, and writes nothing there.
-        UplcBlaster.statementModule(lowered(prop), 600, 400000, "Probe.statement", "programs").text
+        UplcBlaster
+            .statementModule(
+              lowered(prop),
+              600,
+              Some(ProofKind.Blaster),
+              400000,
+              "Probe.statement",
+              "programs"
+            )
+            .text
 
     test("isValid of a script context variable is a premise of Lean on its one Data") {
         val statement =

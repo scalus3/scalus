@@ -187,6 +187,51 @@ class PropTest extends AnyFunSuite {
             case other => fail(s"expected a contract with a statement in ensures, got $other")
     }
 
+    test("statements, functions and contracts of four and five parameters") {
+        def binders(p: Prop): List[PropExpr.Ident[?]] = p match
+            case Prop.Forall(ident, body) => ident :: binders(body)
+            case _                        => Nil
+        def body(p: Prop): Prop = p match
+            case Prop.Forall(_, inner) => body(inner)
+            case other                 => other
+
+        val five = forAll[BigInt, BigInt, BigInt, BigInt, Boolean]((a, b, c, d, e) =>
+            e || a + b + c + d == d + c + b + a
+        )
+        assert(binders(five).size == 5)
+        body(five) match
+            case Prop.Bool(PropExpr.SIRExpr(test)) =>
+                assert(binders(five).forall(v => test.toString.contains(v.name)), test)
+            case other => fail(s"expected one test over five variables, got $other")
+        assert(
+          binders(forAll[BigInt, BigInt, BigInt, BigInt]((a, b, c, d) => a + b <= c + d)).size == 4
+        )
+
+        val sum4 = FunctionDef.named(
+          "sum4",
+          (a: BigInt, b: BigInt, c: BigInt, d: BigInt) => a + b + c + d
+        )
+        val sum5 = FunctionDef.named(
+          "sum5",
+          (a: BigInt, b: BigInt, c: BigInt, d: BigInt, e: BigInt) => a + b + c + d + e
+        )
+        assert(sum4.arity == 4 && sum5.arity == 5)
+        assert(binders(returnsWhen(sum4)((a, b, c, d) => true)).size == 4)
+
+        val atLeastTheFirst = contract(sum5)(
+          expects = (a, b, c, d, e) => b >= 0 && c >= 0 && d >= 0 && e >= 0,
+          ensures = (a, b, c, d, e) => r => r >= a
+        )
+        assert(atLeastTheFirst.function == sum5.ref)
+        val variables = binders(atLeastTheFirst.prop)
+        assert(variables.size == 5)
+        body(atLeastTheFirst.prop) match
+            case Prop.Implies(_, Prop.Call(fn, PropExpr.SIRExpr(arg), _, false, _)) =>
+                assert(fn == sum5.ref)
+                assert(variables.forall(v => arg.toString.contains(v.name)), arg)
+            case other => fail(s"expected a contract over five parameters, got $other")
+    }
+
     test("a variable used to compute the statement itself is a compile error") {
         val errors = scala.compiletime.testing.typeCheckErrors(
           """import scalus.verify.*

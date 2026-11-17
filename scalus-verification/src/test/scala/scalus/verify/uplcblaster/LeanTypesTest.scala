@@ -9,6 +9,7 @@ import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.Data.toData
 import scalus.verify.lean.LeanServer.{Message, Result, Severity}
+import scalus.verify.ProofKind
 import scalus.verify.lean.LeanTypes
 
 import scala.concurrent.duration.*
@@ -171,7 +172,14 @@ class LeanTypesTest extends AnyFunSuite with LeanProofsSuite {
         // the test, by their whole paths.
         val directory = Files.createTempDirectory("scalus-statement-module")
         val written =
-            UplcBlaster.statementModule(lowered, 120, 400000, module, directory.toString)
+            UplcBlaster.statementModule(
+              lowered,
+              120,
+              Some(ProofKind.Blaster),
+              400000,
+              module,
+              directory.toString
+            )
         assert(
           written.programs.map(_._1) == Vector(s"$directory/Leaf0.flat", s"$directory/Leaf1.flat")
         )
@@ -185,17 +193,30 @@ class LeanTypesTest extends AnyFunSuite with LeanProofsSuite {
         assert(UplcBlaster.statementModuleOf(written.text) == Some(120 -> lowered.programHashes))
         assert(UplcBlaster.statementModuleOf("def statement : Prop := True").isEmpty)
         assert(!written.text.contains("#blaster"))
+        // What the proof found, as an axiom of the module that a proof by hand may use.
+        assert(written.text.contains("\naxiom proved : statement\n"), written.text)
+        assert(written.text.contains("a proof of the kind `Blaster`"), written.text)
 
         requireLean()
         val proof = s"theorem clamp_in_range : $module.statement := by\n" +
             s"  unfold $module.statement\n  blaster\n"
+        // A proof by hand that uses the result rests on it, and says so.
+        val cited = s"theorem clamp_in_range_cited : $module.statement := $module.proved\n" +
+            "#print axioms clamp_in_range_cited\n"
         leanServer.check(
-          written.text + "\nset_option warn.sorry false\n" + proof,
+          written.text + "\nset_option warn.sorry false\n" + proof + cited,
           Some(5.minutes)
         ) match
             case Result.Finished(messages) =>
                 val errors = messages.filter(_.severity == Severity.Error)
                 assert(errors.isEmpty, errors.map((m: Message) => s"${m.line}: ${m.text}"))
+                assert(
+                  messages.exists(m =>
+                      m.text.contains("clamp_in_range_cited' depends on axioms") &&
+                          m.text.contains(s"$module.proved")
+                  ),
+                  messages.map((m: Message) => s"${m.line}: ${m.text}")
+                )
             case other => fail(s"Lean did not check the statement: $other")
     }
 

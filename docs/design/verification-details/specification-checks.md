@@ -83,6 +83,9 @@ What the examples have:
 | `VestingValidator.spend` | what stays locked is at least what has not vested | open |
 | `VestingValidator.linearVesting` | `ensuring`: between nothing and the amount | checked, by `vesting.schedule.stated_contract_holds` |
 | `MintingPolicy.mint` | both clauses | checked, by the statement `guarantees` declared of them together |
+| `AmmMath.swapResult` | `ensuring`: the amount out is not negative, the product of the reserves does not decrease, positive reserves stay positive | checked, by `amm.swap.stated_contract_holds` |
+| `AmmMath.redeemDatum` | `ensuring`: no reserve negative, every LP token left backed by as much as before | checked, by `amm.redeem.stated_contract_holds` |
+| `AmmMath.depositDatum` | `ensuring`: a deposit into a pool with liquidity dilutes no LP token | open: as written it holds at no budget, as `Math.sqrt` loops on the first deposit, which the condition excludes; with the condition as a premise it is `amm.deposit.dilutes_no_token`, proved by hand |
 
 The minting policy's clauses are proved as `guarantees` states them. Written as a sentence of the
 suite's own, they compile to other programs, as the sentence builds the minting context again where

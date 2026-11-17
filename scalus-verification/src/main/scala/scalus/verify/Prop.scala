@@ -240,6 +240,36 @@ object FunctionContract {
             inline when: (A, B, C) => Prop | Boolean
         ): FunctionContract[(A, B, C), R] = ${ PropMacro.contractClause('contract, 'when, true) }
     }
+
+    extension [A, B, C, D, R](contract: FunctionContract[(A, B, C, D), R]) {
+
+        /** [[returnsWhen]] for a function of four parameters. */
+        inline def returnsWhen(
+            inline when: (A, B, C, D) => Prop | Boolean
+        ): FunctionContract[(A, B, C, D), R] =
+            ${ PropMacro.contractClause('contract, 'when, false) }
+
+        /** [[failsWhen]] for a function of four parameters. */
+        inline def failsWhen(
+            inline when: (A, B, C, D) => Prop | Boolean
+        ): FunctionContract[(A, B, C, D), R] =
+            ${ PropMacro.contractClause('contract, 'when, true) }
+    }
+
+    extension [A, B, C, D, E, R](contract: FunctionContract[(A, B, C, D, E), R]) {
+
+        /** [[returnsWhen]] for a function of five parameters. */
+        inline def returnsWhen(
+            inline when: (A, B, C, D, E) => Prop | Boolean
+        ): FunctionContract[(A, B, C, D, E), R] =
+            ${ PropMacro.contractClause('contract, 'when, false) }
+
+        /** [[failsWhen]] for a function of five parameters. */
+        inline def failsWhen(
+            inline when: (A, B, C, D, E) => Prop | Boolean
+        ): FunctionContract[(A, B, C, D, E), R] =
+            ${ PropMacro.contractClause('contract, 'when, true) }
+    }
 }
 
 object Props {
@@ -274,6 +304,22 @@ object Props {
     inline def forAll[A: Quantifiable, B: Quantifiable, C: Quantifiable](
         inline body: (A, B, C) => Prop | Boolean
     ): Prop = ${ PropMacro.forAll3[A, B, C]('body) }
+
+    /** A statement about four universally quantified values. */
+    inline def forAll[A: Quantifiable, B: Quantifiable, C: Quantifiable, D: Quantifiable](
+        inline body: (A, B, C, D) => Prop | Boolean
+    ): Prop = ${ PropMacro.forAll4[A, B, C, D]('body) }
+
+    /** A statement about five universally quantified values. */
+    inline def forAll[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        E: Quantifiable
+    ](
+        inline body: (A, B, C, D, E) => Prop | Boolean
+    ): Prop = ${ PropMacro.forAll5[A, B, C, D, E]('body) }
 
     /** Every value of `A`, as its `Data` encoding: [[forAll]], written over the encodings. The
       * values of a type and their `toData` encodings correspond one to one, so it states what
@@ -412,6 +458,15 @@ object Props {
         inline body: R => Prop | Boolean
     ): Prop = callRef(FunctionRef(f), arg)(body)
 
+    inline def call[A, B, C, D, R](inline f: (A, B, C, D) => R, inline arg: (A, B, C, D))(
+        inline body: R => Prop | Boolean
+    ): Prop = callRef(FunctionRef(f), arg)(body)
+
+    inline def call[A, B, C, D, E, R](
+        inline f: (A, B, C, D, E) => R,
+        inline arg: (A, B, C, D, E)
+    )(inline body: R => Prop | Boolean): Prop = callRef(FunctionRef(f), arg)(body)
+
     inline def call[A, R](fn: FunctionDef[A, R], inline arg: A)(
         inline body: R => Prop | Boolean
     ): Prop = ${ PropMacro.callDef('fn, 'arg, 'body, true) }
@@ -432,6 +487,16 @@ object Props {
     inline def whenReturns[A, B, C, R](inline f: (A, B, C) => R, inline arg: (A, B, C))(
         inline body: R => Prop | Boolean
     ): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
+
+    inline def whenReturns[A, B, C, D, R](
+        inline f: (A, B, C, D) => R,
+        inline arg: (A, B, C, D)
+    )(inline body: R => Prop | Boolean): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
+
+    inline def whenReturns[A, B, C, D, E, R](
+        inline f: (A, B, C, D, E) => R,
+        inline arg: (A, B, C, D, E)
+    )(inline body: R => Prop | Boolean): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
 
     inline def whenReturns[A, R](fn: FunctionDef[A, R], inline arg: A)(
         inline body: R => Prop | Boolean
@@ -473,6 +538,31 @@ object Props {
         inline ensures: (A, B, C) => R => Prop | Boolean
     ): FunctionContract[(A, B, C), R] = ${ PropMacro.contract('fn, 'expects, 'ensures, false) }
 
+    /** The contract of a function of four parameters; see [[contract]]. */
+    inline def contract[A: Quantifiable, B: Quantifiable, C: Quantifiable, D: Quantifiable, R](
+        fn: FunctionDef[(A, B, C, D), R]
+    )(
+        inline expects: (A, B, C, D) => Prop | Boolean,
+        inline ensures: (A, B, C, D) => R => Prop | Boolean
+    ): FunctionContract[(A, B, C, D), R] =
+        ${ PropMacro.contract('fn, 'expects, 'ensures, false) }
+
+    /** The contract of a function of five parameters; see [[contract]]. */
+    inline def contract[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        E: Quantifiable,
+        R
+    ](
+        fn: FunctionDef[(A, B, C, D, E), R]
+    )(
+        inline expects: (A, B, C, D, E) => Prop | Boolean,
+        inline ensures: (A, B, C, D, E) => R => Prop | Boolean
+    ): FunctionContract[(A, B, C, D, E), R] =
+        ${ PropMacro.contract('fn, 'expects, 'ensures, false) }
+
     /** The contract of a function of one parameter, with totality: for every argument that
       * satisfies `expects`, the function returns, and its result satisfies `ensures`.
       */
@@ -494,6 +584,37 @@ object Props {
         inline expects: (A, B, C) => Prop | Boolean,
         inline ensures: (A, B, C) => R => Prop | Boolean
     ): FunctionContract[(A, B, C), R] = ${ PropMacro.contract('fn, 'expects, 'ensures, true) }
+
+    /** The total contract of a function of four parameters; see [[totalContract]]. */
+    inline def totalContract[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        R
+    ](
+        fn: FunctionDef[(A, B, C, D), R]
+    )(
+        inline expects: (A, B, C, D) => Prop | Boolean,
+        inline ensures: (A, B, C, D) => R => Prop | Boolean
+    ): FunctionContract[(A, B, C, D), R] =
+        ${ PropMacro.contract('fn, 'expects, 'ensures, true) }
+
+    /** The total contract of a function of five parameters; see [[totalContract]]. */
+    inline def totalContract[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        E: Quantifiable,
+        R
+    ](
+        fn: FunctionDef[(A, B, C, D, E), R]
+    )(
+        inline expects: (A, B, C, D, E) => Prop | Boolean,
+        inline ensures: (A, B, C, D, E) => R => Prop | Boolean
+    ): FunctionContract[(A, B, C, D, E), R] =
+        ${ PropMacro.contract('fn, 'expects, 'ensures, true) }
 
     /** `e` returns a value: [[denotes]], under the name that pairs with [[fails]]. */
     inline def succeeds[A](inline e: A): Prop = denotes(e)
@@ -556,6 +677,25 @@ object Props {
     )(inline when: (A, B, C) => Prop | Boolean): Prop =
         ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, false) }
 
+    /** A function of four parameters returns on all arguments that satisfy `when`. */
+    inline def returnsWhen[A: Quantifiable, B: Quantifiable, C: Quantifiable, D: Quantifiable, R](
+        fn: FunctionDef[(A, B, C, D), R]
+    )(inline when: (A, B, C, D) => Prop | Boolean): Prop =
+        ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, false) }
+
+    /** A function of five parameters returns on all arguments that satisfy `when`. */
+    inline def returnsWhen[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        E: Quantifiable,
+        R
+    ](
+        fn: FunctionDef[(A, B, C, D, E), R]
+    )(inline when: (A, B, C, D, E) => Prop | Boolean): Prop =
+        ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, false) }
+
     /** A function of one parameter fails on every argument that satisfies `when`:
       * `∀ x. when(x) ==>: fails(fn, x)`. It states what the function must reject, as its runtime
       * `require`s do in its code.
@@ -577,6 +717,25 @@ object Props {
     inline def failsWhen[A: Quantifiable, B: Quantifiable, C: Quantifiable, R](
         fn: FunctionDef[(A, B, C), R]
     )(inline when: (A, B, C) => Prop | Boolean): Prop =
+        ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, true) }
+
+    /** A function of four parameters fails on all arguments that satisfy `when`. */
+    inline def failsWhen[A: Quantifiable, B: Quantifiable, C: Quantifiable, D: Quantifiable, R](
+        fn: FunctionDef[(A, B, C, D), R]
+    )(inline when: (A, B, C, D) => Prop | Boolean): Prop =
+        ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, true) }
+
+    /** A function of five parameters fails on all arguments that satisfy `when`. */
+    inline def failsWhen[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        E: Quantifiable,
+        R
+    ](
+        fn: FunctionDef[(A, B, C, D, E), R]
+    )(inline when: (A, B, C, D, E) => Prop | Boolean): Prop =
         ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, true) }
 
     /** `prop` with the statement variables in `names` renamed, in its expressions and binders. */

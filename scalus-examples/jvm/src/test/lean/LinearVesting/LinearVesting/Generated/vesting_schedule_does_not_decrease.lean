@@ -34,4 +34,9 @@ def arguments1 (x0 : ByteString) (x1 : Integer) (x2 : Integer) (x3 : Integer) (x
 def statement : Prop :=
   (∀ (x0 : ByteString) (x1 : Integer) (x2 : Integer) (x3 : Integer), (∀ (x4 : Integer), (∀ (x5 : Integer), ((fromFrameToBool (LinearVesting_Generated_vesting_schedule_does_not_decrease_prepared0 x0 x1 x2 x3 x4 x5) ≠ some false ∧ failed (LinearVesting_Generated_vesting_schedule_does_not_decrease_prepared0 x0 x1 x2 x3 x4 x5) = false) → (fromFrameToBool (LinearVesting_Generated_vesting_schedule_does_not_decrease_prepared1 x0 x1 x2 x3 x4 x5) = some true)))))
 
+/-- That `statement` holds, as Scalus proved it: by the tactic `blaster-uplc`, at 400
+    steps, a proof of the kind `Blaster`. An axiom, and no proof that Lean checks: a
+    theorem that uses it rests on that result, and `#print axioms` names it. -/
+axiom proved : statement
+
 end LinearVesting.Generated.vesting_schedule_does_not_decrease

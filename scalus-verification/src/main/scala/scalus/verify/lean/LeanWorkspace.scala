@@ -138,11 +138,21 @@ object LeanWorkspace {
                         .toList
                 finally walked.close()
             else Nil
-        val files =
-            (directory.resolve("lakefile.lean") :: directory.resolve(s"$name.lean") :: below)
-                .filter(file => file.toString.endsWith(".lean") && Files.isRegularFile(file))
-                .sortBy(file => directory.relativize(file).toString)
-        val text = files.map { file =>
+        hashOf(
+          directory,
+          directory.resolve("lakefile.lean") :: directory.resolve(s"$name.lean") :: below
+        )
+    }
+
+    /** A hash of the Lean sources among `files`, by their paths from `directory` and their texts:
+      * the `.lean` files that exist, in the order of their paths. Another file, as an editor's swap
+      * file or a `README.md`, is no source and changes nothing.
+      */
+    private[verify] def hashOf(directory: Path, files: List[Path]): String = {
+        val sources = files
+            .filter(file => file.toString.endsWith(".lean") && Files.isRegularFile(file))
+            .sortBy(file => directory.relativize(file).toString)
+        val text = sources.map { file =>
             s"${directory.relativize(file)}\n${Files.readString(file, StandardCharsets.UTF_8)}"
         }
         Fingerprint.hash(text.mkString("\n"))

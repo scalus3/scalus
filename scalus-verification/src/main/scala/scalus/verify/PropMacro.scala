@@ -24,16 +24,25 @@ private[verify] object PropMacro {
         binders(body, List(Type.of[A]), "forAll")((idents, inner) => universal(idents, inner))
 
     def forAll2[A: Type, B: Type](body: Expr[(A, B) => Prop | Boolean])(using Quotes): Expr[Prop] =
-        binders(body, List(Type.of[A], Type.of[B]), "forAll")((idents, inner) =>
-            universal(idents, inner)
-        )
+        forAllOf(body, List(Type.of[A], Type.of[B]))
 
     def forAll3[A: Type, B: Type, C: Type](body: Expr[(A, B, C) => Prop | Boolean])(using
         Quotes
-    ): Expr[Prop] =
-        binders(body, List(Type.of[A], Type.of[B], Type.of[C]), "forAll")((idents, inner) =>
-            universal(idents, inner)
-        )
+    ): Expr[Prop] = forAllOf(body, List(Type.of[A], Type.of[B], Type.of[C]))
+
+    def forAll4[A: Type, B: Type, C: Type, D: Type](
+        body: Expr[(A, B, C, D) => Prop | Boolean]
+    )(using Quotes): Expr[Prop] =
+        forAllOf(body, List(Type.of[A], Type.of[B], Type.of[C], Type.of[D]))
+
+    def forAll5[A: Type, B: Type, C: Type, D: Type, E: Type](
+        body: Expr[(A, B, C, D, E) => Prop | Boolean]
+    )(using Quotes): Expr[Prop] =
+        forAllOf(body, List(Type.of[A], Type.of[B], Type.of[C], Type.of[D], Type.of[E]))
+
+    /** A universal quantifier of the variables `body`, a lambda literal, takes, of `types`. */
+    private def forAllOf(body: Expr[Any], types: List[Type[?]])(using Quotes): Expr[Prop] =
+        binders(body, types, "forAll")((idents, inner) => universal(idents, inner))
 
     /** [[forAll]], written over the `Data` encodings of `A`'s values, which states the same: its
       * variable is one of `A`, and the `FromData[A]` it is given is not read.
