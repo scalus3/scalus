@@ -113,7 +113,7 @@ checkByHand(
   depositDilutesNoToken,                         // the statement, declared as any other
   "Amm.Proofs.Deposit",                          // the module of the proof
   "Amm.Proofs.Deposit.deposit_dilutes_no_token", // the theorem
-  800                                            // the steps of the statement's module
+  500                                            // the steps of the statement's module
 )
 ```
 
@@ -149,8 +149,11 @@ checkByHand(
   run, as on a build of another Scala version, whose programs differ, the test is not run, as a
   stale result is not.
 - **The first check of a proof may take minutes**: Lean builds the statement's module, whose
-  programs it runs symbolically, before it elaborates the check. The AMM's deposit statement
-  takes about ten minutes, most of it the branch of the first deposit, which its proof passes over.
+  programs it runs symbolically, before it elaborates the check. Most of the AMM deposit's is the
+  branch of the first deposit, which its proof passes over, run for as many steps as the budget
+  has: at 800 steps it took about ten minutes here and more than thirty on CI's runner, so its
+  budget is the 473 steps its claim needs on a pool with liquidity (`measureRun`), and a little
+  more. The Lean-Proofs workflow builds `AmmProofs` before the tests, and keeps the build.
 
 Two costs of the modules, measured on the vesting workspace (2026-11-10):
 

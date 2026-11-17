@@ -61,9 +61,12 @@ jobs:
           restore-keys: |
             lean-amm-
       - name: Build the Lean workspace of the AMM example
+        # With the statements and the proofs written by hand, `AmmProofs`: building a statement's
+        # module runs its programs symbolically, which takes minutes, and here it is outside the
+        # time limit of the check of a proof by hand. A proof that does not build fails here.
         working-directory: scalus-examples/jvm/src/test/lean/Amm
         run: |
-          nix develop ../../../../../..#ci-lean --accept-flake-config --command bash -c "lake build"
+          nix develop ../../../../../..#ci-lean --accept-flake-config --command bash -c "lake build Amm AmmProofs"
       - name: Run the proofs
         # SCALUS_REQUIRE_LEAN makes a test that cannot run Lean fail instead of being canceled,
         # so the proofs cannot pass by not running.
