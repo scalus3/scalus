@@ -101,8 +101,12 @@ object CapeScenarios {
       CapeScenario(
         "two_party_escrow",
         () => TwoPartyEscrowContract.compiled.program,
-        compiledNote,
-        "Scala 3 validator: Deposited -> Accepted | Refunded state machine.",
+        compiledNote + " Scenario revision 2: one script with a minting purpose (Deposit mints " +
+            "the thread token, Burn destroys it) and a spending purpose (Accept, Refund). It " +
+            "reads its own hash from the context: the policy id when minting, the script hash " +
+            "of the spent input when spending.",
+        "Scala 3 Validator with mint and spend: a thread token marks the escrow UTxO from " +
+            "Deposit until Accept or Refund burns it.",
         "twopartyescrow"
       )
     )

@@ -1,7 +1,7 @@
 package scalus.examples.cape
 
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.cardano.onchain.plutus.prelude.{List as SList, Option as SOption}
+import scalus.cardano.onchain.plutus.prelude.{AssocMap, List as SList, Option as SOption}
 import scalus.uplc.{Term, UplcParser}
 import scalus.uplc.builtin.Data.toData
 
@@ -113,7 +113,13 @@ class CapeTestSuite(json: ujson.Value) {
         inputs: scala.List[TxInInfo] = scala.Nil,
         outputs: scala.List[TxOut] = scala.Nil,
         scriptDatum: scala.Option[Data] = scala.Some(().toData),
-        ownRef: TxOutRef = TxOutRef(zeroTxId, 0)
+        ownRef: TxOutRef = TxOutRef(zeroTxId, 0),
+        // Set by `set_script_info`; None keeps the spending purpose of the baseline.
+        scriptInfo: scala.Option[ScriptInfo] = scala.None,
+        mint: Value = Value.zero,
+        fee: BigInt = 0,
+        txId: TxId = zeroTxId,
+        redeemers: scala.List[(ScriptPurpose, Data)] = scala.Nil
     )
 
     private def buildContext(scJson: ujson.Value): ScriptContext = {
@@ -124,12 +130,17 @@ class CapeTestSuite(json: ujson.Value) {
             outputs = SList.from(b.outputs),
             validRange = b.validRange,
             signatories = SList.from(b.signatories),
-            id = zeroTxId
+            fee = b.fee,
+            mint = b.mint,
+            redeemers = AssocMap.unsafeFromList(SList.from(b.redeemers)),
+            id = b.txId
           ),
           redeemer = b.redeemer,
-          scriptInfo = ScriptInfo.SpendingScript(
-            b.ownRef,
-            b.scriptDatum.fold(SOption.None)(SOption.Some(_))
+          scriptInfo = b.scriptInfo.getOrElse(
+            ScriptInfo.SpendingScript(
+              b.ownRef,
+              b.scriptDatum.fold(SOption.None)(SOption.Some(_))
+            )
           )
         )
     }
@@ -168,39 +179,75 @@ class CapeTestSuite(json: ujson.Value) {
                 )
             )
         case "add_input_utxo" =>
-            val parts = p("utxo_ref").str.split(':')
-            val ref = TxOutRef(TxId(ByteString.fromHex(parts(0))), BigInt(parts(1).toInt))
+            val ref = parseTxOutRef(p("utxo_ref").str)
             val own = p("is_own_input").bool
-            val addr =
+            val addr = p.obj.get("address").map(parseAddress).getOrElse {
                 if own then Address(Credential.ScriptCredential(scriptHash), SOption.None)
                 else
                     Address(Credential.PubKeyCredential(PubKeyHash(ByteString.empty)), SOption.None)
-            val txIn = TxInInfo(ref, TxOut(addr, parseValue(p("value")), datumOf(p), SOption.None))
+            }
+            val txIn =
+                TxInInfo(ref, TxOut(addr, parseValue(p("value")), datumOf(p), referenceScriptOf(p)))
             val b2 = b.copy(inputs = txIn :: b.inputs) // PREPEND
             if own then b2.copy(ownRef = ref) else b2
         case "add_output_utxo" =>
-            val addr = p("address")("type").str match
-                case "script" =>
-                    Address(
-                      Credential.ScriptCredential(resolveHash(p("address")("script_hash"))),
-                      SOption.None
-                    )
-                case "pubkey" =>
-                    Address(
-                      Credential.PubKeyCredential(
-                        PubKeyHash(resolveBytes(p("address")("pubkey_hash")))
-                      ),
-                      SOption.None
-                    )
-                case other => throw RuntimeException(s"Unknown address type: $other")
-            b.copy(outputs =
-                TxOut(addr, parseValue(p("value")), datumOf(p), SOption.None) :: b.outputs
-            ) // PREPEND
+            val out = TxOut(parseAddress(p("address")), parseValue(p("value")), datumOf(p))
+            b.copy(outputs = out.copy(referenceScript = referenceScriptOf(p)) :: b.outputs)
+        // PREPEND
         case "remove_output_utxo" =>
             val i = p("index").num.toInt
             b.copy(outputs = b.outputs.patch(i, scala.Nil, 1))
         case "set_script_datum" => b.copy(scriptDatum = scala.Some(resolveData(p("datum"))))
-        case other              => throw RuntimeException(s"Unknown patch op: $other")
+        // Patches from UPLC-CAPE #274: one transaction evaluated under each purpose it triggers.
+        case "set_script_info" =>
+            val info = p("script_info")
+            val scriptInfo = info("type").str match
+                case "minting"   => ScriptInfo.MintingScript(resolveBytes(info("policy_id")))
+                case "rewarding" => ScriptInfo.RewardingScript(parseCredential(info("credential")))
+                case other       => throw RuntimeException(s"Unknown script info type: $other")
+            b.copy(scriptInfo = scala.Some(scriptInfo))
+        case "set_mint"  => b.copy(mint = assetsValue(Value.zero, p("assets")))
+        case "set_fee"   => b.copy(fee = BigInt(p("lovelace").num.toLong))
+        case "set_tx_id" => b.copy(txId = parseTxId(p("tx_id").str))
+        case "set_redeemers" => // keeps the given order, like upstream `unsafeFromSOPList`
+            b.copy(redeemers = p("redeemers").arr.toList.map { r =>
+                val purpose = r("purpose")
+                val sp = purpose("type").str match
+                    case "spending" =>
+                        ScriptPurpose.Spending(parseTxOutRef(purpose("utxo_ref").str))
+                    case "minting" => ScriptPurpose.Minting(resolveBytes(purpose("policy_id")))
+                    case "rewarding" =>
+                        ScriptPurpose.Rewarding(parseCredential(purpose("credential")))
+                    case other => throw RuntimeException(s"Unknown purpose type: $other")
+                (sp, resolveData(r("redeemer")))
+            })
+        case other => throw RuntimeException(s"Unknown patch op: $other")
+
+    /** `txid:index`. A `#` prefix marks a hex id (32 bytes for a ledger id); the older fixtures
+      * write the id without it, and this harness has always read those as hex too.
+      */
+    private def parseTxOutRef(s: String): TxOutRef = {
+        val parts = s.split(':')
+        TxOutRef(parseTxId(parts(0)), BigInt(parts(1).toInt))
+    }
+
+    private def parseTxId(s: String): TxId = TxId(ByteString.fromHex(s.stripPrefix("#")))
+
+    /** A payment credential (`type` with its hash field) and an optional `staking` credential. */
+    private def parseAddress(a: ujson.Value): Address = Address(
+      parseCredential(a),
+      a.obj
+          .get("staking")
+          .fold(SOption.None)(s => SOption.Some(StakingCredential.StakingHash(parseCredential(s))))
+    )
+
+    private def parseCredential(c: ujson.Value): Credential = c("type").str match
+        case "script" => Credential.ScriptCredential(resolveHash(c("script_hash")))
+        case "pubkey" => Credential.PubKeyCredential(PubKeyHash(resolveBytes(c("pubkey_hash"))))
+        case other    => throw RuntimeException(s"Unknown credential type: $other")
+
+    private def referenceScriptOf(p: ujson.Value): SOption[ScriptHash] =
+        p.obj.get("reference_script").fold(SOption.None)(r => SOption.Some(resolveHash(r)))
 
     private def datumOf(p: ujson.Value): OutputDatum =
         p.obj
@@ -208,16 +255,24 @@ class CapeTestSuite(json: ujson.Value) {
             .map(d => OutputDatum.OutputDatum(resolveData(d)))
             .getOrElse(OutputDatum.NoOutputDatum)
 
-    private def parseValue(v: ujson.Value): Value = {
-        val base = Value.lovelace(BigInt(v("lovelace").num.toLong))
-        v.obj.get("assets").map(_.arr.toSeq).getOrElse(scala.Seq.empty).foldLeft(base) { (acc, a) =>
+    private def parseValue(v: ujson.Value): Value =
+        assetsValue(
+          Value.lovelace(BigInt(v("lovelace").num.toLong)),
+          v.obj.getOrElse("assets", ujson.Arr())
+        )
+
+    /** Adds each asset to `base`. `Value.+` keeps the ledger's shape: policies and token names in
+      * ascending order, duplicates summed, zero quantities dropped. With `Value.zero` as the base
+      * it builds a mint field, which has no ADA entry.
+      */
+    private def assetsValue(base: Value, assets: ujson.Value): Value =
+        assets.arr.foldLeft(base) { (acc, a) =>
             acc + Value(
               resolveBytes(a("currency_symbol")),
               resolveBytes(a("token_name")),
               BigInt(a("quantity").num.toLong)
             )
         }
-    }
 }
 
 object CapeTestSuite {
