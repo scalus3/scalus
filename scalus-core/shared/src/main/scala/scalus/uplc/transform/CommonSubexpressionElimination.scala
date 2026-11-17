@@ -4,7 +4,7 @@ import scalus.uplc.{Constant, Term}
 import scalus.uplc.Term.*
 import scalus.uplc.{DeBruijn, DefaultFun, NamedDeBruijn}
 import scalus.uplc.eval.{Log, Logger}
-import scalus.uplc.internal.TermTraversal.{foreachChildIndexed, mapChildren, mapChildrenIndexed, nodeCount}
+import scalus.uplc.internal.TermTraversal.{foreachChildIndexed, mapChildren, nodeCount}
 import scalus.uplc.transform.TermAnalysis.{collectNames, freeVars, isValueForm}
 import scalus.cardano.ledger.Word64
 import scalus.serialization.flat.Flat
@@ -130,18 +130,18 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         }
         var candidate = collect(current, sizeOf, keyOf)
         while candidate.nonEmpty do
-            val c = candidate.get
+            val (tree, c) = candidate.get
             val name = freshName(s"__cse_${TermNaming.termDescription(c.expr)}")
-            current = extract(current, c, name)
+            current = extract(current, tree, c, name)
             changed = true
             logger.log(
               s"CSE: extracted ${c.expr.showShort} (${c.occurrences.size} occurrences, size/binding estimate=${c.savedLovelace} lovelace) as $name"
             )
-            // Extraction changes both occurrence counts and paths. For example, sharing f(e)
-            // removes copies of the e inside it. A second candidate from the old tree would
+            // Extraction changes both occurrence counts and node numbers. For example, sharing
+            // f(e) removes copies of the e inside it. A second candidate from the old tree would
             // have stale uses and stale savings, so select again from the rewritten tree:
             // Constr(0, [f(e), f(e)]) => let x = f(e) in Constr(0, [x, x]).
-            // There is now just one e, and the original child paths point into a new let.
+            // There is now just one e, and the new let shifts the numbers of the nodes after it.
             candidate = collect(current, sizeOf, keyOf)
 
         // Alpha-renaming alone is not an optimization, and should not change a no-op result.
@@ -156,86 +156,87 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
     // This occurrence justifies sharing into descendant regions that may not execute.
     // In Constr(0, [e, Delay(e)]), the first e supplies the group's region. In
     // Constr(0, [Delay(e), Delay(e)]), the common ancestor contains no occurrence of e itself.
-    private case class Group(region: Path, occurrences: mutable.ArrayBuffer[Path])
-    private case class Candidate(
-        expr: Term,
-        occurrences: Set[Path],
-        bindAt: Path,
-        savedLovelace: Double = 0
+    private final class Group(val region: Int, val occurrences: mutable.ArrayBuffer[Int])
+    private final class Candidate(
+        val expr: Term,
+        val occurrences: mutable.ArrayBuffer[Int],
+        val bindAt: Int,
+        val savedLovelace: Double
     )
 
     /** Collect equal expressions into groups with safe placement, then choose one profitable group.
       *
-      * `path` identifies a node; `region` identifies the root of its evaluation region. These are
-      * different: many nodes share a region, but the binding belongs at their lowest common
-      * ancestor, not necessarily at the region root. For Constr(0, [a, Constr(0, [e, e])]), the e
-      * paths are [1, 0] and [1, 1], both in region []; insert the binding at [1].
+      * A node is identified by its preorder number in `tree`; `region` is the number of the root of
+      * its evaluation region. These are different: many nodes share a region, but the binding
+      * belongs at their lowest common ancestor, not necessarily at the region root. In Constr(0,
+      * [a, Constr(0, [e, e])]), the e nodes are 3 and 4, both in region 0 (the root); insert the
+      * binding at node 2, the inner Constr.
       */
     private def collect(
         term: Term,
         sizeOf: Term => Option[Int],
         keyOf: Term => AlphaTermKey
-    ): Option[Candidate] = {
+    ): Option[(TreeIndex, Candidate)] = {
+        val tree = new TreeIndex(term.nodeCount)
         val groups = mutable.LinkedHashMap.empty[AlphaTermKey, mutable.ArrayBuffer[Group]]
 
-        def add(t: Term, path: Path, region: Path): Unit = {
+        def add(t: Term, node: Int, region: Int): Unit = {
             val entries = groups.getOrElseUpdate(keyOf(t), mutable.ArrayBuffer.empty)
-            entries.find(g => isAncestorOrSelf(g.region, region)) match
+            entries.find(g => tree.isAncestorOrSelf(g.region, region)) match
                 case Some(ancestor) =>
                     // A strict occurrence was already found in this region or an enclosing one.
                     // Its binding can supply this use even if this use is inside a delay/branch.
                     // In Constr(0, [e, Delay(e)]), visiting the delayed e finds the first e's group.
-                    ancestor.occurrences += path
+                    ancestor.occurrences += node
                 case None =>
                     // Traversal order need not discover the outer occurrence first. In
                     // Constr(0, [Delay(e), Delay(e), e]), the final e justifies merging both
                     // previously separate groups. Without that e, the siblings stay separate.
-                    val occurrences = mutable.ArrayBuffer(path)
+                    val occurrences = mutable.ArrayBuffer(node)
                     entries.filterInPlace { g =>
-                        if isAncestorOrSelf(region, g.region) then
+                        if tree.isAncestorOrSelf(region, g.region) then
                             occurrences ++= g.occurrences
                             false
                         else true
                     }
-                    entries += Group(region, occurrences)
+                    entries += new Group(region, occurrences)
         }
 
-        def go(t: Term, path: Path, region: Path): Unit = {
+        // `region` is NewRegion when t is a body that starts its own region: t is its root.
+        def go(t: Term, parent: Int, inherited: Int): Unit = {
+            val node = tree.enter(t, parent)
+            val region = if inherited == NewRegion then node else inherited
             // Record a Delay/LamAbs itself in the current region: constructing the value is
             // strict, although evaluating its body is not. Only the body starts a new region.
             // Constr(0, [Delay(e), Delay(e)]) may become let d = Delay(e) in Constr(0, [d, d]);
             // e remains unevaluated. Likewise, evaluating a lambda value does not call it.
-            add(t, path, region)
+            add(t, node, region)
             t match
                 // Let bodies are strict, but still have lexical scope. Unique binders and the
                 // structural LCA below keep any expression using the parameter inside its body.
                 // (lam a. Constr(0, [f(a), f(a)])) arg shares f(a) inside lam a, never around arg.
-                // Body path [0, 0] still records the intervening lambda despite inheriting region [].
-                case Apply(LamAbs(_, body, _), arg, _) =>
-                    go(body, path :+ 0 :+ 0, region)
-                    go(arg, path :+ 1, region)
-                case LamAbs(_, body, _) =>
-                    val p = path :+ 0
-                    go(body, p, p)
-                case Delay(body, _) =>
-                    val p = path :+ 0
-                    go(body, p, p)
+                // The lambda gets a number but no record: the body inherits the let's region.
+                case Apply(lam @ LamAbs(_, body, _), arg, _) =>
+                    val lamNode = tree.enter(lam, node)
+                    go(body, lamNode, region)
+                    tree.exit(lamNode)
+                    go(arg, node, region)
+                case LamAbs(_, body, _)           => go(body, node, NewRegion)
+                case Delay(body, _)               => go(body, node, NewRegion)
                 case Case(scrutinee, branches, _) =>
                     // The scrutinee is strict; only the selected branch executes. A repeated
                     // expression confined to different branches cannot be hoisted above Case.
                     // Case(tag, [e, e, 0]) must still return 0 for tag 2 even when e would fail.
-                    go(scrutinee, path :+ 0, region)
-                    branches.zipWithIndex.foreach { (branch, i) =>
-                        val p = path :+ (i + 1)
-                        go(branch, p, p)
-                    }
-                // Child indices [TT-2] must agree with `extract`, which uses mapChildrenIndexed.
-                // For Apply(f, Case(s, [b0, b1])), path [1, 2] identifies b1 in both walks.
+                    go(scrutinee, node, region)
+                    branches.foreach(go(_, node, NewRegion))
+                // Child order [TT-2] must agree with `extract`, which uses mapChildren. For
+                // Apply(f, Case(s, [b0, b1])), b1 gets the same number in both walks.
                 case _ =>
-                    t.foreachChildIndexed((child, i) => go(child, path :+ i, region))
+                    t.foreachChildIndexed((child, _) => go(child, node, region))
+            tree.exit(node)
         }
 
-        go(term, Vector.empty, Vector.empty)
+        go(term, NoNode, NewRegion)
         // Safety is established by grouping, independently of expression size or builtin kind.
         // Greatest eligible fee estimate first, retaining traversal order for ties. For example,
         // a value saving 100 lovelace precedes f(xs), whose size/binding estimate may be negative.
@@ -248,20 +249,20 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         var best: Option[Candidate] = None
         for (key, entries) <- groups do
             for group <- entries if group.occurrences.size >= 2 do
-                val paths = group.occurrences.toVector
-                // Unique binders ensure all uses of an expression with a bound variable lie
-                // within that binder's body. Their LCA therefore keeps its dependencies in scope.
-                // Placing here also avoids wrapping unrelated parts of the enclosing region.
-                // In lam a. Constr(0, [other, Constr(0, [f(a), f(a)])]), bind f(a) only around
-                // the inner Constr: a stays in scope and other stays outside the new binding.
-                val c = Candidate(key.term, paths.toSet, longestCommonPrefix(paths))
-                sizeOf(c.expr).foreach { bits =>
-                    val saving = SharingCost.savingLovelace(bits, c.occurrences.size)
-                    val eligible = saving > 0 || preferComputationSharing(c.expr)
+                sizeOf(key.term).foreach { bits =>
+                    val saving = SharingCost.savingLovelace(bits, group.occurrences.size)
+                    val eligible = saving > 0 || preferComputationSharing(key.term)
                     if eligible && best.forall(saving > _.savedLovelace) then
-                        best = Some(c.copy(savedLovelace = saving))
+                        // Unique binders ensure all uses of an expression with a bound variable
+                        // lie within that binder's body. Their LCA therefore keeps its
+                        // dependencies in scope. Placing here also avoids wrapping unrelated
+                        // parts of the enclosing region. In
+                        // lam a. Constr(0, [other, Constr(0, [f(a), f(a)])]), bind f(a) only
+                        // around the inner Constr: a stays in scope and other stays outside.
+                        val bindAt = tree.lca(group.occurrences.min, group.occurrences.max)
+                        best = Some(new Candidate(key.term, group.occurrences, bindAt, saving))
                 }
-        best
+        best.map((tree, _))
     }
 
     /** Prefer evaluating repeated computations once, independently of their unknown runtime cost.
@@ -274,25 +275,33 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         case _: Apply | _: Force | _: Case | _: Constr => !t.isValueForm
         case _                                         => false
 
-    /** Replace uses and insert their binding in one traversal of the original paths.
+    /** Replace uses and insert their binding in one traversal, numbering nodes as `collect` did.
       *
       * For a subtree `Constr(0, [e, e])`, first build `Constr(0, [x, x])`, then wrap it in
       * `[(lam x ...) e]`. The binding's right-hand side is the original e: visiting it with the
       * replacement rule would incorrectly replace it with x and create a self-reference.
       */
-    private def extract(term: Term, candidate: Candidate, name: String): Term = {
-        def go(t: Term, path: Path): Term = {
-            if candidate.occurrences.contains(path) then Var(NamedDeBruijn(name), t.annotation)
+    private def extract(term: Term, tree: TreeIndex, candidate: Candidate, name: String): Term = {
+        val replaced = new Array[Boolean](tree.size)
+        candidate.occurrences.foreach(replaced(_) = true)
+        var next = 0
+        def go(t: Term): Term = {
+            val node = next
+            tree.checkNode(node, t)
+            if replaced(node) then
+                next = tree.end(node) // the whole subtree goes
+                Var(NamedDeBruijn(name), t.annotation)
             else {
+                next += 1
                 // Unchanged subtrees keep their identity, so the per-pass size and key caches
                 // survive extraction rounds.
-                val body = t.mapChildrenIndexed((child, i) => go(child, path :+ i))
-                if path == candidate.bindAt then
+                val body = t.mapChildren(go)
+                if node == candidate.bindAt then
                     Apply(LamAbs(name, body, t.annotation), candidate.expr, t.annotation)
                 else body
             }
         }
-        go(term, Vector.empty)
+        go(term)
     }
 }
 
@@ -360,27 +369,61 @@ object CommonSubexpressionElimination {
         case Case(arg, cases, _) =>
             cases.foldLeft(recur(arg) * 31 + 10)((h, c) => h * 31 + recur(c))
 
-    // A path is a sequence of child indices from the root, not a preorder traversal number.
-    // For example, [0, 1] and [0, 2] have LCA [0]; wrapping that subtree leaves its siblings alone.
-    private type Path = Vector[Int]
+    /** The parent of the root. */
+    private val NoNode = -1
 
-    // [] encloses every path; [1] encloses [1, 0] and itself, but not sibling [2].
-    private def isAncestorOrSelf(ancestor: Path, descendant: Path): Boolean =
-        descendant.startsWith(ancestor)
+    /** Passed as the region of a body that starts its own region, such as a lambda body. */
+    private val NewRegion = -1
 
-    /** Computes the LCA: paths [1, 0] and [1, 2, 0] give [1]; [0] and [1] give the root []. */
-    private def longestCommonPrefix(paths: Vector[Path]): Path = {
-        if paths.isEmpty then Vector.empty
-        else if paths.size == 1 then paths.head
-        else
-            val minLen = paths.map(_.length).min
-            var prefixLen = 0
-            var done = false
-            while prefixLen < minLen && !done do
-                val elem = paths.head(prefixLen)
-                if paths.forall(_(prefixLen) == elem) then prefixLen += 1
-                else done = true
-            paths.head.take(prefixLen)
+    /** Preorder numbers of the nodes of one term, children in [TT-2] order; the root is node 0.
+      *
+      * A subtree is a range of numbers: node a is an ancestor-or-self of node d iff
+      * `a <= d < end(a)`. For Constr(0, [x, Delay(y)]), the nodes are 0 = Constr, 1 = x, 2 = Delay
+      * and 3 = y, and end(2) = 4. While the walk is still inside a node, its end is Int.MaxValue:
+      * every node numbered after it so far is in its subtree, and the test says so.
+      */
+    private final class TreeIndex(val size: Int) {
+        private val terms = new Array[Term](size)
+        private val parents = new Array[Int](size)
+        private val depths = new Array[Int](size)
+        private val ends = new Array[Int](size)
+        private var next = 0
+
+        /** Numbers `t`, the next node in preorder. */
+        def enter(t: Term, parent: Int): Int = {
+            val node = next
+            next += 1
+            terms(node) = t
+            parents(node) = parent
+            depths(node) = if parent == NoNode then 0 else depths(parent) + 1
+            ends(node) = Int.MaxValue
+            node
+        }
+
+        /** Closes the subtree of `node` after the walk has numbered all of it. */
+        def exit(node: Int): Unit = ends(node) = next
+
+        def end(node: Int): Int = ends(node)
+
+        def isAncestorOrSelf(ancestor: Int, node: Int): Boolean =
+            ancestor <= node && node < ends(ancestor)
+
+        /** Lowest common ancestor: in Constr(0, [x, Delay(y)]), lca(1, 3) = 0 and lca(2, 3) = 2. */
+        def lca(a: Int, b: Int): Int = {
+            var x = a
+            var y = b
+            while depths(x) > depths(y) do x = parents(x)
+            while depths(y) > depths(x) do y = parents(y)
+            while x != y do
+                x = parents(x)
+                y = parents(y)
+            x
+        }
+
+        /** A later walk must visit the same node under the same number. */
+        def checkNode(node: Int, t: Term): Unit =
+            if !(terms(node) eq t) then
+                throw new IllegalStateException(s"CSE node $node is numbered differently")
     }
 
     /** Width of a UPLC term tag: Error costs 4 bits; Delay(t) costs 4 plus the size of t. */
