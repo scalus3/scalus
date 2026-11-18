@@ -97,13 +97,13 @@ For a batch of `k` payouts, the table compares `k` single `delete` calls, each a
 
 A multiproof is smaller in every batch. It also costs less CPU and memory for contiguous positions from `k = 4`, but more for scattered ones, so choose by whichever limit is tighter: transaction size or execution budget. Each figure includes decoding the measured program's input from Plutus `Data`, but not the rest of a transaction's budget.
 
-Off-chain, on one shared Ryzen 9 7950X3D limited to eight logical CPUs (Java 25, after JIT warm-up), materializing a 32,768-slot tree took 38–43 ms and computing only its root with `rootFromElements` took 32–37 ms. These times are illustrative.
+Off-chain, computing the root of a 32,768-slot tree with `rootFromElements` took 32–37 ms on one shared Ryzen 9 7950X3D limited to eight logical CPUs (Java 25, after JIT warm-up). Materializing the tree does the same hashing and also keeps the nodes. These times are illustrative.
 
 ## Limitations
 
 - **Delete only** — the slots are filled when the tree is built off-chain; there is no on-chain insert or update
 - **Membership only** — no non-membership proofs; an unused or deleted slot cannot be proved
-- **Fixed depth** — capacity is 2^D, chosen at construction. The materialized off-chain tree keeps every node and supports depths up to 29; `rootFromElements` computes only the root, in O(D) memory, up to depth 256, the same limit as the on-chain verifier
+- **Fixed depth** — capacity is 2^D, chosen at construction. The materialized off-chain tree stores only the nodes over its occupied slots, about 2n hashes for n elements, and supports depths up to 29; `rootFromElements` computes only the root, in O(D) memory, up to depth 256, the same limit as the on-chain verifier
 - **The root does not bind the depth** — store the depth next to the root and take both from authenticated state
 - **Every delete makes all outstanding proofs stale** — a proof verifies against the root it was built for, and every other slot's path has a sibling that covers the deleted slot. After a delete, rebuild proofs from the updated tree
 

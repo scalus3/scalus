@@ -376,6 +376,17 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
         assert(((BigInt(1) << 53) - 1).bitLength - 1 == 52)
     }
 
+    test("the materialized tree stores only occupied slots, so depth 29 builds from a few leaves") {
+        val few = data.take(3)
+        val t = PositionalMerkleTree.fromElements(few, 29)
+        assert(t.rootHash == PositionalMerkleTree.rootFromElements(few.iterator, 29))
+        accepts(single(t, few(1), 1), t.delete(1).rootHash)
+        accepts(query(t, few, Vector(0, 2)), t.deleteMany(Vector(0, 2)).rootHash)
+        val last = t.capacity - 1
+        assert(t.proveMembership(last).size == 29 * 32)
+        rejects(single(t, few.head, last))
+    }
+
     test("node widths cannot change concatenation boundaries or truncate custom digests") {
         for width <- Vector(0, 31, 33, 64) do
             val bad: ByteString => ByteString = _ => ByteString.fromArray(new Array[Byte](width))

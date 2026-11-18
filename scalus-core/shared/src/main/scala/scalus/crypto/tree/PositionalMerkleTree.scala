@@ -11,12 +11,18 @@ import scalus.uplc.builtin.ByteString
   * different positions are independent leaves. The depth must be authenticated separately from the
   * root.
   *
-  * The materialized tree uses O(2^depth) memory and supports depths 0..29. For a root alone, use
+  * The materialized tree stores only the nodes over its occupied slots, about 2n hashes for n
+  * elements, plus one empty-subtree hash per level, so its memory does not grow with 2^depth.
+  * Positions are `Int`, and it supports depths 0..29. For a root alone, use
   * [[PositionalMerkleTree.rootFromElements]], which streams in O(depth) memory up to depth 256.
   */
 final class PositionalMerkleTree private (
     val depth: Int,
-    private val hashes: Vector[ByteString],
+    // levels(h) holds the nodes of height h (0 = leaves) over the slots the tree was built with,
+    // positions 0 until levels(0).length. Every node past them is zeros(h), the root of an empty
+    // subtree of height h.
+    private val levels: Vector[Vector[ByteString]],
+    private val zeros: Vector[ByteString],
     private val nodeHash: ByteString => ByteString
 ) {
     import PositionalMerkleTree.*
@@ -25,7 +31,7 @@ final class PositionalMerkleTree private (
     def capacity: Int = 1 << depth
 
     /** Root hash, without mixing in a length. */
-    def rootHash: ByteString = hashes(1)
+    def rootHash: ByteString = hashAt(1)
 
     /** Siblings of `position`, bottom-up, concatenated into exactly `depth * 32` bytes.
       *
@@ -36,7 +42,7 @@ final class PositionalMerkleTree private (
         val out = new java.io.ByteArrayOutputStream(depth * 32)
         var index = leafIndex(depth, position)
         while index > 1 do
-            out.write(hashes(index ^ 1).bytes)
+            out.write(hashAt(index ^ 1).bytes)
             index >>= 1
         ByteString.unsafeFromArray(out.toByteArray)
     }
@@ -59,7 +65,7 @@ final class PositionalMerkleTree private (
                 index >>= 1
         val out = new java.io.ByteArrayOutputStream()
         for index <- siblings.iterator.filterNot(paths.contains).toSeq.sorted.reverse do
-            out.write(hashes(index).bytes)
+            out.write(hashAt(index).bytes)
         ByteString.unsafeFromArray(out.toByteArray)
     }
 
@@ -77,20 +83,41 @@ final class PositionalMerkleTree private (
       */
     def deleteMany(positions: IndexedSeq[Int]): PositionalMerkleTree = {
         checkPositions(positions)
-        var updated = hashes
+        var below = levels(0)
         for position <- positions do
-            var index = capacity + position
-            require(updated(index) != NullHash, "PositionalMerkleTree: empty slot")
-            updated = updated.updated(index, NullHash)
-            index >>= 1
-            while index > 0 do
-                updated = updated.updated(
-                  index,
-                  nodeHash(appendByteString(updated(index * 2), updated(index * 2 + 1)))
-                )
-                index >>= 1
-        new PositionalMerkleTree(depth, updated, nodeHash)
+            require(
+              position < below.length && below(position) != NullHash,
+              "PositionalMerkleTree: empty slot"
+            )
+            below = below.updated(position, NullHash)
+        val updated = Vector.newBuilder[Vector[ByteString]]
+        updated += below
+        // Level by level, so a parent shared by several positions is hashed once. The indices stay
+        // ascending, so equal parents are adjacent.
+        var changed = positions
+        var height = 1
+        while height <= depth do
+            changed = changed.map(_ >> 1).distinct
+            var level = levels(height)
+            for index <- changed do
+                val left = node(below, height - 1, index * 2)
+                val right = node(below, height - 1, index * 2 + 1)
+                level = level.updated(index, nodeHash(appendByteString(left, right)))
+            updated += level
+            below = level
+            height += 1
+        new PositionalMerkleTree(depth, updated.result(), zeros, nodeHash)
     }
+
+    // The node at generalized index `index`: the root is 1, and node g has children 2g and 2g + 1.
+    private def hashAt(index: Int): ByteString = {
+        val row = 31 - Integer.numberOfLeadingZeros(index)
+        val height = depth - row
+        node(levels(height), height, index - (1 << row))
+    }
+
+    private def node(level: Vector[ByteString], height: Int, index: Int): ByteString =
+        if index < level.length then level(index) else zeros(height)
 
     private def checkPosition(position: Int): Unit = {
         leafIndex(depth, position)
@@ -135,18 +162,29 @@ object PositionalMerkleTree {
     ): PositionalMerkleTree = {
         val capacity = capacityAtDepth(depth)
         val digest = checkedNodeHash(nodeHash)
-        val hashes = Array.fill(capacity * 2)(NullHash)
+        val leaves = Vector.newBuilder[ByteString]
         val input = elements.iterator
         var count = 0
         while input.hasNext do
             require(count < capacity, "PositionalMerkleTree: too many elements")
-            hashes(capacity + count) = leafHash(input.next())
+            leaves += leafHash(input.next())
             count += 1
-        var index = capacity - 1
-        while index > 0 do
-            hashes(index) = digest(appendByteString(hashes(index * 2), hashes(index * 2 + 1)))
-            index -= 1
-        new PositionalMerkleTree(depth, hashes.toVector, digest)
+        val zeros =
+            Vector.iterate(NullHash, depth + 1)(zero => digest(appendByteString(zero, zero)))
+        val levels = Vector.newBuilder[Vector[ByteString]]
+        var level = leaves.result()
+        levels += level
+        var height = 1
+        while height <= depth do
+            val below = level
+            val zero = zeros(height - 1)
+            level = Vector.tabulate((below.length + 1) / 2) { index =>
+                val right = if index * 2 + 1 < below.length then below(index * 2 + 1) else zero
+                digest(appendByteString(below(index * 2), right))
+            }
+            levels += level
+            height += 1
+        new PositionalMerkleTree(depth, levels.result(), zeros, digest)
     }
 
     /** Root of at most 2^depth elements in one pass with O(depth) auxiliary memory (depth 0..256).
