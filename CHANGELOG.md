@@ -6,9 +6,8 @@
 
 - `scalus-plugin` is published for Scala 3.10.1. Scala 3.10.0 is not supported: its compiler
   crashes on some Scalus code (scala/scala3#27039).
-- `PositionalMerkleTree`: fixed-depth positional commitments with SSZ proofs and multiproofs using
-  BLAKE2b-256, streaming off-chain roots, and on-chain `verifyMembership`, `delete` and
-  `deleteMany`.
+- `PositionalMerkleTree`: fixed-depth commitments by position with SSZ multiproofs, and on-chain
+  `verifyMembership`, `delete` and `deleteMany`.
 
 ### Fixed
 

@@ -8,7 +8,7 @@ description: Positional Merkle Tree in Scalus for Cardano smart contracts. A fix
 
 A fixed-depth binary tree whose leaves are addressed by position. A proof shows that an element sits at a given position. `delete` checks that proof and returns the root with the slot set to 32 zero bytes, so the same slot cannot be proved again.
 
-**Best for:** A list fixed when the tree is built, whose entries are each settled once — treasury payouts, vesting tranches, claims by index. A treasury commits to its payout outputs, pays them in any order, and keeps only the root in its datum.
+**Best for:** A list fixed when the tree is built, whose entries are each settled once — treasury payouts, vesting tranches, claims by index. A treasury commits to its payout outputs, pays them in any order, and keeps only the root and the depth in its datum.
 
 Unlike the [Merkle Tree](/docs/advanced-data-structures/merkle-tree), the position is part of what is proved: equal elements at different positions are separate leaves, and each is settled on its own.
 
@@ -78,7 +78,7 @@ For clients that build proofs and redeemers outside Scala:
 - **Delete:** 2D + 1 blake2b calls — the old and the new root in one walk
 - **Proof size:** 32 × D bytes; a multiproof needs fewer helpers when positions are close together
 
-At depth 15 (32,768 slots) with 32-byte elements, one `delete` costs **37,310,510 CPU steps and 126,062 memory units**, with a 480-byte proof. `PositionalMerkleTreeBudgetTest` measures this with `Options.release`, the mainnet Plutus V3 cost model and Scala 3.3.9, and pins the values.
+At depth 15 (32,768 slots) with 32-byte elements, one `delete` costs **37,310,510 CPU steps and 126,062 memory units**, with a 480-byte proof. `PositionalMerkleTreeBudgetTest` measures this with `Options.release`, the mainnet Plutus V3 cost model and Scala 3.3.9. It pins the single `delete` and the two `k = 32` multiproof budgets, and prints the rest of the table below.
 
 For a batch of `k` payouts, the table compares `k` single `delete` calls, each against the previous call's root, with one `deleteMany` against the original root. Contiguous positions are `0..k-1`; scattered positions are `(i × 7919) mod 32768` for `0 ≤ i < k`, sorted. Proof bytes exclude the positions, the elements and the `Data` framing.
 
