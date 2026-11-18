@@ -4,7 +4,7 @@ import org.scalacheck.Gen
 import org.scalactic.anyvals.PosInt
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.uplc.builtin.PlatformSpecific.{bls12_381_G1_compressed_zero, bls12_381_G2_compressed_zero, bls12_381_scalar_period}
+import scalus.uplc.builtin.PlatformSpecific.{bls12_381_G1_compressed_generator, bls12_381_G1_compressed_zero, bls12_381_G2_compressed_generator, bls12_381_G2_compressed_zero, bls12_381_scalar_period}
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 import scalus.uplc.test.ArbitraryInstances
 
@@ -97,20 +97,28 @@ class BLS12_381PropertiesTest
     properties(g2)
 
     test("finalVerify(millerLoop([a]P, Q), millerLoop(P, [b]Q)) holds exactly when a = b mod r") {
-        // b is congruent to a about half the time, so both outcomes occur.
-        val genAB = for
-            a <- genScalar
-            b <- Gen.frequency((1, Gen.oneOf(a, a + r, a - r)), (1, genScalar))
-        yield (a, b)
-        var outcomes = Set.empty[Boolean]
-        forAll(g1.point, g2.point, genAB, minSuccessful(20)) { (p, q, ab) =>
-            val (a, b) = ab
+        def verifies(p: G1Element, q: G2Element, a: BigInt, b: BigInt): Boolean = {
             val lhs = platform.bls12_381_millerLoop(platform.bls12_381_G1_scalarMul(a, p), q)
             val rhs = platform.bls12_381_millerLoop(p, platform.bls12_381_G2_scalarMul(b, q))
-            val congruent = a.mod(r) == b.mod(r)
-            assert(platform.bls12_381_finalVerify(lhs, rhs) == congruent)
-            outcomes += congruent
+            platform.bls12_381_finalVerify(lhs, rhs)
         }
-        assert(outcomes == Set(true, false))
+        // b is congruent to a in half the cases, and not in the others. A scalar of genScalar is
+        // not enough for those: 0 and r are a third of its values each, and congruent.
+        val genAB = for
+            a <- genScalar
+            congruent <- Gen.oneOf(true, false)
+            b <-
+                if congruent then Gen.oneOf(a, a + r, a - r)
+                else genScalar.map(b => if b.mod(r) == a.mod(r) then b + 1 else b)
+        yield (a, b)
+        forAll(g1.point, g2.point, genAB, minSuccessful(20)) { (p, q, ab) =>
+            val (a, b) = ab
+            assert(verifies(p, q, a, b) == (a.mod(r) == b.mod(r)))
+        }
+        // Both outcomes, whatever the samples were.
+        val p = platform.bls12_381_G1_uncompress(bls12_381_G1_compressed_generator)
+        val q = platform.bls12_381_G2_uncompress(bls12_381_G2_compressed_generator)
+        assert(verifies(p, q, BigInt(7), BigInt(7) + r))
+        assert(!verifies(p, q, BigInt(7), BigInt(8)))
     }
 }
