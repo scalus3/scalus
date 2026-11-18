@@ -22,7 +22,7 @@ object PositionalMerkleTreeBudgetTest {
     lazy val sequentialProgram = PlutusV3.compile { (data: Data) =>
         val input = data.to[Sequential]
         input.removals.foldLeft(input.root) { (root, removal) =>
-            OnChain.verifyAndEmpty(
+            OnChain.delete(
               root,
               input.depth,
               removal.position,
@@ -50,7 +50,7 @@ class PositionalMerkleTreeBudgetTest extends AnyFunSuite {
         val tree = PositionalMerkleTree.fromElements(data, depth)
         val input = Single(tree.rootHash, BigInt(depth), 0, data.head, tree.proveMembership(0))
         val single = singleResult(input)
-        assert(returned(single) == tree.emptied(Vector(0)).rootHash)
+        assert(returned(single) == tree.delete(Vector(0)).rootHash)
         assert(single.budget == ExUnits(memory = 161238, steps = 46_503274))
         println(
           "positional-merkle depth=15 elements=32768 element-bytes=32 cost-model=CardanoInfo.mainnet/PlutusV3 Options.release"
@@ -71,7 +71,7 @@ class PositionalMerkleTreeBudgetTest extends AnyFunSuite {
             val removals = positions.map { position =>
                 val removal =
                     Removal(BigInt(position), data(position), current.proveMembership(position))
-                current = current.emptied(Vector(position))
+                current = current.delete(Vector(position))
                 removal
             }
             val sequential = evaluate(

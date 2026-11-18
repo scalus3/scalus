@@ -3,9 +3,9 @@ package scalus.crypto.tree
 import scalus.uplc.builtin.Builtins.{appendByteString, blake2b_256}
 import scalus.uplc.builtin.ByteString
 
-/** Fixed-depth binary Merkle tree addressed by position, with immutable emptying.
+/** Fixed-depth binary Merkle tree addressed by position, with immutable deletion.
   *
-  * Leaves are `blake2b_256(element)`, unused or emptied leaves are 32 zero bytes, and parents are
+  * Leaves are `blake2b_256(element)`, unused or deleted leaves are 32 zero bytes, and parents are
   * `nodeHash(left ++ right)`. With the default node hash this is SSZ's fixed-size chunk tree with
   * BLAKE2b-256 in place of SHA-256, without length mixing or domain tags. Equal elements at
   * different positions are independent leaves. The depth must be authenticated separately from the
@@ -21,7 +21,7 @@ final class PositionalMerkleTree private (
 ) {
     import PositionalMerkleTree.*
 
-    /** Number of leaf slots, including unused and emptied slots. */
+    /** Number of leaf slots, including unused and deleted slots. */
     def capacity: Int = 1 << depth
 
     /** Root hash, without mixing in a length. */
@@ -30,7 +30,7 @@ final class PositionalMerkleTree private (
     /** Siblings of `position`, bottom-up, concatenated into exactly `depth * 32` bytes.
       *
       * Positions are zero-based and must be in range. Paths for empty slots can also be generated;
-      * the on-chain verifier refuses membership or emptying of those slots.
+      * the on-chain verifier refuses membership or deletion of those slots.
       */
     def proveMembership(position: Int): ByteString = {
         val out = new java.io.ByteArrayOutputStream(depth * 32)
@@ -63,18 +63,20 @@ final class PositionalMerkleTree private (
         ByteString.unsafeFromArray(out.toByteArray)
     }
 
-    /** Empty occupied positions and return a new tree, preserving every other slot.
+    /** Delete occupied positions and return a new tree, preserving every other slot.
       *
-      * Positions must be nonempty, strictly ascending, distinct and in range. An unused or already
-      * emptied slot is rejected. Proofs for a later call must be generated from the returned tree.
+      * A deleted slot is set to [[PositionalMerkleTree.NullHash]]; positions and capacity do not
+      * change. Positions must be nonempty, strictly ascending, distinct and in range. An unused or
+      * already deleted slot is rejected. Proofs for a later call must be generated from the
+      * returned tree.
       */
-    def emptied(positions: IndexedSeq[Int]): PositionalMerkleTree = {
+    def delete(positions: IndexedSeq[Int]): PositionalMerkleTree = {
         checkPositions(positions)
         var updated = hashes
         for position <- positions do
             var index = capacity + position
-            require(updated(index) != EmptyLeafHash, "PositionalMerkleTree: empty slot")
-            updated = updated.updated(index, EmptyLeafHash)
+            require(updated(index) != NullHash, "PositionalMerkleTree: empty slot")
+            updated = updated.updated(index, NullHash)
             index >>= 1
             while index > 0 do
                 updated = updated.updated(
@@ -105,8 +107,10 @@ final class PositionalMerkleTree private (
 
 object PositionalMerkleTree {
 
-    /** Reserved empty chunk, with no known preimage under BLAKE2b-256. */
-    val EmptyLeafHash: ByteString = ByteString.fromArray(new Array[Byte](32))
+    /** 32 zero bytes: the reserved chunk of unused and deleted slots, with no known preimage under
+      * BLAKE2b-256.
+      */
+    val NullHash: ByteString = ByteString.fromArray(new Array[Byte](32))
 
     /** Build a tree filled from position zero, allowing duplicate elements. */
     def fromElements(elements: IterableOnce[ByteString], depth: Int): PositionalMerkleTree =
@@ -126,7 +130,7 @@ object PositionalMerkleTree {
     ): PositionalMerkleTree = {
         val capacity = capacityAtDepth(depth)
         val digest = checkedNodeHash(nodeHash)
-        val hashes = Array.fill(capacity * 2)(EmptyLeafHash)
+        val hashes = Array.fill(capacity * 2)(NullHash)
         val input = elements.iterator
         var count = 0
         while input.hasNext do
@@ -174,8 +178,8 @@ object PositionalMerkleTree {
 
         if count == capacity then frontier(depth)
         else
-            var hash = EmptyLeafHash
-            var zero = EmptyLeafHash
+            var hash = NullHash
+            var zero = NullHash
             var level = 0
             while level < depth do
                 hash =
@@ -205,7 +209,7 @@ object PositionalMerkleTree {
 
     private def leafHash(element: ByteString): ByteString = {
         val hash = blake2b_256(element)
-        require(hash != EmptyLeafHash, "PositionalMerkleTree: reserved empty leaf")
+        require(hash != NullHash, "PositionalMerkleTree: reserved empty leaf")
         hash
     }
 }

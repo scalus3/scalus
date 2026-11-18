@@ -23,7 +23,7 @@ object PositionalPayoutBinding {
         val claim = request.membership
         onChainRequire(claim.root == request.currentRoot, "Payout: current root required")
         onChainRequire(claim.position == request.paidPosition, "Payout: position mismatch")
-        OnChain.verifyAndEmpty(
+        OnChain.delete(
           claim.root,
           claim.depth,
           claim.position,
@@ -47,7 +47,7 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
 
     private def accepts(input: Single, expected: ByteString): Unit = {
         assert(
-          OnChain.verifyAndEmpty(
+          OnChain.delete(
             input.root,
             input.depth,
             input.position,
@@ -56,28 +56,26 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
           ) == expected
         )
         assert(returned(singleResult(input)) == expected)
-        assert(
-          OnChain.verifyMembership(
-            input.root,
-            input.depth,
-            input.position,
-            input.element,
-            input.proof
-          ) == input.root
+        OnChain.verifyMembership(
+          input.root,
+          input.depth,
+          input.position,
+          input.element,
+          input.proof
         )
-        assert(returned(membershipResult(input)) == input.root)
+        returnedUnit(membershipResult(input))
     }
 
     private def accepts(input: Multi, expected: ByteString): Unit = {
         assert(
-          OnChain.verifyAndEmptyMany(input.root, input.depth, input.leaves, input.proof) == expected
+          OnChain.deleteMany(input.root, input.depth, input.leaves, input.proof) == expected
         )
         assert(returned(multiResult(input)) == expected)
     }
 
     private def rejects(input: Single): Unit = {
         intercept[RequirementError](
-          OnChain.verifyAndEmpty(
+          OnChain.delete(
             input.root,
             input.depth,
             input.position,
@@ -100,7 +98,7 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
 
     private def rejects(input: Multi): Unit = {
         intercept[RequirementError](
-          OnChain.verifyAndEmptyMany(input.root, input.depth, input.leaves, input.proof)
+          OnChain.deleteMany(input.root, input.depth, input.leaves, input.proof)
         )
         assert(multiResult(input).isFailure)
     }
@@ -109,9 +107,7 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
         depth: Int,
         hash: ByteString => ByteString = blake2b_256
     ): Vector[ByteString] =
-        Vector.iterate(PositionalMerkleTree.EmptyLeafHash, depth + 1)(h =>
-            hash(appendByteString(h, h))
-        )
+        Vector.iterate(PositionalMerkleTree.NullHash, depth + 1)(h => hash(appendByteString(h, h)))
 
     private def siblings(proof: ByteString): Vector[ByteString] =
         proof.bytes.grouped(32).map(ByteString.fromArray).toVector
@@ -125,9 +121,9 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
               )
             )
             assertThrows[IllegalArgumentException](tree.proveMulti(Vector(0, position.toInt)))
-            assertThrows[IllegalArgumentException](tree.emptied(Vector(0, position.toInt)))
+            assertThrows[IllegalArgumentException](tree.delete(Vector(0, position.toInt)))
         val input = query(tree, data, Vector(0, 3, 7))
-        accepts(input, model.emptied(Vector(0, 3, 7)).root)
+        accepts(input, model.delete(Vector(0, 3, 7)).root)
         val leaves = input.leaves.toScalaList.toVector
         for i <- leaves.indices do
             rejects(
@@ -152,10 +148,10 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
             rejects(one.copy(leaves = SList.from(leaves)))
             val positions = leaves.map(_.position.toInt)
             assertThrows[IllegalArgumentException](tree.proveMulti(positions))
-            assertThrows[IllegalArgumentException](tree.emptied(positions))
+            assertThrows[IllegalArgumentException](tree.delete(positions))
         val equal = Vector.fill(8)(data.head)
         val t = PositionalMerkleTree.fromElements(equal, 3)
-        accepts(query(t, equal, Vector(0, 1)), naive(equal, 3).emptied(Vector(0, 1)).root)
+        accepts(query(t, equal, Vector(0, 1)), naive(equal, 3).delete(Vector(0, 1)).root)
         for first <- Vector(data.head, uniqueElement(99)) do
             rejects(
               Multi(
@@ -172,14 +168,14 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
     ) {
         val old0 = single(tree, data.head, 0)
         val old1 = single(tree, data(1), 1)
-        val next = tree.emptied(Vector(0))
-        assert(next.rootHash == model.emptied(Vector(0)).root)
+        val next = tree.delete(Vector(0))
+        assert(next.rootHash == model.delete(Vector(0)).root)
         accepts(old0, next.rootHash)
         rejects(old0.copy(root = next.rootHash))
         rejects(old1.copy(root = next.rootHash))
         rejects(query(tree, data, Vector(1, 6)).copy(root = next.rootHash))
-        accepts(single(next, data(1), 1), model.emptied(Vector(0, 1)).root)
-        accepts(query(next, data, Vector(1, 6)), model.emptied(Vector(0, 1, 6)).root)
+        accepts(single(next, data(1), 1), model.delete(Vector(0, 1)).root)
+        accepts(query(next, data, Vector(1, 6)), model.delete(Vector(0, 1, 6)).root)
         // Pure verification against an old root remains valid; the caller supplies current state.
         accepts(old0, next.rootHash)
         assert(tree.rootHash == old0.root)
@@ -187,18 +183,18 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
 
     test("shared ancestors use all replacements and all-leaf emptying needs zero helpers") {
         val positions = Vector(0, 1, 6)
-        val expected = model.emptied(positions).root
+        val expected = model.delete(positions).root
         accepts(query(tree, data, positions), expected)
-        val emptied = tree.emptied(positions)
+        val emptied = tree.delete(positions)
         var sequential = tree
         for position <- positions do
-            val next = sequential.emptied(Vector(position))
+            val next = sequential.delete(Vector(position))
             accepts(single(sequential, data(position), position), next.rootHash)
             sequential = next
         assert(sequential.rootHash == expected && emptied.rootHash == expected)
         for position <- data.indices if !positions.contains(position) do
             val input = single(emptied, data(position), position)
-            accepts(input, model.emptied(positions :+ position).root)
+            accepts(input, model.delete(positions :+ position).root)
         val all = query(tree, data, data.indices.toVector)
         assert(all.proof == ByteString.empty)
         accepts(all, zeros(3).last)
@@ -210,7 +206,7 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
         assert(helpers.map(_._1) == Vector(13, 7))
         val input = query(tree, data, positions)
         assert(input.proof == concat(helpers.map(_._2)))
-        accepts(input, model.emptied(positions).root)
+        accepts(input, model.delete(positions).root)
         val ancestor3 = model.helpers(Vector(0)).find(_._1 == 3).get._2
         rejects(input.copy(proof = concat(Vector(input.proof, ancestor3))))
     }
@@ -221,7 +217,7 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
         val input = query(tree, data, positions)
         val hashes = siblings(input.proof)
         assert(hashes.distinct.size == 3)
-        accepts(input, model.emptied(positions).root)
+        accepts(input, model.delete(positions).root)
         rejects(input.copy(proof = concat(hashes.updated(0, hashes(1)).updated(1, hashes(0)))))
         rejects(input.copy(proof = concat(hashes.reverse)))
         rejects(
@@ -231,7 +227,7 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
         )
         for p <- data.indices do
             assert(tree.proveMulti(Vector(p)) == tree.proveMembership(p))
-            accepts(query(tree, data, Vector(p)), model.emptied(Vector(p)).root)
+            accepts(query(tree, data, Vector(p)), model.delete(Vector(p)).root)
     }
 
     test(
@@ -253,14 +249,14 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
             do
                 val input = query(t, values, selected)
                 assert(input.proof == reference.multiProof(selected))
-                accepts(input, reference.emptied(selected).root)
+                accepts(input, reference.delete(selected).root)
     }
 
     test("empty queries differ from nonempty queries with zero helpers") {
         for proof <- Vector(ByteString.empty, tree.rootHash) do
             rejects(Multi(tree.rootHash, 3, SList.empty, proof))
         assertThrows[IllegalArgumentException](tree.proveMulti(Vector.empty))
-        assertThrows[IllegalArgumentException](tree.emptied(Vector.empty))
+        assertThrows[IllegalArgumentException](tree.delete(Vector.empty))
         accepts(query(tree, data, data.indices.toVector), zeros(3).last)
         val input = query(tree, data, Vector(0, 1, 6))
         for proof <- Vector(
@@ -293,8 +289,8 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
                 if count > 0 then
                     val p = count - 1
                     val rebuilt = PositionalMerkleTree.fromElements(values.take(p), depth, hash)
-                    assert(t.emptied(Vector(p)).rootHash == rebuilt.rootHash)
-                    assert(rebuilt.rootHash == reference.emptied(Vector(p)).root)
+                    assert(t.delete(Vector(p)).rootHash == rebuilt.rootHash)
+                    assert(rebuilt.rootHash == reference.delete(Vector(p)).root)
                     if algorithm == "blake2b256" then
                         accepts(single(t, values(p), p), rebuilt.rootHash)
                         accepts(query(t, values, Vector(p)), rebuilt.rootHash)
@@ -324,9 +320,9 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
             snapshots += current -> current.rootHash
             val input = single(current, values(p), p)
             cleared :+= p
-            val next = current.emptied(Vector(p))
-            accepts(input, reference.emptied(cleared).root)
-            assert(next.rootHash == reference.emptied(cleared).root)
+            val next = current.delete(Vector(p))
+            accepts(input, reference.delete(cleared).root)
+            assert(next.rootHash == reference.delete(cleared).root)
             rejects(single(next, values(p), p))
             current = next
         for (snapshot, root) <- snapshots do assert(snapshot.rootHash == root)
@@ -407,7 +403,7 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
         val t = PositionalMerkleTree.fromElements(data.take(2), 1, digest)
         val root = t.rootHash
         invalid = true
-        assertThrows[IllegalArgumentException](t.emptied(Vector(0)))
+        assertThrows[IllegalArgumentException](t.delete(Vector(0)))
         assert(t.rootHash == root)
         val input = single(tree, data.head, 0)
         for proof <- Vector(
@@ -436,7 +432,7 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
         assert(repartitioned == canonical.proof)
         accepts(
           canonical.copy(proof = repartitioned),
-          naive(data.take(4), 2).emptied(Vector(0)).root
+          naive(data.take(4), 2).delete(Vector(0)).root
         )
         val emptyProof = Single(blake2b_256(data.head), 0, 0, data.head, ByteString.empty)
         accepts(emptyProof, zeros(0).head)
@@ -446,18 +442,18 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
     test("the proof position is the only updated position and must match the actual payout") {
         val claim = single(tree, data.head, 0)
         val request = PositionalPayoutBinding.Request(tree.rootHash, 0, claim)
-        val expected = model.emptied(Vector(0)).root
+        val expected = model.delete(Vector(0)).root
         assert(PositionalPayoutBinding.verify(request) == expected)
         assert(returned(evaluate(payoutProgram, request.toData)) == expected)
         for bad <- Vector(
               request.copy(paidPosition = 1),
               request.copy(paidPosition = 8, membership = claim.copy(position = 8)),
-              request.copy(currentRoot = tree.emptied(Vector(0)).rootHash)
+              request.copy(currentRoot = tree.delete(Vector(0)).rootHash)
             )
         do
             intercept[RequirementError](PositionalPayoutBinding.verify(bad))
             assert(evaluate(payoutProgram, bad.toData).isFailure)
-        assert(expected != model.emptied(Vector(1)).root)
+        assert(expected != model.delete(Vector(1)).root)
     }
 
     test("capacity and configured depth are authenticated independently of proof length") {
@@ -470,7 +466,7 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
             )
             val t = PositionalMerkleTree.fromElements(values.take(capacity), depth)
             val input = single(t, values.head, 0)
-            accepts(input, naive(values.take(capacity), depth).emptied(Vector(0)).root)
+            accepts(input, naive(values.take(capacity), depth).delete(Vector(0)).root)
             rejects(input.copy(depth = depth - 1))
             rejects(input.copy(depth = depth + 1))
             rejects(input.copy(proof = input.proof.drop(32)))
@@ -518,7 +514,7 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
                 )
                 val wanted = ByteString.fromHex(s.emptiedRoot)
                 val bad = s.copy(emptiedRoot = flip(wanted, 0).toHex)
-                val scalaRoot = OnChain.verifyAndEmpty(
+                val scalaRoot = OnChain.delete(
                   input.root,
                   input.depth,
                   input.position,

@@ -137,10 +137,10 @@ object PositionalMerkleTreeTestSupport {
             collect(1, 0, chunks.size, positions).sortBy(-_._1)
         }
         def multiProof(positions: Vector[Int]): ByteString = concat(helpers(positions).map(_._2))
-        def emptied(positions: Iterable[Int]): Naive =
+        def delete(positions: Iterable[Int]): Naive =
             new Naive(
               chunks.indices.map { i =>
-                  if positions.toSet.contains(i) then PositionalMerkleTree.EmptyLeafHash
+                  if positions.toSet.contains(i) then PositionalMerkleTree.NullHash
                   else chunks(i)
               }.toVector,
               nodeHash
@@ -153,7 +153,7 @@ object PositionalMerkleTreeTestSupport {
         nodeHash: ByteString => ByteString = blake2b_256
     ): Naive =
         new Naive(
-          data.map(blake2b_256).padTo(1 << depth, PositionalMerkleTree.EmptyLeafHash),
+          data.map(blake2b_256).padTo(1 << depth, PositionalMerkleTree.NullHash),
           nodeHash
         )
 
@@ -170,7 +170,7 @@ object PositionalMerkleTreeTestSupport {
 
     lazy val singleProgram: Program = PlutusV3.compile { (data: Data) =>
         val input = data.to[Single]
-        OnChain.verifyAndEmpty(input.root, input.depth, input.position, input.element, input.proof)
+        OnChain.delete(input.root, input.depth, input.position, input.element, input.proof)
     }.program
 
     lazy val membershipProgram: Program = PlutusV3.compile { (data: Data) =>
@@ -186,7 +186,7 @@ object PositionalMerkleTreeTestSupport {
 
     lazy val multiProgram: Program = PlutusV3.compile { (data: Data) =>
         val input = data.to[Multi]
-        OnChain.verifyAndEmptyMany(input.root, input.depth, input.leaves, input.proof)
+        OnChain.deleteMany(input.root, input.depth, input.leaves, input.proof)
     }.program
 
     def evaluate(program: Program, input: Data): Result =
@@ -201,5 +201,12 @@ object PositionalMerkleTreeTestSupport {
             success.term match
                 case Term.Const(Constant.ByteString(bytes), _) => bytes
                 case other => throw new AssertionError(s"Expected a byte string, got $other")
+        case failure: Result.Failure => throw new AssertionError(failure.toString)
+
+    def returnedUnit(result: Result): Unit = result match
+        case success: Result.Success =>
+            success.term match
+                case Term.Const(Constant.Unit, _) => ()
+                case other => throw new AssertionError(s"Expected unit, got $other")
         case failure: Result.Failure => throw new AssertionError(failure.toString)
 }

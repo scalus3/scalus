@@ -1,14 +1,14 @@
 ---
 title: Positional Merkle Tree
 sidebarTitle: Positional Merkle Tree
-description: Fixed-depth positional commitments with single proofs, SSZ multiproofs and verify-and-empty for Cardano smart contracts.
+description: Fixed-depth positional commitments with single proofs, SSZ multiproofs and deletion for Cardano smart contracts.
 ---
 
 # Positional Merkle Tree
 
-`PositionalMerkleTree` commits to a fixed number of slots and can empty occupied slots with a proof. A treasury can commit to its payout outputs, pay each selected output once, and retain only the updated root in its datum. Equal outputs at different positions are separate leaves.
+`PositionalMerkleTree` commits to a fixed number of slots and can delete occupied slots with a proof: a deleted slot is set to 32 zero bytes. A treasury can commit to its payout outputs, pay each selected output once, and retain only the updated root in its datum. Equal outputs at different positions are separate leaves.
 
-The caller authenticates **both the current root and the depth**, through a datum or script parameter, and binds every verified position to the slot actually paid or changed. An empty slot and an emptied slot have the same value. Emptying preserves positions and capacity.
+The caller authenticates **both the current root and the depth**, through a datum or script parameter, and binds every verified position to the slot actually paid or changed. An unused slot and a deleted slot have the same value. Deletion preserves positions and capacity.
 
 ## Encoding
 
@@ -19,7 +19,7 @@ For depth `D`, positions are integers in `[0, 2^D)`. Depth zero is a single slot
 Let `H(x) = blake2b_256(x)`, the unkeyed 32-byte digest, and `++` mean byte concatenation:
 
 - Occupied leaf at position `p`: `H(elementBytes)`. The application defines and consistently serializes `elementBytes`; the library adds no framing.
-- Unused or emptied leaf: `Z[0] = 32 zero bytes`. An element whose digest equals `Z[0]` is refused.
+- Unused or deleted leaf: `Z[0] = 32 zero bytes` (`PositionalMerkleTree.NullHash`). An element whose digest equals `Z[0]` is refused.
 - Internal node: `H(left32 ++ right32)`, preserving left/right order.
 - Empty subtree of height `h + 1`: `Z[h + 1] = H(Z[h] ++ Z[h])`.
 - Root: pad the leaf chunks to exactly `2^D` with `Z[0]` and hash adjacent pairs until one chunk remains. Do not duplicate the last occupied leaf or mix in a count.
@@ -30,7 +30,7 @@ The root has generalized index 1; index `g` has children `2*g` and `2*g + 1`. Po
 
 A proof is **exactly `32 * D` bytes**: the sibling at the leaf level first, then each sibling up to the root. There are no direction bytes or indices in the proof. At level `i`, starting with `i = 0`, use bit `i` of `p`: zero hashes `current ++ sibling`, one hashes `sibling ++ current`. Depth is taken from authenticated configuration, never from proof length. Negative or out-of-range positions fail, including nonzero bits above depth.
 
-Verification hashes the submitted element. Verify-and-empty carries two hashes over the same siblings: one starts at `H(elementBytes)`, the other at `Z[0]`. It checks the first against the supplied root and returns the second. Membership returns the unchanged root after the same membership check, computing only the old path.
+Verification hashes the submitted element. `delete` carries two hashes over the same siblings: one starts at `H(elementBytes)`, the other at `Z[0]`. It checks the first against the supplied root and returns the second. `verifyMembership` makes the same membership check, computing only the old path, and returns nothing.
 
 ### Multiproof
 
@@ -60,7 +60,7 @@ val outputs = Vector("output-0", "output-1", "output-2").map(ByteString.fromStri
 val tree = PositionalMerkleTree.fromElements(outputs, 15)
 val positions = Vector(0, 2)
 val proof = tree.proveMulti(positions)
-val updated = tree.emptied(positions)
+val updated = tree.delete(positions)
 
 // When only a commitment is needed, the iterator is consumed once with O(depth) memory.
 val root = PositionalMerkleTree.rootFromElements(outputs.iterator, 15)
@@ -73,7 +73,7 @@ Inside an `@Compile` validator, take `oldRoot` and `depth` from current authenti
 import scalus.cardano.onchain.plutus.crypto.tree.PositionalMerkleTree
 import scalus.cardano.onchain.plutus.prelude.List
 
-val nextRoot = PositionalMerkleTree.verifyAndEmptyMany(
+val nextRoot = PositionalMerkleTree.deleteMany(
   oldRoot,
   depth,
   List(
@@ -84,23 +84,23 @@ val nextRoot = PositionalMerkleTree.verifyAndEmptyMany(
 )
 ```
 
-For one payout use `verifyAndEmpty(root, depth, position, element, proof)`. For read-only membership use `verifyMembership` with the same arguments. A later payout needs a proof against the updated root: old-root single proofs cannot simply be reused after a prior payout.
+For one payout use `delete(root, depth, position, element, proof)`. For read-only membership use `verifyMembership` with the same arguments; it fails on an invalid proof and returns `Unit`, so its result cannot be mistaken for an updated root. A later payout needs a proof against the updated root: old-root single proofs cannot simply be reused after a prior payout.
 
 The treasury validator must also check the actual paid outputs, preserve its state token and continuing value, and authenticate the continuing datum. This library verifies a root transition; it does not authorize a treasury transaction.
 
-Verify-and-empty proves membership against **the root supplied to it**. An old proof still succeeds when deliberately checked against its old root. The caller must require the current state root, and must bind the verified position to the actual payout or changed slot. Verifying slot 0 and paying slot 1 is not authorized by that proof. After emptying slot 0, an untouched slot's old proof can also be stale when one of its helper subtrees contained slot 0; regenerate it against the updated tree.
+`delete` proves membership against **the root supplied to it**. An old proof still succeeds when deliberately checked against its old root. The caller must require the current state root, and must bind the verified position to the actual payout or changed slot. Verifying slot 0 and paying slot 1 is not authorized by that proof. After deleting slot 0, an untouched slot's old proof can also be stale when one of its helper subtrees contained slot 0; regenerate it against the updated tree.
 
 ## Security
 
 The commitment assumes BLAKE2b-256 collision and preimage resistance, consistent element serialization, and an authenticated depth and root. Fixed depth plus exact path length prevents an internal node from being accepted as a leaf at a different level, even though both use the same hash function. A different authenticated depth defines a different interpretation; the root alone does not bind depth.
 
-Zero32 has no known leaf preimage. Consequently unused and emptied slots cannot prove an element, and a valid emptying proof cannot be replayed against the new root. Strictly increasing bounded positions prevent paying one slot twice in a batch. Recomputing old and new roots together shares one authenticated topology. Exact helper consumption prevents malformed multiproofs from reading missing nodes or ignoring unused helpers. Zero-valued helpers themselves are valid, necessary hashes.
+Zero32 has no known leaf preimage. Consequently unused and deleted slots cannot prove an element, and a valid deletion proof cannot be replayed against the new root. Strictly increasing bounded positions prevent paying one slot twice in a batch. Recomputing old and new roots together shares one authenticated topology. Exact helper consumption prevents malformed multiproofs from reading missing nodes or ignoring unused helpers. Zero-valued helpers themselves are valid, necessary hashes.
 
 The regression suites name CVE-2012-2459 (duplicate-last padding), CVE-2017-12842 and tBTC GHSA-wg2x-rv86-mmpx (leaf/internal ambiguity and wrong depths), CVE-2023-34459 (malformed multiproofs), and the CVE-2018-17144 duplicate-position analogue. These are regression analogies, not claims that the historical exploits apply unchanged to this tree.
 
 ## Costs and verification
 
-At depth 15 a single proof is 480 bytes. Verify-and-empty hashes the element once and each old/new parent once: 31 BLAKE2b-256 calls. Membership uses 16 calls. A multiproof shares selected sibling paths and their ancestors. Proof sizes below count only the concatenated helpers; positions, elements and Plutus Data framing are additional transaction bytes.
+At depth 15 a single proof is 480 bytes. `delete` hashes the element once and each old/new parent once: 31 BLAKE2b-256 calls. Membership uses 16 calls. A multiproof shares selected sibling paths and their ancestors. Proof sizes below count only the concatenated helpers; positions, elements and Plutus Data framing are additional transaction bytes.
 
 The committed tests compare both SHA-256 and BLAKE2b trees to 86 positive arithmetic cases generated by executing the pinned maintained SSZ code, including the root calculators in [`src/ssz/verification.py`](https://github.com/ethereum/ssz-specs/blob/7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70/src/ssz/verification.py). The BLAKE2b vectors also run as Scala and compiled Plutus V3. Both hashes initialize their zero caches before any SSZ imports in separate generator processes. The 42 v1.5.0 cases remain an arithmetic cross-check. Independent full rebuilding checks random duplicate-heavy trees at depths 1 through 6 and every nonempty subset at depths 1 through 3. Tests assert nonzero executed counts per depth, hash and applicable backend. The fixture's README records the sources, generation inputs and source digests.
 
@@ -122,7 +122,7 @@ The reference supplies valid arithmetic, never rejection verdicts. Negative expe
 
 ### Measured costs
 
-`PositionalMerkleTreeBudgetTest` prints CPU steps, memory units and raw proof bytes using `Options.release` and `PlutusVM.makePlutusV3VM()`, which loads the shipped `CardanoInfo.mainnet` cost model. With Scala 3.3.9, depth 15 and 32-byte elements, single verify-and-empty costs **46,503,274 CPU steps and 161,238 memory units**, with a 480-byte proof.
+`PositionalMerkleTreeBudgetTest` prints CPU steps, memory units and raw proof bytes using `Options.release` and `PlutusVM.makePlutusV3VM()`, which loads the shipped `CardanoInfo.mainnet` cost model. With Scala 3.3.9, depth 15 and 32-byte elements, a single `delete` costs **46,503,274 CPU steps and 161,238 memory units**, with a 480-byte proof.
 
 The sequential column evaluates all `k` single operations in one compiled call, building each proof against the preceding updated root. The multiproof column evaluates one batch against the original root. Contiguous positions are `0` through `k - 1`; scattered positions are the sorted set `{(i * 7919) mod 32768 | 0 <= i < k}`. Element `i` is its unsigned integer value, encoded big-endian in 32 bytes. The measurements include decoding the supplied Plutus Data argument and require successful results equal to the off-chain updated root.
 
@@ -145,7 +145,7 @@ For 32,768 leaves at depth 15, a standalone JVM measurement on a shared Ryzen 9 
 
 ## Scope
 
-The API provides membership, single and batch emptying, and off-chain proof construction. It supplies no insertion/update verifier, non-membership proof, length commitment, output serialization, or transaction validator. Existing Merkle tree APIs and encodings are unchanged. A custom off-chain node digest exists for interoperability tests; the on-chain verifier always uses BLAKE2b-256.
+The API provides membership, single and batch deletion, and off-chain proof construction. It supplies no insertion/update verifier, non-membership proof, length commitment, output serialization, or transaction validator. Existing Merkle tree APIs and encodings are unchanged. A custom off-chain node digest exists for interoperability tests; the on-chain verifier always uses BLAKE2b-256.
 
 ## Related
 

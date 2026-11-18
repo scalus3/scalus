@@ -15,11 +15,11 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
     import PositionalMerkleTree.*
 
     private def scalaSingle(input: Single): ByteString =
-        verifyAndEmpty(input.root, input.depth, input.position, input.element, input.proof)
-    private def scalaMembership(input: Single): ByteString =
+        delete(input.root, input.depth, input.position, input.element, input.proof)
+    private def scalaMembership(input: Single): Unit =
         verifyMembership(input.root, input.depth, input.position, input.element, input.proof)
     private def scalaMulti(input: Multi): ByteString =
-        verifyAndEmptyMany(input.root, input.depth, input.leaves, input.proof)
+        deleteMany(input.root, input.depth, input.leaves, input.proof)
 
     private def rejects(input: Single): Unit = {
         intercept[RequirementError](scalaSingle(input))
@@ -59,8 +59,8 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
                         scalaSingles += 1
                         assertReferenceHash(returned(singleResult(input)), s.emptiedRoot)
                         uplcSingles += 1
-                        assert(scalaMembership(input) == root)
-                        assert(returned(membershipResult(input)) == root)
+                        scalaMembership(input)
+                        returnedUnit(membershipResult(input))
                     else rejects(input)
                 for m <- v.multis do
                     val input = Multi(
@@ -88,7 +88,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
     ) {
         for position <- Seq(0, 5, 15) do
             val input = single(position)
-            assert(returned(singleResult(input)) == tree.emptied(Vector(position)).rootHash)
+            assert(returned(singleResult(input)) == tree.delete(Vector(position)).rootHash)
             for offset <- input.proof.bytes.indices do
                 rejects(input.copy(proof = flip(input.proof, offset)))
             for offset <- input.element.bytes.indices do
@@ -103,7 +103,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
     ) {
         val positions = Vector(1, 4, 10, 15)
         val input = query(tree, data, positions)
-        assert(returned(multiResult(input)) == tree.emptied(positions).rootHash)
+        assert(returned(multiResult(input)) == tree.delete(positions).rootHash)
         for offset <- input.proof.bytes.indices do
             rejects(input.copy(proof = flip(input.proof, offset)))
         val leaves = input.leaves.toScalaList.toVector
@@ -143,7 +143,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
     ) {
         val input = single(0)
         rejects(input.copy(proof = input.proof.drop(32)))
-        rejects(input.copy(proof = concat(Vector(input.proof, EmptyLeafHash))))
+        rejects(input.copy(proof = concat(Vector(input.proof, NullHash))))
         rejects(input.copy(proof = input.proof.take(input.proof.length - 1)))
         rejects(
           input.copy(proof = concat(Vector(input.proof, ByteString.fromArray(Array[Byte](1)))))
@@ -156,23 +156,17 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
         val shortened = input.copy(element = internal, proof = input.proof.drop(32))
         rejects(shortened)
         rejects(shortened.copy(proof = input.proof))
-        assert(scalaMembership(shortened.copy(depth = 3)) == tree.rootHash)
-        assert(returned(membershipResult(shortened.copy(depth = 3))) == tree.rootHash)
+        scalaMembership(shortened.copy(depth = 3))
+        returnedUnit(membershipResult(shortened.copy(depth = 3)))
     }
 
     test("tBTC GHSA-wg2x-rv86-mmpx: exact authenticated depth even when a shorter root matches") {
         val input = single(0)
         val leafRoot = blake2b_256(input.element)
         rejects(input.copy(root = leafRoot, proof = ByteString.empty))
-        assert(
-          scalaMembership(
-            input.copy(root = leafRoot, depth = 0, proof = ByteString.empty)
-          ) == leafRoot
-        )
-        assert(
-          returned(
-            membershipResult(input.copy(root = leafRoot, depth = 0, proof = ByteString.empty))
-          ) == leafRoot
+        scalaMembership(input.copy(root = leafRoot, depth = 0, proof = ByteString.empty))
+        returnedUnit(
+          membershipResult(input.copy(root = leafRoot, depth = 0, proof = ByteString.empty))
         )
     }
 
@@ -190,7 +184,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
             val error = intercept[RequirementError](scalaMulti(bad))
             assert(error.getMessage.contains("missing helper"))
             assert(multiResult(bad).isFailure)
-        for suffix <- Seq(EmptyLeafHash, ByteString.fromArray(Array[Byte](1))) do
+        for suffix <- Seq(NullHash, ByteString.fromArray(Array[Byte](1))) do
             rejects(input.copy(proof = concat(Vector(input.proof, suffix))))
         val emptyQuery = input.copy(leaves = SList.empty)
         val error = intercept[RequirementError](scalaMulti(emptyQuery))
@@ -199,20 +193,18 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
         val all = query(tree, data, data.indices.toVector)
         assert(all.proof == ByteString.empty)
         assert(returned(multiResult(all)) == OffChain.fromElements(Vector.empty, 4).rootHash)
-        rejects(all.copy(proof = EmptyLeafHash))
+        rejects(all.copy(proof = NullHash))
     }
 
     test("CVE-2023-34459: zero-valued helpers are valid hashes, never uninitialized nodes") {
         val partial = OffChain.fromElements(Vector(data.head), 4)
         val input = query(partial, Vector(data.head), Vector(0))
-        assert(input.proof.take(32) == EmptyLeafHash)
+        assert(input.proof.take(32) == NullHash)
         assert(scalaMulti(input) == OffChain.fromElements(Vector.empty, 4).rootHash)
         assert(returned(multiResult(input)) == OffChain.fromElements(Vector.empty, 4).rootHash)
         rejects(input.copy(leaves = SList(Leaf(0, data(1)))))
         rejects(
-          input.copy(proof =
-              concat(Vector(EmptyLeafHash, EmptyLeafHash, EmptyLeafHash, EmptyLeafHash))
-          )
+          input.copy(proof = concat(Vector(NullHash, NullHash, NullHash, NullHash)))
         )
     }
 
@@ -238,14 +230,14 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
 
     test("configured depth ceiling rejects structurally matching 257-level proofs") {
         var hash = blake2b_256(data.head)
-        for _ <- 0 until 257 do hash = blake2b_256(appendByteString(hash, EmptyLeafHash))
-        val proof = concat(Vector.fill(257)(EmptyLeafHash))
+        for _ <- 0 until 257 do hash = blake2b_256(appendByteString(hash, NullHash))
+        val proof = concat(Vector.fill(257)(NullHash))
         rejects(Single(hash, 257, 0, data.head, proof))
         rejects(Multi(hash, 257, SList(Leaf(0, data.head)), proof))
     }
 
     test("maximum depth 256 accepts a real leaf at the last position") {
-        var zero = EmptyLeafHash
+        var zero = NullHash
         var root = blake2b_256(data.head)
         val siblings = Vector.newBuilder[ByteString]
         for _ <- 0 until 256 do
@@ -257,23 +249,23 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
         val input = Single(root, 256, position, data.head, proof)
         assert(scalaSingle(input) == zero)
         assert(returned(singleResult(input)) == zero)
-        assert(scalaMembership(input) == root)
-        assert(returned(membershipResult(input)) == root)
+        scalaMembership(input)
+        returnedUnit(membershipResult(input))
         val multi = Multi(root, 256, SList(Leaf(position, data.head)), proof)
         assert(scalaMulti(multi) == zero)
         assert(returned(multiResult(multi)) == zero)
     }
 
     test(
-      "an unused or emptied slot cannot be proved or emptied, including the known-preimage controls"
+      "an unused or deleted slot cannot be proved or deleted, including the known-preimage controls"
     ) {
         val partial = OffChain.fromElements(Vector(data.head), 4)
-        for value <- Vector(ByteString.empty, EmptyLeafHash, data.head) do
+        for value <- Vector(ByteString.empty, NullHash, data.head) do
             rejects(Single(partial.rootHash, 4, 1, value, partial.proveMembership(1)))
             rejects(
               Multi(partial.rootHash, 4, SList(Leaf(1, value)), partial.proveMulti(Vector(1)))
             )
-        val after = tree.emptied(Vector(0))
+        val after = tree.delete(Vector(0))
         rejects(single(0).copy(root = after.rootHash, proof = after.proveMembership(0)))
         rejects(query(after, data, Vector(0)))
         rejects(single(0).copy(root = after.rootHash))
@@ -281,23 +273,23 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
     }
 
     test("the reserved empty digest is rejected directly, without needing a BLAKE2b preimage") {
-        val error = intercept[RequirementError](nonEmptyLeaf(EmptyLeafHash))
+        val error = intercept[RequirementError](nonEmptyLeaf(NullHash))
         assert(error.getMessage.contains("reserved empty leaf"))
         given Options = Options.release
         val program = PlutusV3.compile { (data: Data) => nonEmptyLeaf(data.to[ByteString]) }.program
-        assert(evaluate(program, EmptyLeafHash.toData).isFailure)
+        assert(evaluate(program, NullHash.toData).isFailure)
         assert(nonEmptyLeaf(blake2b_256(data.head)) == blake2b_256(data.head))
     }
 
     test(
-      "k identical elements at k positions are each emptied exactly once, sequentially and together"
+      "k identical elements at k positions are each deleted exactly once, sequentially and together"
     ) {
         for k <- Seq(1, 2, 4, 8, 16) do
             val equal = Vector.fill(k)(data.head)
             val original = OffChain.fromElements(equal, 4)
             val positions = equal.indices.toVector
             val all = query(original, equal, positions)
-            assert(returned(multiResult(all)) == original.emptied(positions).rootHash)
+            assert(returned(multiResult(all)) == original.delete(positions).rootHash)
             var current = original
             for position <- positions do
                 val input = Single(
@@ -307,7 +299,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
                   data.head,
                   current.proveMembership(position)
                 )
-                val next = current.emptied(Vector(position))
+                val next = current.delete(Vector(position))
                 assert(scalaSingle(input) == next.rootHash)
                 assert(returned(singleResult(input)) == next.rootHash)
                 rejects(input.copy(root = next.rootHash, proof = next.proveMembership(position)))

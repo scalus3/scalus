@@ -7,7 +7,7 @@ import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.{ByteString, FromData, ToData}
 import scalus.uplc.builtin.ByteString.hex
 
-/** Positional membership and verify-and-empty for an SSZ chunk tree with BLAKE2b-256.
+/** Positional membership and deletion for an SSZ chunk tree with BLAKE2b-256.
   *
   * The caller must authenticate both root and depth (0..256) in a datum or script parameter.
   * Positions are zero-based integers below 2^depth. Leaves hash the element once; empty leaves are
@@ -21,8 +21,8 @@ import scalus.uplc.builtin.ByteString.hex
 @Compile
 object PositionalMerkleTree {
 
-    /** Reserved empty chunk, shared by unused and emptied slots. */
-    val EmptyLeafHash: ByteString =
+    /** 32 zero bytes: the reserved chunk of unused and deleted slots. */
+    val NullHash: ByteString =
         hex"0000000000000000000000000000000000000000000000000000000000000000"
 
     /** A position and its unhashed element. Multiproof queries must be strictly ascending. */
@@ -30,13 +30,14 @@ object PositionalMerkleTree {
 
     private case class Node(position: BigInt, oldHash: ByteString, newHash: ByteString)
 
-    /** Verify a positional proof and return the root with that occupied slot emptied.
+    /** Verify that `element` occupies `position` and return the root with that slot set to
+      * [[NullHash]].
       *
       * `proof` is exactly `depth` sibling hashes (32 bytes each), bottom-up. Directions come from
       * the position's bits, least significant first. Malformed proofs or empty slots fail. Both
       * roots are recomputed together in one walk.
       */
-    def verifyAndEmpty(
+    def delete(
         root: ByteString,
         depth: BigInt,
         position: BigInt,
@@ -45,11 +46,11 @@ object PositionalMerkleTree {
     ): ByteString = {
         checkSingle(depth, position, proof)
         val leaf = nonEmptyLeaf(blake2b_256(element))
-        emptyUp(root, position, leaf, EmptyLeafHash, proof, 0, depth * 32)
+        deleteUp(root, position, leaf, NullHash, proof, 0, depth * 32)
     }
 
-    /** Verify membership and return the unchanged root, failing on invalid proofs or empty slots.
-      * Uses the same position and proof encoding as [[verifyAndEmpty]].
+    /** Verify that `element` occupies `position`, failing on invalid proofs or empty slots. Uses
+      * the same position and proof encoding as [[delete]].
       */
     def verifyMembership(
         root: ByteString,
@@ -57,15 +58,14 @@ object PositionalMerkleTree {
         position: BigInt,
         element: ByteString,
         proof: ByteString
-    ): ByteString = {
+    ): Unit = {
         checkSingle(depth, position, proof)
         val computed =
             membershipUp(position, nonEmptyLeaf(blake2b_256(element)), proof, 0, depth * 32)
         require(computed == root, "PositionalMerkleTree: root mismatch")
-        root
     }
 
-    /** Verify an SSZ multiproof and empty all selected occupied slots in one topology walk.
+    /** Verify an SSZ multiproof and delete all selected occupied slots in one topology walk.
       *
       * `leaves` must be nonempty with strictly ascending, distinct, in-range positions. The proof
       * contains exactly the helpers from SSZ `get_helper_indices(2^depth + positions)`, in
@@ -73,7 +73,7 @@ object PositionalMerkleTree {
       * consumed; missing, extra and trailing bytes fail. Equal elements at different positions are
       * allowed.
       */
-    def verifyAndEmptyMany(
+    def deleteMany(
         root: ByteString,
         depth: BigInt,
         leaves: List[Leaf],
@@ -82,7 +82,7 @@ object PositionalMerkleTree {
         val capacity = capacityAtDepth(depth)
         require(!leaves.isEmpty, "PositionalMerkleTree: empty query")
         val nodes = leafNodes(leaves, -1, capacity, Nil)
-        emptyLevels(root, nodes, depth, proof, 0)
+        deleteLevels(root, nodes, depth, proof, 0)
     }
 
     private def capacityAtDepth(depth: BigInt): BigInt = {
@@ -101,14 +101,14 @@ object PositionalMerkleTree {
 
     // Package visibility lets tests exercise the reserved digest without finding a hash preimage.
     private[tree] def nonEmptyLeaf(hash: ByteString): ByteString = {
-        require(hash != EmptyLeafHash, "PositionalMerkleTree: reserved empty leaf")
+        require(hash != NullHash, "PositionalMerkleTree: reserved empty leaf")
         hash
     }
 
     private def combine(left: ByteString, right: ByteString): ByteString =
         blake2b_256(appendByteString(left, right))
 
-    private def emptyUp(
+    private def deleteUp(
         root: ByteString,
         position: BigInt,
         oldHash: ByteString,
@@ -124,7 +124,7 @@ object PositionalMerkleTree {
             val sibling = sliceByteString(offset, 32, proof)
             val parent = quotientInteger(position, 2)
             if modInteger(position, 2) == BigInt(0) then
-                emptyUp(
+                deleteUp(
                   root,
                   parent,
                   combine(oldHash, sibling),
@@ -134,7 +134,7 @@ object PositionalMerkleTree {
                   end
                 )
             else
-                emptyUp(
+                deleteUp(
                   root,
                   parent,
                   combine(sibling, oldHash),
@@ -177,10 +177,10 @@ object PositionalMerkleTree {
               rest,
               leaf.position,
               capacity,
-              Cons(Node(leaf.position, hash, EmptyLeafHash), acc)
+              Cons(Node(leaf.position, hash, NullHash), acc)
             )
 
-    private def emptyLevels(
+    private def deleteLevels(
         root: ByteString,
         nodes: List[Node],
         remaining: BigInt,
@@ -193,11 +193,11 @@ object PositionalMerkleTree {
             val node = nodes.head
             require(node.oldHash == root, "PositionalMerkleTree: root mismatch")
             node.newHash
-        else emptyLevel(root, nodes, Nil, remaining, proof, offset)
+        else deleteLevel(root, nodes, Nil, remaining, proof, offset)
 
     // Known nodes and helpers are consumed right-to-left, level-by-level. Helpers therefore have
     // descending generalized indices, exactly SSZ's ordering. Parents share both root calculations.
-    private def emptyLevel(
+    private def deleteLevel(
         root: ByteString,
         nodes: List[Node],
         parents: List[Node],
@@ -205,7 +205,7 @@ object PositionalMerkleTree {
         proof: ByteString,
         offset: BigInt
     ): ByteString = nodes match
-        case Nil => emptyLevels(root, parents.reverse, remaining - 1, proof, offset)
+        case Nil => deleteLevels(root, parents.reverse, remaining - 1, proof, offset)
         case Cons(node, rest) =>
             val parent = quotientInteger(node.position, 2)
             val isRight = modInteger(node.position, 2) == BigInt(1)
@@ -216,7 +216,7 @@ object PositionalMerkleTree {
                   combine(left.oldHash, node.oldHash),
                   combine(left.newHash, node.newHash)
                 )
-                emptyLevel(root, rest.tail, Cons(merged, parents), remaining, proof, offset)
+                deleteLevel(root, rest.tail, Cons(merged, parents), remaining, proof, offset)
             else
                 require(
                   offset + 32 <= lengthOfByteString(proof),
@@ -227,5 +227,5 @@ object PositionalMerkleTree {
                     if isRight then
                         Node(parent, combine(helper, node.oldHash), combine(helper, node.newHash))
                     else Node(parent, combine(node.oldHash, helper), combine(node.newHash, helper))
-                emptyLevel(root, rest, Cons(merged, parents), remaining, proof, offset + 32)
+                deleteLevel(root, rest, Cons(merged, parents), remaining, proof, offset + 32)
 }

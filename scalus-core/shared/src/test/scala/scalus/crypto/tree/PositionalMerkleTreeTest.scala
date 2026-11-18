@@ -53,7 +53,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite with ScalaCheckPropertyChecks
                     counts("single proofs") += 1
                     if single.position < v.count then
                         assertReferenceHash(
-                          tree.emptied(Vector(single.position)).rootHash,
+                          tree.delete(Vector(single.position)).rootHash,
                           single.emptiedRoot
                         )
                         counts("emptied") += 1
@@ -61,7 +61,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite with ScalaCheckPropertyChecks
                     assert(model.helpers(multi.positions).map(_._1) == multi.helperIndices)
                     assert(tree.proveMulti(multi.positions) == ByteString.fromHex(multi.proof))
                     assert(model.multiProof(multi.positions) == ByteString.fromHex(multi.proof))
-                    assertReferenceHash(tree.emptied(multi.positions).rootHash, multi.emptiedRoot)
+                    assertReferenceHash(tree.delete(multi.positions).rootHash, multi.emptiedRoot)
                     counts("multiproofs") += 1
             for backend <- Vector(
                   "materialized",
@@ -81,14 +81,14 @@ class PositionalMerkleTreeTest extends AnyFunSuite with ScalaCheckPropertyChecks
         for position <- data.indices do
             assert(tree.proveMembership(position) == model.proof(position))
         assert(tree.proveMulti(positions) == model.multiProof(positions))
-        assert(tree.emptied(positions).rootHash == model.emptied(positions).root)
+        assert(tree.delete(positions).rootHash == model.delete(positions).root)
         val input = query(tree, data, positions)
         assert(
-          OnChain.verifyAndEmptyMany(input.root, input.depth, input.leaves, input.proof) == model
-              .emptied(positions)
+          OnChain.deleteMany(input.root, input.depth, input.leaves, input.proof) == model
+              .delete(positions)
               .root
         )
-        assert(returned(multiResult(input)) == model.emptied(positions).root)
+        assert(returned(multiResult(input)) == model.delete(positions).root)
     }
 
     for depth <- 1 to 6 do
@@ -131,12 +131,12 @@ class PositionalMerkleTreeTest extends AnyFunSuite with ScalaCheckPropertyChecks
         assert(
           returned(
             singleResult(Single(tree.rootHash, 0, 0, data.head, ByteString.empty))
-          ) == PositionalMerkleTree.EmptyLeafHash
+          ) == PositionalMerkleTree.NullHash
         )
     }
 
     test(
-      "off-chain builders reject capacity overflow, bad depths, indices, ordering and repeat emptying"
+      "off-chain builders reject capacity overflow, bad depths, indices, ordering and repeat deletion"
     ) {
         for depth <- Seq(-1, 30) do
             assertThrows[IllegalArgumentException](
@@ -155,8 +155,8 @@ class PositionalMerkleTreeTest extends AnyFunSuite with ScalaCheckPropertyChecks
             assertThrows[IllegalArgumentException](tree.proveMembership(position))
         for positions <- Seq(Vector.empty, Vector(1, 1), Vector(2, 1), Vector(-1), Vector(4)) do
             assertThrows[IllegalArgumentException](tree.proveMulti(positions))
-            assertThrows[IllegalArgumentException](tree.emptied(positions))
-        assertThrows[IllegalArgumentException](tree.emptied(Vector(3)))
-        assertThrows[IllegalArgumentException](tree.emptied(Vector(1)).emptied(Vector(1)))
+            assertThrows[IllegalArgumentException](tree.delete(positions))
+        assertThrows[IllegalArgumentException](tree.delete(Vector(3)))
+        assertThrows[IllegalArgumentException](tree.delete(Vector(1)).delete(Vector(1)))
     }
 }
