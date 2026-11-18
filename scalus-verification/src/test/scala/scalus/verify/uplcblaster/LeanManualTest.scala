@@ -33,6 +33,10 @@ class LeanManualTest extends AnyFunSuite {
         )
         assert(LeanManual.axiomsOf(printed, "Vault.Proofs.three").contains(Nil))
         assert(LeanManual.axiomsOf(printed, "Vault.Proofs.four").isEmpty)
+        // A message of a form not read here is none, not a theorem of no axioms.
+        val other =
+            List(Message(9, Severity.Information, "'Vault.Proofs.five' depends on: sorryAx"))
+        assert(LeanManual.axiomsOf(other, "Vault.Proofs.five").isEmpty)
     }
 
     test("the axioms say what a proof rests on") {
@@ -115,25 +119,77 @@ class LeanManualTest extends AnyFunSuite {
         assert(!proved.text.contains("to be proved by hand"), proved.text)
     }
 
-    test("the Lean files of the proofs by hand are hashed apart from the workspace's environment") {
+    test("a proof's sources are its module and the proofs it imports, and only they are hashed") {
         val root = Files.createTempDirectory("scalus-lean-manual")
         try
             val workspace = root.resolve("Vault")
             val proofs = workspace.resolve("Vault").resolve("Proofs")
             Files.createDirectories(proofs)
             Files.writeString(workspace.resolve("lean-toolchain"), "leanprover/lean4:v4.24.0\n")
-            val before = LeanManual.proofsHash(workspace)
-            Files.writeString(proofs.resolve("Clamp.lean"), "theorem one : 1 = 1 := rfl\n")
-            val written = LeanManual.proofsHash(workspace)
-            assert(written != before)
-            Files.writeString(proofs.resolve("Clamp.lean"), "theorem two : 2 = 2 := rfl\n")
-            val changed = LeanManual.proofsHash(workspace)
-            assert(changed != written)
-            // A file that is no Lean source, as an editor's or Finder's, changes nothing, and is
-            // not read: it need not be text.
+            val clamp = proofs.resolve("Clamp.lean")
+            val lemmas = proofs.resolve("Lemmas.lean")
+            val other = proofs.resolve("Other.lean")
+            Files.writeString(lemmas, "theorem one : 1 = 1 := rfl\n")
+            Files.writeString(other, "theorem two : 2 = 2 := rfl\n")
+            Files.writeString(
+              clamp,
+              "import Vault.Generated.clamp_in_range\nimport Vault.Proofs.Lemmas\n\n" +
+                  "theorem p : 1 = 1 := one\n"
+            )
+            assert(
+              LeanManual.proofSources(workspace, "Vault.Proofs.Clamp").toSet == Set(clamp, lemmas)
+            )
+            val before = LeanManual.proofsHash(workspace, "Vault.Proofs.Clamp")
+            // A proof it does not import changes nothing, nor does a file that is no Lean source,
+            // as an editor's or Finder's, which is not read, and need not be text.
+            Files.writeString(other, "theorem three : 3 = 3 := rfl\n")
             Files.write(proofs.resolve(".DS_Store"), Array[Byte](0, -1, -2, 0x7f))
             Files.writeString(proofs.resolve("README.md"), "What belongs here.\n")
-            assert(LeanManual.proofsHash(workspace) == changed)
+            assert(LeanManual.proofsHash(workspace, "Vault.Proofs.Clamp") == before)
+            // One it imports does.
+            Files.writeString(lemmas, "theorem one : 1 = 1 := by rfl\n")
+            assert(LeanManual.proofsHash(workspace, "Vault.Proofs.Clamp") != before)
+
+            // A source that turns off Lean's kernel check makes the proof none.
+            assert(LeanManual.skippingTheKernel(workspace, "Vault.Proofs.Clamp").isEmpty)
+            Files.writeString(
+              lemmas,
+              "set_option debug.skipKernelTC true in\ntheorem one : 1 = 1 := rfl\n"
+            )
+            assert(LeanManual.skippingTheKernel(workspace, "Vault.Proofs.Clamp").contains(lemmas))
+        finally scalus.verify.lean.Directories.remove(root)
+    }
+
+    test("a module is held to the code by its text and by its programs") {
+        val clamp = FunctionDef(Math.clamp)
+        val inRange = forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
+            (lo <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+        )
+        val lowered = UplcBlaster.lower(inRange, FunctionTable(clamp)).fold(fail(_), identity)
+        val root = Files.createTempDirectory("scalus-lean-manual")
+        try
+            val written = UplcBlaster.statementModule(
+              lowered,
+              120,
+              Some(ProofKind.Blaster),
+              400000,
+              statementModule,
+              "Vault/Generated/clamp_in_range"
+            )
+            val file = root.resolve("Vault/Generated/clamp_in_range.lean")
+            assert(written.unlike(root, file).exists(_.contains("not in the workspace")))
+            Files.createDirectories(root.resolve("Vault/Generated/clamp_in_range"))
+            Files.writeString(file, written.text)
+            written.programs.foreach((path, program) =>
+                Files.writeString(root.resolve(path), UplcBlaster.programHex(program))
+            )
+            assert(written.unlike(root, file).isEmpty)
+            // A module of the same header without the axiom of its proof, as one written before it.
+            Files.writeString(file, written.text.replace("axiom proved : statement", ""))
+            assert(written.unlike(root, file).exists(_.contains("not the statement's")))
+            Files.writeString(file, written.text)
+            Files.writeString(root.resolve(written.programs.head._1), "00")
+            assert(written.unlike(root, file).exists(_.contains("programs")))
         finally scalus.verify.lean.Directories.remove(root)
     }
 }

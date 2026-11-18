@@ -6,7 +6,7 @@
       "CardanoLedgerApi": "3dd048e3eb86",
       "PlutusCore": "71872c19a90b",
       "ScalusProofs": "16c4f79c84fecfd5",
-      "proofs": "72aa18807428fc9b",
+      "proofs": "8097bcd9f8d7f0f7",
       "toolchain": "leanprover/lean4:v4.24.0"
     },
     "uplc-blaster": {

@@ -1,7 +1,7 @@
 package scalus.verify.uplcblaster
 
 import scalus.verify.*
-import scalus.verify.lean.{LeanServer, LeanServerProvider, LeanWorkspace}
+import scalus.verify.lean.{LeanServer, LeanServerProvider, LeanWorkspace, Processes}
 import scalus.verify.lean.LeanServer.{Message, Severity}
 
 import java.nio.charset.StandardCharsets
@@ -15,10 +15,10 @@ import scala.jdk.CollectionConverters.*
   * The statement is written into the workspace as the module `<Package>.Generated.<name>`, as
   * `blaster-uplc` lowers it, as written, at `budget` steps, and without the axiom `proved`: no
   * proof of Scalus found it ([[UplcBlaster.statementModule]]). [[LeanProofs]] writes it where its
-  * proofs export, and holds the workspace's module to the code where they do not. `theorem`, a
-  * theorem of the module `module`, which is under `<Package>/Proofs`, is to prove the module's
-  * `statement`. Lake builds both modules, as Lean's server does not build an import that is out of
-  * date, and the tactic has Lean elaborate
+  * proofs export. The tactic holds the workspace's module, and its programs, to the statement as
+  * the code has it now. `theorem`, a theorem of the module `module`, which is under
+  * `<Package>/Proofs`, is to prove the module's `statement`. Lake builds both modules, as Lean's
+  * server does not build an import that is out of date, and the tactic has Lean elaborate
   * {{{
   * import <module>
   * import <the statement's module>
@@ -30,34 +30,37 @@ import scala.jdk.CollectionConverters.*
   *     runs as Blaster's optimizer gives them, [[ProofKind.LeanKernelOfOptimizedRuns]];
   *   - `Lean.ofReduceBool`: it evaluates with `native_decide`, [[ProofKind.LeanNative]];
   *   - `<Package>.Generated.<other>.proved`: it cites what Scalus proved of another statement,
-  *     which is then one of the proof's lemmas, and is to be among the verifier's theorems. A
-  *     second check has Lean take each such axiom as that of its statement's module, so a proof
-  *     cannot declare one of its own under the name.
+  *     which is then one of the proof's lemmas, and is to be among the verifier's theorems. The
+  *     module of that statement is to state the axiom, and a second check has Lean take each such
+  *     axiom as that module's, so a proof cannot declare one of its own under the name.
   *
   * A proof that uses `sorry`, cites the result of its own statement, or rests on another axiom is
   * none, and so is one that rests on Blaster's `blasterProven`: that axiom proves any proposition
   * where it is used without the tactic, and its uses do not tell one from the other. What Blaster
-  * proves, a proof by hand cites by a statement Scalus checked. The first check of a proof may take
-  * minutes: Lake builds the statement's module, whose programs Lean runs symbolically.
+  * proves, a proof by hand cites by a statement Scalus checked. Nor is a proof whose sources set
+  * `debug.skipKernelTC`, which adds declarations Lean's kernel does not check, and which
+  * `#print axioms` does not see. Its sources are its module and the modules under
+  * `<Package>/Proofs` it imports; that the kernel checked every declaration of them is not replayed
+  * (as `lean4checker` would).
   *
   * A result is kept as `blaster-uplc`'s are: its fingerprint has the workspace's environment, the
-  * hash of the Lean files under `<Package>/Proofs`, which the environment leaves out, the theorem,
-  * the statement's text at the budget, and its programs. It keeps the hash of the module of each
-  * statement it cites, and stands no longer where one has changed.
+  * hash of the proof's sources, which the environment leaves out, the theorem, the statement's text
+  * at the budget, and its programs. It keeps the hash of the module of each statement it cites, and
+  * stands no longer where one has changed.
   */
 final class LeanManual private (
     val module: String,
     val theorem: String,
     val budget: Int,
     val servers: LeanServerProvider,
-    val timeout: Option[FiniteDuration],
+    val timeout: FiniteDuration,
     /** How the statement's variables are mapped, or none where it was not said: as for
       * [[UplcBlaster.mapping]].
       */
     val mapping: Option[VariableMapping]
 ) extends Tactic {
     require(budget > 0, "the budget of a statement proved by hand must be positive")
-    require(timeout.forall(_.length > 0), "the lean-manual timeout must be positive")
+    require(timeout.length > 0, "the lean-manual timeout must be positive")
 
     override type Prepared = LeanManual.Prepared
 
@@ -99,99 +102,150 @@ final class LeanManual private (
         )
     }
 
-    override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult =
-        servers.workspace match
-            case None =>
-                VerificationResult.Failed(
-                  "lean-manual needs a workspace: the statement's module and the proof are in it"
-                )
-            case Some(workspace) =>
-                val proofs =
-                    s"${LeanWorkspace.packageName(workspace)}.${LeanWorkspace.ProofsDirectory}."
-                if !module.startsWith(proofs) then
-                    VerificationResult.Failed(
-                      s"the module of a proof by hand is to be under $proofs, and $module is " +
-                          "not: the result is kept by the files there, and one elsewhere would " +
-                          "change no result that is kept"
+    override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult = {
+        val result = for {
+            workspace <- servers.workspace.toRight(
+              LeanManual.failure(
+                "lean-manual needs a workspace: the statement's module and the proof are in it"
+              )
+            )
+            _ <- placed(workspace)
+            _ <- kernelChecked(workspace)
+            written = statementModule(prepared, workspace)
+            _ <- written.written
+                .unlike(workspace, written.file)
+                .map(reason =>
+                    LeanManual.failure(
+                      s"the Lean module ${written.module} $reason: write it with `sbt leanExport`"
                     )
-                else
-                    val deadline = timeout.map(_.fromNow)
-                    val statementModule = LeanManual.moduleOf(workspace, prepared)
-                    servers.server() match
-                        case Left(reason) => VerificationResult.Failed(reason)
-                        case Right(server) =>
-                            LeanManual
-                                .built(workspace, List(module, statementModule), deadline)
-                                .getOrElse(
-                                  checked(prepared, workspace, server, statementModule, deadline)
-                                )
+                )
+                .toLeft(())
+            server <- servers.server().left.map(LeanManual.failure)
+            deadline = timeout.fromNow
+            _ <- LeanManual.built(workspace, List(module, written.module), deadline).toLeft(())
+            proof <- checked(prepared, workspace, server, written.module, deadline)
+        } yield proof
+        result.merge
+    }
+
+    /** Where the proof's module is not under `<Package>/Proofs`, why it is no proof here: the
+      * result is kept by the sources there, and a module elsewhere would change no kept result.
+      */
+    private def placed(workspace: Path): Either[ExecutionResult, Unit] = {
+        val proofs = s"${LeanWorkspace.packageName(workspace)}.${LeanWorkspace.ProofsDirectory}."
+        Either.cond(
+          module.startsWith(proofs),
+          (),
+          LeanManual.failure(
+            s"the module of a proof by hand is to be under $proofs, and $module is not: the " +
+                "result is kept by the sources there"
+          )
+        )
+    }
+
+    /** Where a source of the proof sets `debug.skipKernelTC`, why it is no proof: Lean's kernel
+      * does not check what is declared under it, and `#print axioms` does not say so.
+      */
+    private def kernelChecked(workspace: Path): Either[ExecutionResult, Unit] =
+        LeanManual
+            .skippingTheKernel(workspace, module)
+            .map(file =>
+                LeanManual.failure(
+                  s"${workspace.relativize(file)}, a source of $theorem, sets debug.skipKernelTC: " +
+                      "Lean's kernel does not check what is declared under it"
+                )
+            )
+            .toLeft(())
 
     /** Lean's check that `theorem` proves the statement of `prepared`, the module
-      * `statementModule`, in `server`, with what is left of the time until `deadline`.
+      * `statementModule`, in `server`, with what is left of the time until `deadline`: the proof,
+      * or the result of a check that found none.
       */
     private def checked(
         prepared: Prepared,
         workspace: Path,
         server: LeanServer,
         statementModule: String,
-        deadline: Option[Deadline]
-    ): ExecutionResult = {
+        deadline: Deadline
+    ): Either[ExecutionResult, ExecutionResult] = {
         val text = LeanManual.checkText(module, statementModule, theorem)
-        LeanManual.finished(server.check(text, LeanManual.left(deadline)), theorem) match
-            case Left(result) => result
-            case Right(messages) =>
-                val packageName = LeanWorkspace.packageName(workspace)
-                LeanManual.read(messages, packageName, statementModule, theorem) match
-                    case Left(result) => result
-                    case Right((kind, axioms, cited)) =>
-                        LeanManual.theorems(prepared.goal, cited) match
-                            case Left(reason) => VerificationResult.Inconclusive(reason)
-                            case Right(lemmas) =>
-                                citations(workspace, server, cited, deadline).getOrElse(
-                                  VerificationResult.Proven(
-                                    Proof(
-                                      LeanManual.Artifact(
-                                        theorem,
-                                        module,
-                                        axioms,
-                                        kind,
-                                        budget,
-                                        prepared.asWritten.programHashes,
-                                        LeanManual.citedModules(workspace, cited),
-                                        kept = false
-                                      ),
-                                      lemmas
-                                    )
-                                  )
-                                )
+        for {
+            messages <- LeanManual.finished(server.check(text, LeanManual.left(deadline)), theorem)
+            read <- LeanManual.read(
+              messages,
+              LeanWorkspace.packageName(workspace),
+              statementModule,
+              theorem
+            )
+            (kind, axioms, cited) = read
+            lemmas <- LeanManual
+                .theorems(prepared.goal, cited)
+                .left
+                .map(LeanManual.undecided)
+            _ <- citations(workspace, server, cited, deadline).toLeft(())
+        } yield LeanManual.proven(
+          Proof(
+            LeanManual.Artifact(
+              theorem,
+              module,
+              axioms,
+              kind,
+              budget,
+              prepared.asWritten.programHashes,
+              LeanManual.citedModules(workspace, cited),
+              kept = false
+            ),
+            lemmas
+          )
+        )
     }
 
-    /** Nothing where Lean takes each axiom `proved` the proof cites, of the statements whose
-      * modules are `cited`, as that of its statement's module; else why the proof is none. A
-      * proof's own axiom of such a name is another declaration of it, which Lean refuses.
+    /** Nothing where each axiom `proved` the proof cites, of the statements whose modules are
+      * `cited`, is that module's: the module states it, as one of a statement Scalus proved does,
+      * and Lean takes the axiom as the module's where the proof's module is imported too. Else why
+      * the proof is none. A proof's own axiom of such a name is another declaration of it, which
+      * Lean refuses.
       */
     private def citations(
         workspace: Path,
         server: LeanServer,
         cited: List[String],
-        deadline: Option[Deadline]
+        deadline: Deadline
     ): Option[ExecutionResult] =
         if cited.isEmpty then None
-        else
-            val modules = cited.map(id => LeanWorkspace.generated(workspace, id)._1)
-            LeanManual.built(workspace, modules, deadline).orElse {
-                val text = LeanManual.citationText(module, modules)
-                LeanManual.finished(server.check(text, LeanManual.left(deadline)), theorem) match
-                    case Left(result) => Some(result)
-                    case Right(messages) =>
-                        val errors = messages.filter(_.severity == Severity.Error)
-                        Option.when(errors.nonEmpty)(
-                          VerificationResult.Failed(
-                            s"$theorem cites a result that is not its statement's: " +
-                                LeanManual.described(errors)
-                          )
-                        )
-            }
+        else {
+            val modules = cited.map(id => LeanWorkspace.generated(workspace, id))
+            modules
+                .find((_, file) =>
+                    !Files.isRegularFile(file) ||
+                        !Files
+                            .readString(file, StandardCharsets.UTF_8)
+                            .contains(LeanManual.provedAxiom)
+                )
+                .map((cited, _) =>
+                    LeanManual.failure(
+                      s"$theorem cites $cited.proved, and $cited states no result of Scalus"
+                    )
+                )
+                .orElse(LeanManual.built(workspace, modules.map(_._1), deadline))
+                .orElse {
+                    val text = LeanManual.citationText(module, modules.map(_._1))
+                    LeanManual.finished(
+                      server.check(text, LeanManual.left(deadline)),
+                      theorem
+                    ) match {
+                        case Left(result) => Some(result)
+                        case Right(messages) =>
+                            val errors = messages.filter(_.severity == Severity.Error)
+                            Option.when(errors.nonEmpty)(
+                              LeanManual.failure(
+                                s"$theorem cites a result that is not its statement's: " +
+                                    LeanManual.described(errors)
+                              )
+                            )
+                    }
+                }
+        }
 
     override def fingerprint(prepared: Prepared): Option[Fingerprint] =
         servers.workspace
@@ -200,7 +254,7 @@ final class LeanManual private (
                 val (statement, programs) = UplcBlaster.identity(prepared.lowered)
                 Fingerprint(
                   LeanWorkspace.environment(workspace) +
-                      (LeanManual.proofsPart -> LeanManual.proofsHash(workspace)),
+                      (LeanManual.proofsPart -> LeanManual.proofsHash(workspace, module)),
                   Fingerprint.hash(s"$name $module $theorem $budget $statement"),
                   programs
                 )
@@ -213,9 +267,9 @@ final class LeanManual private (
         Some(UplcBlaster.identity(prepared.lowered))
 
     override def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] =
-        result match
+        result match {
             case VerificationResult.Proven(proof) =>
-                proof.artifact match
+                proof.artifact match {
                     case artifact: LeanManual.Artifact =>
                         Some(
                           Kept(
@@ -232,13 +286,15 @@ final class LeanManual private (
                           )
                         )
                     case _ => None
+                }
             case _ => None
+        }
 
     /** The proof that was kept, where it still stands: of this theorem, and citing statements whose
       * modules are still those it was checked with, and which are among the verifier's theorems.
       */
-    override def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] =
-        for
+    override def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] = {
+        for {
             _ <- Either.cond(kept.result == Kept.Result.Proved, (), "it is no proof")
             workspace <- servers.workspace.toRight("there is no workspace to read its proof in")
             kind <- kept.notes
@@ -259,7 +315,7 @@ final class LeanManual private (
               "the module of a statement it cites has changed"
             )
             lemmas <- LeanManual.theorems(prepared.goal, ids)
-        yield VerificationResult.Proven(
+        } yield LeanManual.proven(
           Proof(
             LeanManual.Artifact(
               theorem,
@@ -274,9 +330,17 @@ final class LeanManual private (
             lemmas
           )
         )
+    }
 }
 
 object LeanManual {
+
+    /** A result of the tactic, of the type a tactic's run gives: a case of an enum is widened to
+      * the enum's type where no type is expected, as in a lambda.
+      */
+    private def failure(reason: String): ExecutionResult = VerificationResult.Failed(reason)
+    private def undecided(reason: String): ExecutionResult = VerificationResult.Inconclusive(reason)
+    private def proven(proof: Proof): ExecutionResult = VerificationResult.Proven(proof)
 
     /** The time a check of a proof is given, by default: it may build the statement's module. */
     val defaultTimeout: FiniteDuration = 30.minutes
@@ -290,7 +354,7 @@ object LeanManual {
         budget: Int,
         servers: LeanServerProvider
     ): LeanManual =
-        new LeanManual(module, theorem, budget, servers, Some(defaultTimeout), None)
+        new LeanManual(module, theorem, budget, servers, defaultTimeout, None)
 
     /** [[apply]], with the check given up after `timeout`. */
     def apply(
@@ -300,7 +364,7 @@ object LeanManual {
         servers: LeanServerProvider,
         timeout: FiniteDuration
     ): LeanManual =
-        new LeanManual(module, theorem, budget, servers, Some(timeout), None)
+        new LeanManual(module, theorem, budget, servers, timeout, None)
 
     /** A statement as the tactic lowered it, with the goal whose lemmas a proof may cite. */
     final case class Prepared(goal: Goal, lowered: UplcBlaster.Lowered) {
@@ -345,6 +409,9 @@ object LeanManual {
       */
     val blasterAxiom: String = "Blaster.Tactic.blasterProven"
 
+    /** The declaration of the result of a statement Scalus proved, in its module. */
+    private[uplcblaster] val provedAxiom = "\naxiom proved : statement\n"
+
     private[uplcblaster] val kindNote = "kind"
     private[uplcblaster] val theoremNote = "theorem"
     private[uplcblaster] val axiomsNote = "axioms"
@@ -353,42 +420,41 @@ object LeanManual {
     /** The part of a fingerprint that has the proofs written by hand. */
     private[uplcblaster] val proofsPart = "proofs"
 
-    /** The name of the module of the statement of `prepared` in `workspace`. */
-    private[uplcblaster] def moduleOf(workspace: Path, prepared: Prepared): String =
-        LeanWorkspace.generated(workspace, LeanProofs.moduleName(prepared.goal.statement.name))._1
-
     /** What is left of the time until `deadline`, for a check: at least a second. */
-    private def left(deadline: Option[Deadline]): Option[FiniteDuration] =
-        deadline.map(_.timeLeft.max(1.second))
+    private def left(deadline: Deadline): Option[FiniteDuration] =
+        Some(deadline.timeLeft.max(1.second))
 
     /** Builds `modules` in `workspace` with Lake, and the modules they import: Lean's server does
       * not build an import that is out of date, as one `leanExport` wrote again. Nothing where the
       * build succeeds; else why the proof is none, with Lake's errors, or that the time until
-      * `deadline` passed.
+      * `deadline` passed. Lake is stopped where the time passes, or the wait is interrupted.
       */
     private[uplcblaster] def built(
         workspace: Path,
         modules: List[String],
-        deadline: Option[Deadline]
+        deadline: Deadline
     ): Option[ExecutionResult] = {
         val output = Files.createTempFile("scalus-lean-manual-build-", ".log")
-        try
+        try {
             val process = new ProcessBuilder(("lake" :: "build" :: modules).asJava)
                 .directory(workspace.toFile)
                 .redirectErrorStream(true)
                 .redirectOutput(output.toFile)
                 .start()
-            val ended = deadline match
-                case Some(at) =>
+            val ended =
+                try
                     process.waitFor(
-                      at.timeLeft.toMillis.max(1L),
+                      deadline.timeLeft.toMillis.max(1L),
                       java.util.concurrent.TimeUnit.MILLISECONDS
                     )
-                case None => process.waitFor(); true
+                catch
+                    case interrupted: InterruptedException =>
+                        Processes.stop(process, Nil)
+                        throw interrupted
             if !ended then
-                scalus.verify.lean.Processes.stop(process, Nil)
+                Processes.stop(process, Nil)
                 Some(
-                  VerificationResult.Inconclusive(
+                  LeanManual.undecided(
                     s"Lake did not build ${modules.mkString(", ")} in time"
                   )
                 )
@@ -400,10 +466,10 @@ object LeanManual {
                     .take(20)
                     .mkString("; ")
                 Some(
-                  VerificationResult.Failed(s"Lake does not build ${modules.mkString(", ")}: $log")
+                  LeanManual.failure(s"Lake does not build ${modules.mkString(", ")}: $log")
                 )
             else None
-        finally Files.deleteIfExists(output)
+        } finally Files.deleteIfExists(output)
     }
 
     /** The text Lean elaborates to check `theorem`, of `module`, as a proof of the statement of
@@ -433,35 +499,39 @@ object LeanManual {
         result: LeanServer.Result,
         theorem: String
     ): Either[ExecutionResult, List[Message]] =
-        result match
+        result match {
             case LeanServer.Result.Finished(messages) => Right(messages)
             case LeanServer.Result.TimedOut(_) =>
-                Left(VerificationResult.Inconclusive(s"Lean did not check $theorem in time"))
-            case LeanServer.Result.Failed(reason) => Left(VerificationResult.Failed(reason))
+                Left(LeanManual.undecided(s"Lean did not check $theorem in time"))
+            case LeanServer.Result.Failed(reason) => Left(LeanManual.failure(reason))
+        }
 
     /** Lean's errors, by their lines. */
     private def described(errors: List[Message]): String =
         errors.map(message => s"${message.line}: ${message.text}").mkString("; ")
 
     /** The axioms `#print axioms` says `theorem` depends on, from Lean's messages: none where it
-      * says nothing of it.
+      * says nothing of it, or says it in a form that is not read here. An empty list is only that
+      * of a theorem Lean says depends on no axiom.
       */
     def axiomsOf(messages: List[Message], theorem: String): Option[List[String]] =
         messages
             .map(_.text)
             .find(text => text.contains(s"'$theorem'") && text.contains("depend"))
-            .map { text =>
-                if text.contains("does not depend on any axioms") then Nil
+            .flatMap { text =>
+                if text.contains("does not depend on any axioms") then Some(Nil)
                 else
-                    val start = text.indexOf('[')
+                    val start = text.indexOf("depends on axioms: [")
                     val end = text.lastIndexOf(']')
-                    if start < 0 || end < start then Nil
+                    if start < 0 || end < start then None
                     else
-                        text.substring(start + 1, end)
-                            .split(',')
-                            .map(_.trim)
-                            .filter(_.nonEmpty)
-                            .toList
+                        Some(
+                          text.substring(start + "depends on axioms: [".length, end)
+                              .split(',')
+                              .map(_.trim)
+                              .filter(_.nonEmpty)
+                              .toList
+                        )
             }
 
     /** What Lean's check of `theorem`, as a proof of the statement of `statementModule`, says: the
@@ -477,19 +547,19 @@ object LeanManual {
         val errors = messages.filter(_.severity == Severity.Error)
         if errors.nonEmpty then
             Left(
-              VerificationResult.Failed(
+              LeanManual.failure(
                 s"Lean does not take $theorem as a proof of $statementModule.statement: " +
                     described(errors)
               )
             )
         else
-            axiomsOf(messages, theorem) match
-                case None =>
-                    Left(VerificationResult.Failed(s"Lean did not say the axioms of $theorem"))
-                case Some(axioms) =>
-                    judgedAxioms(axioms, packageName, statementModule, theorem) match
-                        case Left(reason)         => Left(VerificationResult.Inconclusive(reason))
-                        case Right((kind, cited)) => Right((kind, axioms, cited))
+            for {
+                axioms <- axiomsOf(messages, theorem).toRight(
+                  LeanManual.failure(s"Lean did not say the axioms of $theorem")
+                )
+                judged <- judgedAxioms(axioms, packageName, statementModule, theorem).left
+                    .map(LeanManual.failure(_))
+            } yield (judged._1, axioms, judged._2)
     }
 
     /** The kind of a proof of the statement of `statementModule` that rests on `axioms`, and the
@@ -537,7 +607,7 @@ object LeanManual {
       */
     private def theorems(goal: Goal, ids: List[String]): Either[String, List[Theorem]] =
         ids.foldRight[Either[String, List[Theorem]]](Right(Nil)) { (id, rest) =>
-            for
+            for {
                 found <- goal.lemmas
                     .find(lemma => LeanProofs.moduleName(lemma.statement.name) == id)
                     .toRight(
@@ -545,7 +615,7 @@ object LeanManual {
                           "verifier has not proved"
                     )
                 others <- rest
-            yield found :: others
+            } yield found :: others
         }
 
     /** The hash of the module of each statement, of the modules `ids` in `workspace`'s `Generated`:
@@ -562,30 +632,54 @@ object LeanManual {
     /** The modules a kept proof cites, with their hashes, as its note has them, `a=1, b=2`. */
     private def citedOf(note: Option[String]): Either[String, List[(String, String)]] =
         listed(note).foldRight[Either[String, List[(String, String)]]](Right(Nil)) { (item, rest) =>
-            item.split('=') match
+            item.split('=') match {
                 case Array(id, hash) => rest.map((id, hash) :: _)
                 case _ => Left(s"its note of the statements it cites, $item, is no pair")
+            }
         }
 
     /** The items of a list kept as a note, `a, b`. */
     private def listed(note: Option[String]): List[String] =
         note.filter(_.nonEmpty).fold(Nil)(_.split(",").map(_.trim).filter(_.nonEmpty).toList)
 
-    /** A hash of the Lean files of the proofs written by hand of `workspace`, `<Package>/Proofs`,
-      * by their paths and texts, as the environment's sources are hashed: the environment leaves
-      * them out.
+    /** The sources of the proof in `module` of `workspace`: its file, and the files of the modules
+      * under `<Package>/Proofs` it imports, and they import, as their `import` lines say. The
+      * workspace's environment has the other modules of the package, and the kept result the
+      * statements' modules, so these are what the proof itself adds.
       */
-    def proofsHash(workspace: Path): String = {
-        val directory =
-            workspace
-                .resolve(LeanWorkspace.packageName(workspace))
-                .resolve(LeanWorkspace.ProofsDirectory)
-        val files =
-            if Files.isDirectory(directory) then
-                val walked = Files.walk(directory)
-                try walked.iterator().asScala.toList
-                finally walked.close()
-            else Nil
-        LeanWorkspace.hashOf(directory, files)
+    def proofSources(workspace: Path, module: String): List[Path] = {
+        val proofs = s"${LeanWorkspace.packageName(workspace)}.${LeanWorkspace.ProofsDirectory}."
+        val imported = """(?m)^\s*import\s+([\w.«»']+)""".r
+        def file(name: String): Path = workspace.resolve(name.replace('.', '/') + ".lean")
+        @annotation.tailrec
+        def walk(pending: List[String], seen: Set[String]): Set[String] =
+            pending match {
+                case Nil                                              => seen
+                case next :: rest if seen(next)                       => walk(rest, seen)
+                case next :: rest if !Files.isRegularFile(file(next)) => walk(rest, seen)
+                case next :: rest =>
+                    val text = Files.readString(file(next), StandardCharsets.UTF_8)
+                    val more = imported
+                        .findAllMatchIn(text)
+                        .map(_.group(1))
+                        .filter(_.startsWith(proofs))
+                        .toList
+                    walk(more ::: rest, seen + next)
+            }
+        walk(List(module), Set.empty).toList.map(file)
     }
+
+    /** The first source of the proof in `module` ([[proofSources]]) that sets `debug.skipKernelTC`,
+      * under which Lean's kernel does not check a declaration: none where no source does.
+      */
+    def skippingTheKernel(workspace: Path, module: String): Option[Path] =
+        proofSources(workspace, module).find(file =>
+            Files.readString(file, StandardCharsets.UTF_8).contains("skipKernelTC")
+        )
+
+    /** A hash of the sources of the proof in `module` ([[proofSources]]), by their paths and texts,
+      * as the environment's sources are hashed: the environment leaves them out.
+      */
+    def proofsHash(workspace: Path, module: String): String =
+        LeanWorkspace.hashOf(workspace, proofSources(workspace, module))
 }

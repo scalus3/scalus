@@ -391,7 +391,10 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
                   text(module).replaceAll("(?m)^  leaf0 [0-9a-f]{64}$", "  leaf0 " + "0" * 64)
                 )
                 val stale = intercept[AssertionError](proofs.check(held, 40))
-                assert(stale.getMessage.contains("is not of the code"), stale.getMessage)
+                assert(
+                  stale.getMessage.contains("is not the statement's as the code has it"),
+                  stale.getMessage
+                )
                 assert(stale.getMessage.contains("sbt leanExport"), stale.getMessage)
                 // Another statement whose name is the same as a Lean name is an error, and does not
                 // take the module of the first.
