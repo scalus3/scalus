@@ -2,7 +2,7 @@
 asIndexPage: true
 title: Authenticated Collections — Advanced Data Structures for Cardano
 sidebarTitle: Advanced Data Structures
-description: Authenticated data structures for Cardano smart contracts — Merkle Trees, Incremental Merkle Trees, Merkle Patricia Forestry, Fused MPF, and Bilinear Accumulators. Store data off-chain, verify on-chain with cryptographic proofs.
+description: Authenticated data structures for Cardano smart contracts — Merkle Trees, Positional Merkle Trees, Incremental Merkle Trees, Merkle Patricia Forestry, Fused MPF, and Bilinear Accumulators. Store data off-chain, verify on-chain with cryptographic proofs.
 ---
 
 import { Callout } from 'nextra/components'
@@ -28,10 +28,11 @@ This matters on Cardano because of eUTxO constraints: limited transaction size, 
 ## Decision Flowchart
 
 1. **Static set?** → **[Merkle Tree](/docs/advanced-data-structures/merkle-tree)** (cheapest possible)
-2. **Append-only?** → **[Incremental Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree)** / **[Frontier Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree#frontier-merkle-tree)**
-3. **Need insert + delete?** → **[Fused MPF](/docs/advanced-data-structures/merkle-patricia-forestry#fused-merkle-patricia-forestry)** (cheapest) or **[MPF](/docs/advanced-data-structures/merkle-patricia-forestry)** (Aiken-compatible)
-4. **Proof size critical?** → **[Bilinear Accumulator](/docs/advanced-data-structures/bilinear-accumulators)** (smallest constant proof, ~35× CPU)
-5. **Need non-membership proofs?** → MPF, Fused MPF, or Bilinear Accumulator
+2. **Fixed list, each entry settled once?** → **[Positional Merkle Tree](/docs/advanced-data-structures/positional-merkle-tree)** (delete by position, batch multiproofs)
+3. **Append-only?** → **[Incremental Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree)** / **[Frontier Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree#frontier-merkle-tree)**
+4. **Need insert + delete?** → **[Fused MPF](/docs/advanced-data-structures/merkle-patricia-forestry#fused-merkle-patricia-forestry)** (cheapest) or **[MPF](/docs/advanced-data-structures/merkle-patricia-forestry)** (Aiken-compatible)
+5. **Proof size critical?** → **[Bilinear Accumulator](/docs/advanced-data-structures/bilinear-accumulators)** (smallest constant proof, ~35× CPU)
+6. **Need non-membership proofs?** → MPF, Fused MPF, or Bilinear Accumulator
 
 ```
                What collection do you need?
@@ -39,6 +40,11 @@ This matters on Cardano because of eUTxO constraints: limited transaction size, 
                      ┌──────▼──────┐
                      │ Static set? │── Yes ──→  Merkle Tree (MT) @ cheapest
                      └──────┬──────┘
+                            │ No
+               ┌────────────▼────────────┐
+               │ Fixed list, each entry  │── Yes ──→  Positional Merkle Tree
+               │ settled once?           │
+               └────────────┬────────────┘
                             │ No
                      ┌──────▼───────┐
                      │ Append-only? │── Yes ──→  Incremental MT / Frontier MT
@@ -62,13 +68,13 @@ This matters on Cardano because of eUTxO constraints: limited transaction size, 
 
 ## Supported Operations
 
-| Operation | Merkle Tree | Incremental MT / Frontier MT | Merkle Patricia Forestry | Fused MPF | Bilinear Accumulator |
-|---|---|---|---|---|---|
-| Verify membership | yes | yes | yes | yes | yes |
-| Verify non-membership | — | — | yes | yes | yes |
-| Insert (with proof) | — | append only | yes | yes | — |
-| Delete (with proof) | — | — | yes | yes | — |
-| Update (with proof) | — | — | yes | yes | — |
+| Operation | Merkle Tree | Positional MT | Incremental MT / Frontier MT | Merkle Patricia Forestry | Fused MPF | Bilinear Accumulator |
+|---|---|---|---|---|---|---|
+| Verify membership | yes | yes | yes | yes | yes | yes |
+| Verify non-membership | — | — | — | yes | yes | yes |
+| Insert (with proof) | — | — | append only | yes | yes | — |
+| Delete (with proof) | — | by position, batched | — | yes | yes | — |
+| Update (with proof) | — | — | — | yes | yes | — |
 
 <Callout>
 Frontier Merkle Tree uses the same on-chain verifier as Incremental Merkle Tree — it is an off-chain memory optimization.

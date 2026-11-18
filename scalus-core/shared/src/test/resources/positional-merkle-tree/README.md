@@ -25,7 +25,7 @@ Each JSON profile records `algorithm`, `depth`, `shape`, `count`, `root`, `singl
 
 For byte-identical files, write records in the field order listed here with Python `json.dumps(records, indent=2) + "\n"`.
 
-Helper hashes are obtained by calling the maintained `merkleize` on the corresponding subtree. `helperIndices` comes from its `get_helper_indices`; proofs concatenate those hashes in descending order. The documentation page includes the same recipe and the generalized-index rules in full.
+Helper hashes are obtained by calling the maintained `merkleize` on the corresponding subtree. `helperIndices` comes from its `get_helper_indices`; proofs concatenate those hashes in descending order. The documentation page describes the encoding, generalized indices and helper order.
 
 The maintained root calculators check 270 single paths, 146 multiproofs and 416 replacement roots. The harness separately cross-checks every case with the executable `merkleize_chunks` from consensus-specs v1.5.0 `tests/core/pyspec/eth2spec/utils/merkle_minimal.py` and the positive arithmetic of its `ssz/merkle-proofs.md`. These comparisons found no difference in fixed-depth padding, generalized indices or helper ordering. The maintained fixture is 278705 bytes including whitespace.
 
