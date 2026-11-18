@@ -10,9 +10,10 @@ import scalus.uplc.builtin.ByteString.hex
 /** Positional membership and deletion for an SSZ chunk tree with BLAKE2b-256.
   *
   * The caller must authenticate both root and depth (0..256) in a datum or script parameter.
-  * Positions are zero-based integers below 2^depth. Leaves hash the element once; empty leaves are
-  * zero32; parents hash `left ++ right`, without tags or length mixing. Exact depth prevents a leaf
-  * from being interpreted as an internal node. Empty leaves have no known element preimage.
+  * Positions are zero-based integers below 2^depth. Leaves hash the element once; unused and
+  * deleted leaves are [[NullHash]]; parents hash `left ++ right`, without tags or length mixing.
+  * Exact depth prevents a leaf from being interpreted as an internal node. [[NullHash]] has no
+  * known element preimage.
   *
   * Verification authenticates membership against the root it receives. The caller must bind that
   * root to current state and every verified position to the actual payout or changed slot. Old

@@ -27,7 +27,7 @@ This matters on Cardano because of eUTxO constraints: limited transaction size, 
 
 ## Decision Flowchart
 
-1. **Static set?** → **[Merkle Tree](/docs/advanced-data-structures/merkle-tree)** (cheapest possible)
+1. **Static set, membership only?** → **[Merkle Tree](/docs/advanced-data-structures/merkle-tree)** (cheapest possible)
 2. **Fixed list, each entry settled once?** → **[Positional Merkle Tree](/docs/advanced-data-structures/positional-merkle-tree)** (delete by position, batch multiproofs)
 3. **Append-only?** → **[Incremental Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree)** / **[Frontier Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree#frontier-merkle-tree)**
 4. **Need insert + delete?** → **[Fused MPF](/docs/advanced-data-structures/merkle-patricia-forestry#fused-merkle-patricia-forestry)** (cheapest) or **[MPF](/docs/advanced-data-structures/merkle-patricia-forestry)** (Aiken-compatible)
@@ -37,9 +37,10 @@ This matters on Cardano because of eUTxO constraints: limited transaction size, 
 ```
                What collection do you need?
                             │
-                     ┌──────▼──────┐
-                     │ Static set? │── Yes ──→  Merkle Tree (MT) @ cheapest
-                     └──────┬──────┘
+               ┌────────────▼────────────┐
+               │ Static set, membership  │── Yes ──→  Merkle Tree (MT) @ cheapest
+               │ only?                   │
+               └────────────┬────────────┘
                             │ No
                ┌────────────▼────────────┐
                │ Fixed list, each entry  │── Yes ──→  Positional Merkle Tree

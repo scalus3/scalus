@@ -63,14 +63,19 @@ final class PositionalMerkleTree private (
         ByteString.unsafeFromArray(out.toByteArray)
     }
 
-    /** Delete occupied positions and return a new tree, preserving every other slot.
+    /** Delete an occupied position and return a new tree, preserving every other slot.
       *
-      * A deleted slot is set to [[PositionalMerkleTree.NullHash]]; positions and capacity do not
-      * change. Positions must be nonempty, strictly ascending, distinct and in range. An unused or
-      * already deleted slot is rejected. Proofs for a later call must be generated from the
-      * returned tree.
+      * The slot is set to [[PositionalMerkleTree.NullHash]]; positions and capacity do not change.
+      * An unused or already deleted slot is rejected. A deletion changes a hash on every other
+      * slot's path, so later proofs must be generated from the returned tree.
       */
-    def delete(positions: IndexedSeq[Int]): PositionalMerkleTree = {
+    def delete(position: Int): PositionalMerkleTree = deleteMany(Vector(position))
+
+    /** Delete several occupied positions and return a new tree, as [[delete]] does for one.
+      *
+      * Positions must be nonempty, strictly ascending, distinct and in range.
+      */
+    def deleteMany(positions: IndexedSeq[Int]): PositionalMerkleTree = {
         checkPositions(positions)
         var updated = hashes
         for position <- positions do

@@ -137,7 +137,7 @@ object PositionalMerkleTreeTestSupport {
             collect(1, 0, chunks.size, positions).sortBy(-_._1)
         }
         def multiProof(positions: Vector[Int]): ByteString = concat(helpers(positions).map(_._2))
-        def delete(positions: Iterable[Int]): Naive =
+        def deleteMany(positions: Iterable[Int]): Naive =
             new Naive(
               chunks.indices.map { i =>
                   if positions.toSet.contains(i) then PositionalMerkleTree.NullHash
@@ -196,17 +196,18 @@ object PositionalMerkleTreeTestSupport {
     def membershipResult(input: Single): Result = evaluate(membershipProgram, input.toData)
     def multiResult(input: Multi): Result = evaluate(multiProgram, input.toData)
 
-    def returned(result: Result): ByteString = result match
+    private def returnedConstant(result: Result): Constant = result match
         case success: Result.Success =>
             success.term match
-                case Term.Const(Constant.ByteString(bytes), _) => bytes
-                case other => throw new AssertionError(s"Expected a byte string, got $other")
+                case Term.Const(constant, _) => constant
+                case other => throw new AssertionError(s"Expected a constant, got $other")
         case failure: Result.Failure => throw new AssertionError(failure.toString)
 
-    def returnedUnit(result: Result): Unit = result match
-        case success: Result.Success =>
-            success.term match
-                case Term.Const(Constant.Unit, _) => ()
-                case other => throw new AssertionError(s"Expected unit, got $other")
-        case failure: Result.Failure => throw new AssertionError(failure.toString)
+    def returned(result: Result): ByteString = returnedConstant(result) match
+        case Constant.ByteString(bytes) => bytes
+        case other => throw new AssertionError(s"Expected a byte string, got $other")
+
+    def returnedUnit(result: Result): Unit = returnedConstant(result) match
+        case Constant.Unit => ()
+        case other         => throw new AssertionError(s"Expected unit, got $other")
 }

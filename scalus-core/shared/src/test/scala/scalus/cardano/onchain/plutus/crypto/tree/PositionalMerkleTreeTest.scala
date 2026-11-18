@@ -88,7 +88,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
     ) {
         for position <- Seq(0, 5, 15) do
             val input = single(position)
-            assert(returned(singleResult(input)) == tree.delete(Vector(position)).rootHash)
+            assert(returned(singleResult(input)) == tree.delete(position).rootHash)
             for offset <- input.proof.bytes.indices do
                 rejects(input.copy(proof = flip(input.proof, offset)))
             for offset <- input.element.bytes.indices do
@@ -103,7 +103,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
     ) {
         val positions = Vector(1, 4, 10, 15)
         val input = query(tree, data, positions)
-        assert(returned(multiResult(input)) == tree.delete(positions).rootHash)
+        assert(returned(multiResult(input)) == tree.deleteMany(positions).rootHash)
         for offset <- input.proof.bytes.indices do
             rejects(input.copy(proof = flip(input.proof, offset)))
         val leaves = input.leaves.toScalaList.toVector
@@ -265,7 +265,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
             rejects(
               Multi(partial.rootHash, 4, SList(Leaf(1, value)), partial.proveMulti(Vector(1)))
             )
-        val after = tree.delete(Vector(0))
+        val after = tree.delete(0)
         rejects(single(0).copy(root = after.rootHash, proof = after.proveMembership(0)))
         rejects(query(after, data, Vector(0)))
         rejects(single(0).copy(root = after.rootHash))
@@ -289,7 +289,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
             val original = OffChain.fromElements(equal, 4)
             val positions = equal.indices.toVector
             val all = query(original, equal, positions)
-            assert(returned(multiResult(all)) == original.delete(positions).rootHash)
+            assert(returned(multiResult(all)) == original.deleteMany(positions).rootHash)
             var current = original
             for position <- positions do
                 val input = Single(
@@ -299,7 +299,7 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
                   data.head,
                   current.proveMembership(position)
                 )
-                val next = current.delete(Vector(position))
+                val next = current.delete(position)
                 assert(scalaSingle(input) == next.rootHash)
                 assert(returned(singleResult(input)) == next.rootHash)
                 rejects(input.copy(root = next.rootHash, proof = next.proveMembership(position)))
