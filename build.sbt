@@ -839,12 +839,21 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
               sys.env.get("SCALUS_LEAN_WORKSPACE").filter(_.nonEmpty).map(file).getOrElse(sources)
           val vesting = baseDirectory.value / "src" / "test" / "lean" / "LinearVesting"
           val amm = baseDirectory.value / "src" / "test" / "lean" / "Amm"
-          for ((workspace, targets) <- Seq(library -> Nil, vesting -> Nil, amm -> Seq("Amm", "AmmProofs"))) {
+          for (
+            (workspace, targets) <- Seq(
+              library -> Nil,
+              vesting -> Nil,
+              amm -> Seq("Amm", "AmmProofs")
+            )
+          ) {
               log.info(s"Running `lake build ${targets.mkString(" ")}` in $workspace")
               val output =
                   scala.sys.process.ProcessLogger(line => log.info(line), line => log.info(line))
               val exit =
-                  try scala.sys.process.Process(Seq("lake", "build") ++ targets, workspace).!(output)
+                  try
+                      scala.sys.process
+                          .Process(Seq("lake", "build") ++ targets, workspace)
+                          .!(output)
                   catch {
                       case e: java.io.IOException =>
                           sys.error(
