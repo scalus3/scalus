@@ -5315,7 +5315,29 @@ object UplcBlaster {
     /** A statement as a Lean module of a workspace: its text, and the programs of its tests, each
       * with the path the text reads it from, from the workspace's directory.
       */
-    final case class StatementModule(text: String, programs: Vector[(String, Program)])
+    final case class StatementModule(text: String, programs: Vector[(String, Program)]) {
+
+        /** How `file`, and the programs at their paths in `workspace`, are not this module: nothing
+          * where they are. Lake does not see the programs, which `#import_uplc` reads, so a program
+          * that is not the one the text was written of is not built again either.
+          */
+        def unlike(workspace: Path, file: Path): Option[String] = {
+            def read(path: Path): Option[String] =
+                Option.when(Files.isRegularFile(path))(
+                  Files.readString(path, java.nio.charset.StandardCharsets.UTF_8)
+                )
+            read(file) match {
+                case None                     => Some("is not in the workspace")
+                case Some(now) if now != text => Some("is not the statement's as the code has it")
+                case Some(_) =>
+                    Option.when(
+                      !programs.forall((path, program) =>
+                          read(workspace.resolve(path)).contains(programHex(program))
+                      )
+                    )("has programs that are not the statement's as the code has it")
+            }
+        }
+    }
 
     /** The Lean module `module` that states `goal`, a statement lowered for a check at `budget`
       * steps: `def statement : Prop`, the proposition a check gives Blaster, over the programs of

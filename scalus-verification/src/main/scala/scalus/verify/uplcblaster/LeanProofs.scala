@@ -129,9 +129,9 @@ final class LeanProofs private (
       * language, as a proof within a budget, is passed over.
       *
       * Where the modules are not written, a module of the statement that the workspace has is held
-      * to the code: one of other programs, or of another budget, than those the statement was
-      * proved of now fails, as a proof by hand of it would be checked against programs that are not
-      * the code's. `leanExport` writes it again.
+      * to the code, as the module the export would write now ([[heldToTheCode]]): a proof by hand
+      * of it would be checked against programs that are not the code's, or cite an axiom it does
+      * not have. `leanExport` writes it again.
       */
     private def exportProved(
         verifier: Verifier,
@@ -142,7 +142,12 @@ final class LeanProofs private (
         if !statement.name.startsWith("#") then
             if leanExport then
                 val _ = writtenStatement(verifier, statement, result, tactic)
-            else heldToTheCode(statement, artifactOf(result))
+            else
+                val file =
+                    LeanWorkspace.generated(workspace, LeanProofs.moduleName(statement.name))._2
+                if Files.isRegularFile(file) then
+                    val (module, _, _, written) = provedModule(verifier, statement, result, tactic)
+                    heldToTheCode(statement, module, file, written)
             if ualExportDirectory.isDefined then
                 val text = Option(currentLabel).filter(_.nonEmpty).getOrElse(statement.name)
                 propertyOf(verifier, statement, result, text, tactic).foreach { property =>
@@ -157,33 +162,28 @@ final class LeanProofs private (
                 }
     }
 
-    /** Fails where the workspace has a module of `statement` ([[writeStatement]]) that is not of
-      * the programs and the budget of `artifact`, the statement's proof.
+    /** Holds the workspace's module of `statement`, in `file`, and its programs, to `written`, the
+      * module as it is written of the code now: the text, which has the statement's formula, its
+      * budget and the hashes of its programs, and, of a proved statement, the axiom of its result;
+      * and the programs themselves. Where they differ and Lean can run, or is required, the test
+      * fails, and says to write the module again; where Lean cannot run, as on a build of another
+      * Scala version, whose programs differ, the statement is not checked, as a stale result is
+      * not. The module is first to be the statement's ([[claimed]]).
       */
-    private def heldToTheCode(statement: Statement, artifact: UplcBlaster.Artifact): Unit = {
-        val (module, file) =
-            LeanWorkspace.generated(workspace, LeanProofs.moduleName(statement.name))
-        if Files.isRegularFile(file) then
-            val text = Files.readString(file, StandardCharsets.UTF_8)
-            UplcBlaster
-                .statementModuleName(text)
-                .filter(_ != statement.name)
-                .foreach(other =>
-                    failed(
-                      s"${statement.name}: its module $module is the module of $other, whose " +
-                          "name is the same as a Lean name: rename one"
-                    )
-                )
-            val written = UplcBlaster.statementModuleOf(text)
-            if !written.contains(artifact.budget -> artifact.programHashes) then
-                failed(
-                  s"${statement.name}: the Lean module $module is not of the code: it is of " +
-                      written.fold("nothing it says")((budget, hashes) =>
-                          s"${hashes.size} programs at $budget steps"
-                      ) +
-                      s", and the statement is proved of ${artifact.programHashes.size} programs " +
-                      s"at ${artifact.budget} steps. Write it again with `sbt leanExport`."
-                )
+    private def heldToTheCode(
+        statement: Statement,
+        module: String,
+        file: Path,
+        written: UplcBlaster.StatementModule
+    ): Unit = {
+        claimed(statement, module, file)
+        written.unlike(workspace, file).foreach { reason =>
+            val message =
+                s"${statement.name}: the Lean module $module $reason. Write it with `sbt leanExport`."
+            if leanAvailable || sys.env.contains("SCALUS_REQUIRE_LEAN") || requiredByBuild then
+                failed(message)
+            else notChecked(message)
+        }
     }
 
     /** Writes the documents of the properties exported ([[ualExportDirectory]]). The blueprint is
@@ -543,36 +543,17 @@ final class LeanProofs private (
 
     /** The module of `statement` that `tactic` checks a proof by hand of: written where these
       * proofs export, as the modules of the statements proved are, and held to the code where they
-      * do not, its text and its programs. A proof by hand of a module of other programs, or of
-      * another budget, would be checked against programs that are not the code's: where Lean can
-      * run, or is required, that fails, and says to write the module again; where it cannot, as on
-      * a build of another Scala version, whose programs differ, the statement is not checked, as a
-      * stale result is not. A statement the tactic cannot lower is left to the tactic to report.
+      * do not ([[heldToTheCode]]), before a result kept of it is taken: the proof imports it. The
+      * tactic holds it to the code as well, where it runs. A statement the tactic cannot lower is
+      * left to the tactic to report.
       */
     private def writtenForHand(verifier: Verifier, statement: Statement, tactic: LeanManual): Unit =
         tactic.prepare(verifier.goalOf(statement)).foreach { prepared =>
             val written = tactic.statementModule(prepared, workspace)
-            claimed(statement, written.module, written.file)
-            if leanExport then writeModule(written.file, written.directory, written.written)
-            else
-                def read(path: Path): Option[String] =
-                    Option.when(Files.isRegularFile(path))(
-                      Files.readString(path, StandardCharsets.UTF_8)
-                    )
-                val programs = written.written.programs.forall((path, program) =>
-                    read(workspace.resolve(path)).contains(UplcBlaster.programHex(program))
-                )
-                val now = read(written.file)
-                if !now.contains(written.written.text) || !programs then
-                    val reason =
-                        s"${statement.name}: the Lean module ${written.module}, which a proof by " +
-                            "hand is of, " +
-                            (if now.isEmpty then "is not in the workspace"
-                             else "or its programs, are not the statement's as the code has it") +
-                            ". Write it with `sbt leanExport`."
-                    if leanAvailable || sys.env.contains("SCALUS_REQUIRE_LEAN") || requiredByBuild
-                    then failed(reason)
-                    else notChecked(reason)
+            if leanExport then
+                claimed(statement, written.module, written.file)
+                writeModule(written.file, written.directory, written.written)
+            else heldToTheCode(statement, written.module, written.file, written.written)
         }
 
     /** Fails where the module `module`, in `file`, may not be `statement`'s: it is the module of
@@ -654,22 +635,39 @@ final class LeanProofs private (
         result: VerificationResult,
         tactic: UplcBlaster
     ): String = {
-        val artifact = result match
-            case VerificationResult.Proven(_) => artifactOf(result)
+        result match
+            case VerificationResult.Proven(_) =>
             case other =>
                 failed(
                   s"${statement.name}: a statement is written where it is proved, " +
                       s"got ${LeanProofs.describe(other)}"
                 )
+        val (module, file, directory, written) = provedModule(verifier, statement, result, tactic)
+        claimed(statement, module, file)
+        writeModule(file, directory, written)
+        module
+    }
+
+    /** The module of `statement`, which `result` proved, as `tactic` writes it: its name, its file,
+      * the directory of its programs from the workspace's, and the module.
+      */
+    private def provedModule(
+        verifier: Verifier,
+        statement: Statement,
+        result: VerificationResult,
+        tactic: UplcBlaster
+    ): (String, Path, String, UplcBlaster.StatementModule) = {
         val id = LeanProofs.moduleName(statement.name)
         val (module, file) = LeanWorkspace.generated(workspace, id)
-        claimed(statement, module, file)
         val directory = workspace.relativize(file.getParent.resolve(id)).toString
-        tactic.statementModule(verifier.goalOf(statement), artifact, module, directory) match
-            case Left(reason) => failed(reason)
-            case Right(written) =>
-                writeModule(file, directory, written)
-                module
+        tactic.statementModule(
+          verifier.goalOf(statement),
+          artifactOf(result),
+          module,
+          directory
+        ) match
+            case Left(reason)   => failed(reason)
+            case Right(written) => (module, file, directory, written)
     }
 
     /** `statement`, which `result` proved, as a property of the Universal Annotation Language that

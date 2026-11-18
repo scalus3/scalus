@@ -57,7 +57,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: scalus-examples/jvm/src/test/lean/Amm/.lake
-          key: lean-amm-${{ hashFiles('scalus-verification/src/main/lean/lake-manifest.json', 'scalus-examples/jvm/src/test/lean/Amm/**/*.lean', 'scalus-examples/jvm/src/test/lean/Amm/**/*.flat') }}
+          # Everything the AMM's modules are built of: Scalus's Lean library and its pins, the
+          # toolchain, and the AMM's own sources and programs. An exact hit is not saved again.
+          key: lean-amm-${{ hashFiles('scalus-verification/src/main/lean/lake-manifest.json', 'scalus-verification/src/main/lean/lakefile.lean', 'scalus-verification/src/main/lean/ScalusProofs.lean', 'scalus-verification/src/main/lean/ScalusProofs/**/*.lean', 'scalus-examples/jvm/src/test/lean/Amm/lean-toolchain', 'scalus-examples/jvm/src/test/lean/Amm/lakefile.lean', 'scalus-examples/jvm/src/test/lean/Amm/Amm.lean', 'scalus-examples/jvm/src/test/lean/Amm/Amm/**/*.lean', 'scalus-examples/jvm/src/test/lean/Amm/Amm/**/*.flat') }}
           restore-keys: |
             lean-amm-
       - name: Build the Lean workspace of the AMM example

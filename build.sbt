@@ -825,9 +825,11 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       // `verify` runs `leanBuild` before the suites of proofs. The plugin's `leanBuild` builds
       // the project's own workspace, and these examples have none: their suites run in the
       // workspace of Scalus's Lean library (LeanProofs.libraryWorkspace), and
-      // VestingVerificationTest runs in LinearVesting's, which requires that library by its path.
-      // So this builds those two, in that order. A new pin of Blaster or PlutusCore is then
-      // built before a check asks for it. UsdcxMintingPolicyVerificationTest is not a suite of
+      // VestingVerificationTest runs in LinearVesting's, and AmmVerificationTest in Amm's, which
+      // require that library by its path. So this builds those three, in that order, and Amm's
+      // statements and proofs by hand (`AmmProofs`): a statement's module takes minutes to build,
+      // which is then not in the time limit of the check of a proof by hand. A new pin of Blaster
+      // or PlutusCore is then built before a check asks for it. UsdcxMintingPolicyVerificationTest is not a suite of
       // proofs and needs the Z3 of its own nix shell, so its workspace is not built here.
       leanBuild := {
           val log = streams.value.log
@@ -836,12 +838,13 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
           val library =
               sys.env.get("SCALUS_LEAN_WORKSPACE").filter(_.nonEmpty).map(file).getOrElse(sources)
           val vesting = baseDirectory.value / "src" / "test" / "lean" / "LinearVesting"
-          for (workspace <- Seq(library, vesting)) {
-              log.info(s"Running `lake build` in $workspace")
+          val amm = baseDirectory.value / "src" / "test" / "lean" / "Amm"
+          for ((workspace, targets) <- Seq(library -> Nil, vesting -> Nil, amm -> Seq("Amm", "AmmProofs"))) {
+              log.info(s"Running `lake build ${targets.mkString(" ")}` in $workspace")
               val output =
                   scala.sys.process.ProcessLogger(line => log.info(line), line => log.info(line))
               val exit =
-                  try scala.sys.process.Process(Seq("lake", "build"), workspace).!(output)
+                  try scala.sys.process.Process(Seq("lake", "build") ++ targets, workspace).!(output)
                   catch {
                       case e: java.io.IOException =>
                           sys.error(

@@ -65,11 +65,14 @@ other's module. So are two statements of one property id in the export to the la
 named statement that is proved written so ("The sbt tasks").
 
 **A module is held to the code.** Where the export is off, every check of a named statement whose
-module the workspace has compares the module with the proof: the budget and the SHA-256 of each
-program, as its header says them, against those of the programs the statement was proved of now.
-A module of other programs fails the statement's test, and says to run `leanExport`: a proof by
-hand of it would be checked by `lake build` against programs that are not the code's. It needs no
-Lean, as a kept result has the hashes of the code's programs too.
+module the workspace has compares the module with the one the export would write now: its whole
+text, which has the formula, the budget, the SHA-256 of each program and the axiom of the proof,
+and the programs beside it. A module that differs, as one of other programs or one written before
+the axiom was, fails the statement's test where Lean can run, or is required, and says to run
+`leanExport`: a proof by hand of it would be checked by `lake build` against programs that are not
+the code's, or cite an axiom it does not have. Where Lean cannot run, the test is not run, as a
+stale result is not. It needs no Lean: the module is written from the statement and its proof, of
+which a kept result has what is needed.
 
 ## A proof by hand
 
@@ -132,22 +135,28 @@ checkByHand(
 - **The axioms say what the proof rests on.** Lean's own only: `LeanKernelOfOptimizedRuns`, the
   kernel, of the runs as Blaster's optimizer gives them (overview §6.4). `Lean.ofReduceBool`:
   `LeanNative`. `<Package>.Generated.<name>.proved`: a lemma, the statement of that module, which is
-  to be among the verifier's theorems, and which the proof records as used; a second check has Lean
-  take each such axiom as that of its statement's module, so a proof cannot declare its own of the
-  name. `sorry`, the result of the proof's own statement, or another axiom: no proof. Nor is
-  Blaster's `blasterProven`: it proves any proposition where it is used without the tactic, and its
-  uses do not tell one from the other. What Blaster proves, a proof by hand cites by the `proved` of
-  a statement Scalus checked.
-- **The proof's module is under `<Package>/Proofs`**, whose Lean files the result is kept by; one
-  elsewhere would change no kept result.
+  to be among the verifier's theorems, and which the proof records as used. The module is to state
+  the axiom, as the module of a statement Scalus proved does, and a second check has Lean take each
+  such axiom as that module's, so a proof cannot declare its own of the name. `sorry`, the result
+  of the proof's own statement, or another axiom: no proof, a failure. Nor is Blaster's
+  `blasterProven`: it proves any proposition where it is used without the tactic, and its uses do
+  not tell one from the other. What Blaster proves, a proof by hand cites by the `proved` of a
+  statement Scalus checked.
+- **The proof's sources are read too.** They are its module, which is to be under
+  `<Package>/Proofs`, and the modules there it imports. One that sets `debug.skipKernelTC` makes
+  the proof none: Lean's kernel does not check what is declared under it, and `#print axioms` does
+  not say so. That the kernel checked every declaration of them is not replayed, as `lean4checker`
+  would.
 - **The result is kept** as a check's is. Its fingerprint has, beside the workspace's environment,
-  a hash of the Lean files under `<Package>/Proofs`, which the environment leaves out: a change of
-  any proof by hand makes the results of the proofs by hand stale, and those of the checks not. It
-  keeps the hash of the module of each statement it cites, and stands no longer where one changed.
-- **The statement's module, and its programs, are held to the code.** Where they are not the code's
-  and Lean can run, or is required, the test fails, and says to run `leanExport`; where Lean cannot
-  run, as on a build of another Scala version, whose programs differ, the test is not run, as a
-  stale result is not.
+  a hash of the proof's sources, which the environment leaves out: a change of a proof by hand
+  makes the results of the proofs that import it stale, and no others. It keeps the hash of the
+  module of each statement it cites, and stands no longer where one changed.
+- **The statement's module, and its programs, are held to the code**, by the tactic, and by the
+  suite before a result kept of it is taken, as the module of a statement proved is: the whole
+  text, which has the formula, the budget, the programs' hashes and, of a proved statement, its
+  axiom, and the programs themselves. Where they are not the code's and Lean can run, or is
+  required, the test fails, and says to run `leanExport`; where Lean cannot run, as on a build of
+  another Scala version, whose programs differ, the test is not run, as a stale result is not.
 - **The first check of a proof may take minutes**: Lean builds the statement's module, whose
   programs it runs symbolically, before it elaborates the check. Most of the AMM deposit's is the
   branch of the first deposit, which its proof passes over, run for as many steps as the budget
