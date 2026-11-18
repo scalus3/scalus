@@ -80,23 +80,21 @@ object PositionalMerkleTree {
         leaves: List[Leaf],
         proof: ByteString
     ): ByteString = {
-        val capacity = capacityAtDepth(depth)
+        checkDepth(depth)
         require(!leaves.isEmpty, "PositionalMerkleTree: empty query")
-        val nodes = leafNodes(leaves, -1, capacity, Nil)
+        val nodes = leafNodes(leaves, -1, Nil)
         deleteLevels(root, nodes, depth, proof, 0)
     }
 
-    private def capacityAtDepth(depth: BigInt): BigInt = {
+    // Positions are not compared with 2^depth up front, which would cost a loop of depth steps.
+    // Each walk halves the position once per level and requires 0 at the root instead: a
+    // nonnegative position reaches 0 after `depth` halvings exactly when it is below 2^depth.
+    private def checkDepth(depth: BigInt): Unit =
         require(depth >= 0 && depth <= 256, "PositionalMerkleTree: depth out of range")
-        powerOfTwo(depth, 1)
-    }
-
-    private def powerOfTwo(depth: BigInt, result: BigInt): BigInt =
-        if depth <= 0 then result else powerOfTwo(depth - 1, result * 2)
 
     private def checkSingle(depth: BigInt, position: BigInt, proof: ByteString): Unit = {
-        val capacity = capacityAtDepth(depth)
-        require(position >= 0 && position < capacity, "PositionalMerkleTree: position out of range")
+        checkDepth(depth)
+        require(position >= 0, "PositionalMerkleTree: position out of range")
         require(lengthOfByteString(proof) == depth * 32, "PositionalMerkleTree: proof length")
     }
 
@@ -119,6 +117,7 @@ object PositionalMerkleTree {
         end: BigInt
     ): ByteString =
         if offset == end then
+            require(position == BigInt(0), "PositionalMerkleTree: position out of range")
             require(oldHash == root, "PositionalMerkleTree: root mismatch")
             newHash
         else
@@ -152,7 +151,9 @@ object PositionalMerkleTree {
         offset: BigInt,
         end: BigInt
     ): ByteString =
-        if offset == end then hash
+        if offset == end then
+            require(position == BigInt(0), "PositionalMerkleTree: position out of range")
+            hash
         else
             val sibling = sliceByteString(offset, 32, proof)
             val parentHash =
@@ -160,10 +161,10 @@ object PositionalMerkleTree {
                 else combine(sibling, hash)
             membershipUp(quotientInteger(position, 2), parentHash, proof, offset + 32, end)
 
+    // Returns the nodes in descending position order. The first position must be above -1.
     private def leafNodes(
         leaves: List[Leaf],
         previous: BigInt,
-        capacity: BigInt,
         acc: List[Node]
     ): List[Node] = leaves match
         case Nil => acc
@@ -172,14 +173,8 @@ object PositionalMerkleTree {
               leaf.position > previous,
               "PositionalMerkleTree: positions must be strictly ascending"
             )
-            require(leaf.position < capacity, "PositionalMerkleTree: position out of range")
             val hash = nonEmptyLeaf(blake2b_256(leaf.element))
-            leafNodes(
-              rest,
-              leaf.position,
-              capacity,
-              Cons(Node(leaf.position, hash, NullHash), acc)
-            )
+            leafNodes(rest, leaf.position, Cons(Node(leaf.position, hash, NullHash), acc))
 
     private def deleteLevels(
         root: ByteString,
@@ -190,8 +185,11 @@ object PositionalMerkleTree {
     ): ByteString =
         if remaining == BigInt(0) then
             require(offset == lengthOfByteString(proof), "PositionalMerkleTree: unused helpers")
-            // Sorted, bounded leaves give exactly one node here, even at depth zero.
+            // Every level keeps distinct positions in descending order, so the head holds the
+            // largest. Positions below 2^depth all reach 0 and leave exactly one node, even at
+            // depth zero; any larger position leaves a head above 0.
             val node = nodes.head
+            require(node.position == BigInt(0), "PositionalMerkleTree: position out of range")
             require(node.oldHash == root, "PositionalMerkleTree: root mismatch")
             node.newHash
         else deleteLevel(root, nodes, Nil, remaining, proof, offset)

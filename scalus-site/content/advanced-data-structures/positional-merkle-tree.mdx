@@ -78,22 +78,22 @@ For clients that build proofs and redeemers outside Scala:
 - **Delete:** 2D + 1 blake2b calls — the old and the new root in one walk
 - **Proof size:** 32 × D bytes; a multiproof needs fewer helpers when positions are close together
 
-At depth 15 (32,768 slots) with 32-byte elements, one `delete` costs **46,503,274 CPU steps and 161,238 memory units**, with a 480-byte proof. `PositionalMerkleTreeBudgetTest` measures this with `Options.release`, the mainnet Plutus V3 cost model and Scala 3.3.9, and pins the values.
+At depth 15 (32,768 slots) with 32-byte elements, one `delete` costs **37,310,510 CPU steps and 126,062 memory units**, with a 480-byte proof. `PositionalMerkleTreeBudgetTest` measures this with `Options.release`, the mainnet Plutus V3 cost model and Scala 3.3.9, and pins the values.
 
 For a batch of `k` payouts, the table compares `k` single `delete` calls, each against the previous call's root, with one `deleteMany` against the original root. Contiguous positions are `0..k-1`; scattered positions are `(i × 7919) mod 32768` for `0 ≤ i < k`, sorted. Proof bytes exclude the positions, the elements and the `Data` framing.
 
 | Positions | k | Single proofs (bytes) | Sequential CPU | Sequential memory | Multiproof (bytes) | Multiproof CPU | Multiproof memory |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Contiguous | 2 | 960 | 93,559,178 | 325,920 | 448 | 112,959,796 | 439,836 |
-| Contiguous | 4 | 1,920 | 185,402,676 | 643,944 | 416 | 126,067,798 | 482,110 |
-| Contiguous | 8 | 3,840 | 369,121,672 | 1,280,192 | 384 | 157,306,376 | 584,946 |
-| Contiguous | 16 | 7,680 | 736,623,664 | 2,553,088 | 352 | 224,806,098 | 808,906 |
-| Contiguous | 32 | 15,360 | 1,471,755,648 | 5,099,680 | 320 | 364,828,100 | 1,275,114 |
-| Scattered | 2 | 960 | 93,719,178 | 326,920 | 832 | 182,567,192 | 683,242 |
-| Scattered | 4 | 1,920 | 185,834,676 | 646,644 | 1,632 | 343,071,674 | 1,244,114 |
-| Scattered | 8 | 3,840 | 369,953,672 | 1,285,392 | 2,880 | 593,902,628 | 2,126,370 |
-| Scattered | 16 | 7,680 | 737,983,664 | 2,561,588 | 5,312 | 1,075,283,874 | 3,827,961 |
-| Scattered | 32 | 15,360 | 1,474,155,648 | 5,114,680 | 10,144 | 2,049,031,158 | 7,253,570 |
+| Contiguous | 2 | 960 | 75,317,650 | 256,468 | 448 | 103,768,002 | 404,287 |
+| Contiguous | 4 | 1,920 | 149,063,620 | 505,940 | 416 | 116,679,790 | 445,823 |
+| Contiguous | 8 | 3,840 | 296,587,560 | 1,005,084 | 384 | 147,525,940 | 547,183 |
+| Contiguous | 16 | 7,680 | 591,699,440 | 2,003,772 | 352 | 214,240,806 | 768,191 |
+| Contiguous | 32 | 15,360 | 1,182,051,200 | 4,001,948 | 320 | 352,693,096 | 1,228,495 |
+| Scattered | 2 | 960 | 75,477,650 | 257,468 | 832 | 173,375,398 | 647,693 |
+| Scattered | 4 | 1,920 | 149,495,620 | 508,640 | 1,632 | 333,683,666 | 1,207,827 |
+| Scattered | 8 | 3,840 | 297,419,560 | 1,010,284 | 2,880 | 584,122,192 | 2,088,607 |
+| Scattered | 16 | 7,680 | 593,059,440 | 2,012,272 | 5,312 | 1,064,718,582 | 3,787,246 |
+| Scattered | 32 | 15,360 | 1,184,451,200 | 4,016,948 | 10,144 | 2,036,896,154 | 7,206,951 |
 
 A multiproof is smaller in every batch. It also costs less CPU and memory for contiguous positions from `k = 4`, but more for scattered ones, so choose by whichever limit is tighter: transaction size or execution budget. Each figure includes decoding the measured program's input from Plutus `Data`, but not the rest of a transaction's budget.
 

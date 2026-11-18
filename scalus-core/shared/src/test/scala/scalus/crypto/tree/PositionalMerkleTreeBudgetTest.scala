@@ -51,7 +51,7 @@ class PositionalMerkleTreeBudgetTest extends AnyFunSuite {
         val input = Single(tree.rootHash, BigInt(depth), 0, data.head, tree.proveMembership(0))
         val single = singleResult(input)
         assert(returned(single) == tree.delete(0).rootHash)
-        assert(single.budget == ExUnits(memory = 161238, steps = 46_503274))
+        assert(single.budget == ExUnits(memory = 126062, steps = 37_310510))
         println(
           "positional-merkle depth=15 elements=32768 element-bytes=32 cost-model=CardanoInfo.mainnet/PlutusV3 Options.release"
         )
@@ -85,8 +85,8 @@ class PositionalMerkleTreeBudgetTest extends AnyFunSuite {
             assert(multiInput.proof.size < k * depth * 32)
             if k == 32 then
                 val expected =
-                    if pattern == "contiguous" then ExUnits(memory = 1275114, steps = 364_828100)
-                    else ExUnits(memory = 7253570, steps = 2049_031158)
+                    if pattern == "contiguous" then ExUnits(memory = 1228495, steps = 352_693096)
+                    else ExUnits(memory = 7206951, steps = 2036_896154)
                 assert(multi.budget == expected)
             println(
               s"$pattern,$k,${removals.map(_.proof.size).sum},${sequential.budget.steps},${sequential.budget.memory},${multiInput.proof.size},${multi.budget.steps},${multi.budget.memory}"
