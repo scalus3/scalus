@@ -12,6 +12,7 @@ on:
       - 'scalus-examples/**/scalus/examples/htlc/**'
       - 'scalus-examples/**/scalus/examples/paymentsplitter/**'
       - 'scalus-examples/**/scalus/examples/oneshotmint/**'
+      - 'scalus-examples/**/scalus/examples/amm/**'
       - '.github/workflows/lean-proofs.yml'
       # The toolchain: Z3 and elan come from the flake.
       - 'flake.nix'
@@ -44,19 +45,37 @@ jobs:
       - name: Build the Lean workspace
         working-directory: scalus-verification/src/main/lean
         run: |
-          nix develop ../../../..#ci --accept-flake-config --command bash -c "lake build"
+          nix develop ../../../..#ci-lean --accept-flake-config --command bash -c "lake build"
       - name: Build the Lean workspace of the vesting example
         # It has the packages of the workspace above, so only its own module is built.
         working-directory: scalus-examples/jvm/src/test/lean/LinearVesting
         run: |
-          nix develop ../../../../../..#ci --accept-flake-config --command bash -c "lake build"
+          nix develop ../../../../../..#ci-lean --accept-flake-config --command bash -c "lake build"
+      - name: Cache the Lean builds of the AMM example
+        # Its statements' modules take minutes to build, the deposit's about ten: a module whose text
+        # has not changed is taken from the cache.
+        uses: actions/cache@v6
+        with:
+          path: scalus-examples/jvm/src/test/lean/Amm/.lake
+          # Everything the AMM's modules are built of: Scalus's Lean library and its pins, the
+          # toolchain, and the AMM's own sources and programs. An exact hit is not saved again.
+          key: lean-amm-${{ hashFiles('scalus-verification/src/main/lean/lake-manifest.json', 'scalus-verification/src/main/lean/lakefile.lean', 'scalus-verification/src/main/lean/ScalusProofs.lean', 'scalus-verification/src/main/lean/ScalusProofs/**/*.lean', 'scalus-examples/jvm/src/test/lean/Amm/lean-toolchain', 'scalus-examples/jvm/src/test/lean/Amm/lakefile.lean', 'scalus-examples/jvm/src/test/lean/Amm/Amm.lean', 'scalus-examples/jvm/src/test/lean/Amm/Amm/**/*.lean', 'scalus-examples/jvm/src/test/lean/Amm/Amm/**/*.flat') }}
+          restore-keys: |
+            lean-amm-
+      - name: Build the Lean workspace of the AMM example
+        # With the statements and the proofs written by hand, `AmmProofs`: building a statement's
+        # module runs its programs symbolically, which takes minutes, and here it is outside the
+        # time limit of the check of a proof by hand. A proof that does not build fails here.
+        working-directory: scalus-examples/jvm/src/test/lean/Amm
+        run: |
+          nix develop ../../../../../..#ci-lean --accept-flake-config --command bash -c "lake build Amm AmmProofs"
       - name: Run the proofs
         # SCALUS_REQUIRE_LEAN makes a test that cannot run Lean fail instead of being canceled,
         # so the proofs cannot pass by not running.
         env:
           SCALUS_REQUIRE_LEAN: "1"
         run: |
-          nix develop .#ci --accept-flake-config --command bash -c "sbt --batch scalusVerification/test 'scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest scalus.examples.htlc.HtlcVerificationTest scalus.examples.paymentsplitter.PaymentSplitterVerificationTest scalus.examples.oneshotmint.MintingPolicyVerificationTest -- -l scalus.verify.uplcblaster.Unfinished'"
+          nix develop .#ci-lean --accept-flake-config --command bash -c "sbt --batch scalusVerification/test 'scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest scalus.examples.htlc.HtlcVerificationTest scalus.examples.paymentsplitter.PaymentSplitterVerificationTest scalus.examples.oneshotmint.MintingPolicyVerificationTest scalus.examples.amm.AmmVerificationTest -- -l scalus.verify.uplcblaster.Unfinished'"
       - name: The kept results are current
         # The run above asked Lean for every statement. One whose entry was missing or stale was
         # proved again and written into its file, so a file that changed is not the one of this

@@ -11,7 +11,7 @@ import scalus.uplc.Constant
   * For a call `f(a, b)` in the body of `g`, the obligation is, over `g`'s parameters,
   *
   * {{{
-  * denotes(reach) ==> Prop(check)
+  * denotes(reach) ==>: Prop(check)
   * }}}
   *
   * Both tests are cut out of `g`'s SIR along the path to the call: the bindings before it stay, a
@@ -54,6 +54,22 @@ private[verify] object Obligations {
         val definition = wrappers.bindings.find(_.name == function.name).map(_.value)
         val (parameters, term) = lambda(definition.getOrElse(root), function.arity, function.name)
         Body(parameters, term, wrappers)
+    }
+
+    /** Whether [[body]] reads the code of `function`, whose SIR is `sir`: whether it is a function
+      * of its declared parameters, which `body` takes apart, and does not throw on.
+      */
+    def hasBody(function: FunctionDef[?, ?], sir: SIR): Boolean = {
+        val (wrappers, root) = Wrappers.of(sir)
+        val definition = wrappers.bindings.find(_.name == function.name).map(_.value)
+        @annotation.tailrec
+        def lambdaOf(sir: SIR, arity: Int): Boolean =
+            if arity == 0 then true
+            else
+                sir match
+                    case SIR.LamAbs(_, term, Nil, _) => lambdaOf(term, arity - 1)
+                    case _                           => false
+        lambdaOf(definition.getOrElse(root), function.arity)
     }
 
     private def lambda(sir: SIR, arity: Int, name: String): (List[SIR.Var], SIR) =

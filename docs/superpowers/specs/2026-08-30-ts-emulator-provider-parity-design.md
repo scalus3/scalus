@@ -1,7 +1,10 @@
 # Making the Scalus JS/TS Emulator the one worth integrating
 
 **Date:** 2026-08-30 (revision 2)
-**Status:** Design — awaiting owner review. Research complete, Stage 0 spike run and reverted.
+**Status:** M1 implemented, merged to master on 2026-09-04 (13 commits, 3c8e3ac82 to 53ab5c566).
+Stage 0 spike run and reverted (section 3). Rollbacks (6.2) landed in 679b0890a under
+`2026-10-21-emulator-chain-design.md`; rewards (6.3) in d5457d164 under
+`2026-11-02-emulator-ledger-rules-design.md`.
 **Scope:** The `scalus` npm package's emulator and script-evaluation surface, the Scala-side
 changes it implies, and how lucid-evolution, the IntersectMBO Evolution SDK and MeshJS integrate
 with it.

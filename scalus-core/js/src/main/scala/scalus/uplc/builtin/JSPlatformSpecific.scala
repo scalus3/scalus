@@ -4,6 +4,7 @@ import scalus.crypto.ed25519.JsEd25519Verifier
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
 import scala.scalajs.js
+import scala.util.control.NonFatal
 import scala.scalajs.js.annotation.*
 import scalus.utils.scalajs.internal as sjs
 import scalus.utils.scalajs.internal.toByteArray
@@ -125,7 +126,7 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
             ) // Use fromBytes instead of fromHex
             point.toAffine() // Ensures key is valid
             true
-        catch case e: Throwable => false
+        catch case NonFatal(_) => false
 
     // secp256k1 group order n
     private val SECP256K1_ORDER =

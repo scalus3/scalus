@@ -3,6 +3,7 @@ package scalus.examples.amm
 import scalus.uplc.builtin.ByteString.utf8
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.Spec.ensuring
 
 type TradedToken = (PolicyId, TokenName)
 
@@ -57,25 +58,58 @@ object AmmDatum {
 @Compile
 object AmmMath {
 
+    // The `ensuring` clauses below are the functions' specifications: they are no part of the
+    // script, and `AmmVerificationTest` proves them about the compiled functions. Each holds under
+    // a condition written in the clause, not under a precondition, because the validator takes
+    // the reserves and the fee as the datum and the parameters give them.
+
     /** Expected pool datum after depositing `(x0, x1)`. The minted LP amount is
       * `result.lpSupply - current.lpSupply`. Does not validate the deposit ratio — callers do.
+      *
+      * Specification: a deposit of amounts that are not negative into a pool that has liquidity
+      * dilutes no LP token already issued. Every LP token is backed by at least as much of each
+      * reserve after the deposit as before: `r0' / lpSupply' >= r0 / lpSupply`, and so of `r1`.
       */
     def depositDatum(current: AmmDatum, x0: BigInt, x1: BigInt): AmmDatum = {
         val lpMinted =
             if current.lpSupply === BigInt(0) then Math.sqrt(x0 * x1)
             else Math.min(x0 * current.lpSupply / current.r0, x1 * current.lpSupply / current.r1)
         AmmDatum(current.r0 + x0, current.r1 + x1, current.lpSupply + lpMinted)
-    }
+    }.ensuring(next =>
+        !(current.r0 > 0 && current.r1 > 0 && current.lpSupply > 0 && x0 >= 0 && x1 >= 0) ||
+            (next.r0 * current.lpSupply >= current.r0 * next.lpSupply
+                && next.r1 * current.lpSupply >= current.r1 * next.lpSupply)
+    )
 
-    /** Expected pool datum after burning `lp` LP tokens. */
-    def redeemDatum(current: AmmDatum, lp: BigInt): AmmDatum =
+    /** Expected pool datum after burning `lp` LP tokens.
+      *
+      * Specification: a redemption of at most the supply leaves no reserve negative, and takes no
+      * more than the redeemed share. Every LP token left is backed by at least as much of each
+      * reserve as before: `r0' / lpSupply' >= r0 / lpSupply`, and so of `r1`.
+      */
+    def redeemDatum(current: AmmDatum, lp: BigInt): AmmDatum = {
         AmmDatum(
           r0 = current.r0 - lp * current.r0 / current.lpSupply,
           r1 = current.r1 - lp * current.r1 / current.lpSupply,
           lpSupply = current.lpSupply - lp
         )
+    }.ensuring(next =>
+        !(current.r0 >= 0 && current.r1 >= 0 && lp >= 0 && lp <= current.lpSupply) ||
+            (next.r0 >= 0 && next.r1 >= 0
+                && next.r0 * current.lpSupply >= current.r0 * next.lpSupply
+                && next.r1 * current.lpSupply >= current.r1 * next.lpSupply)
+    )
 
-    /** `(amountOut, expected pool datum)` after swapping `amountIn` in the given direction. */
+    /** `(amountOut, expected pool datum)` after swapping `amountIn` in the given direction.
+      *
+      * `feeNumerator / feeDenominator` is the share of `amountIn` that counts, `997 / 1000` for a
+      * fee of 0.3%.
+      *
+      * Specification: with reserves and an amount in that are not negative, and a fee between
+      * nothing and everything (`0 <= feeNumerator <= feeDenominator`), the amount out is not
+      * negative, the product of the reserves `r0 * r1` does not decrease, and a pool whose reserves
+      * are both positive keeps them positive: a swap does not drain it.
+      */
     def swapResult(
         current: AmmDatum,
         feeNumerator: BigInt,
@@ -90,7 +124,13 @@ object AmmMath {
         else
             val out = current.r0 * dxAdjusted / (current.r1 * feeDenominator + dxAdjusted)
             (out, AmmDatum(current.r0 - out, current.r1 + amountIn, current.lpSupply))
-    }
+    }.ensuring(result =>
+        !(current.r0 >= 0 && current.r1 >= 0 && amountIn >= 0
+            && feeNumerator >= 0 && feeNumerator <= feeDenominator) ||
+            (result._1 >= 0
+                && result._2.r0 * result._2.r1 >= current.r0 * current.r1
+                && (!(current.r0 > 0 && current.r1 > 0) || (result._2.r0 > 0 && result._2.r1 > 0)))
+    )
 }
 
 /** Redeemer for the spending validator. */

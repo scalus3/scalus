@@ -71,6 +71,45 @@ class LeanProofsTest extends AnyFunSuite {
         finally Directories.remove(root)
     }
 
+    test("a build requires Lean by a resource on the class path, as `verify` writes it") {
+        val classes = Files.createTempDirectory("scalus-lean-proofs")
+        try
+            val loader = new java.net.URLClassLoader(Array(classes.toUri.toURL), null)
+            try
+                assert(!LeanProofs.requiredByBuild(loader))
+                val said = classes.resolve(LeanProofs.requireLeanResource)
+                Files.createDirectories(said.getParent)
+                Files.writeString(said, "on")
+                assert(LeanProofs.requiredByBuild(loader))
+            finally loader.close()
+        finally Directories.remove(classes)
+    }
+
+    test("where the build requires Lean, a statement that cannot be checked here fails") {
+        unbuilt { workspace =>
+            val classes = Files.createTempDirectory("scalus-lean-proofs")
+            val said = classes.resolve(LeanProofs.requireLeanResource)
+            Files.createDirectories(said.getParent)
+            Files.writeString(said, "on")
+            val loader = new java.net.URLClassLoader(Array(classes.toUri.toURL), null)
+            val thread = Thread.currentThread
+            val before = thread.getContextClassLoader
+            // The proofs read the build's resources with the class loader of the tests that run.
+            thread.setContextClassLoader(loader)
+            val proofs = LeanProofs(workspace, None, reason => throw new Skipped(reason))
+            try
+                val failed = intercept[AssertionError] {
+                    proofs.proven(forAll[BigInt](x => x + BigInt(0) == x), 40)
+                }
+                assert(failed.getMessage.contains("requires lake and a built Lean workspace"))
+            finally
+                proofs.close()
+                thread.setContextClassLoader(before)
+                loader.close()
+                Directories.remove(classes)
+        }
+    }
+
     test("where no build names a workspace, it is the library's in these sources") {
         val loader = new java.net.URLClassLoader(Array.empty[java.net.URL], null)
         try assert(LeanProofs.projectWorkspace(loader) == LeanProofs.libraryWorkspace)

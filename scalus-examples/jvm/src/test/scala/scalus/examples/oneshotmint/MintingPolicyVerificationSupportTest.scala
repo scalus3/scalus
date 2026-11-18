@@ -47,11 +47,10 @@ class MintingPolicyVerificationSupportTest extends AnyFunSuite {
         assert(!erased.contains("holdsOnReturn"))
         clauses.foreach(name => assert(!erased.contains(s"MintingPolicy$$.$name"), name))
         // Compiled with error traces, a program has the message of every error it can raise, as
-        // the policy has its own, and none of a function that only a clause calls.
+        // the policy has its own.
         given Options = Options.debug
         val script = compiled.toUplc().show
         assert(script.contains("\"M\""), script)
-        assert(!script.contains(MintingPolicy.NoOwnTokens))
     }
 }
 

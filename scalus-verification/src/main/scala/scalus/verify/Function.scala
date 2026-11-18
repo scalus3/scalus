@@ -39,6 +39,14 @@ object FunctionRef {
 
     inline def apply[A, B, C, R](inline f: (A, B, C) => R): FunctionRef[(A, B, C), R] =
         FunctionRef[(A, B, C), R](FunctionMacro.qualifiedName(f))
+
+    inline def apply[A, B, C, D, R](inline f: (A, B, C, D) => R): FunctionRef[(A, B, C, D), R] =
+        FunctionRef[(A, B, C, D), R](FunctionMacro.qualifiedName(f))
+
+    inline def apply[A, B, C, D, E, R](
+        inline f: (A, B, C, D, E) => R
+    ): FunctionRef[(A, B, C, D, E), R] =
+        FunctionRef[(A, B, C, D, E), R](FunctionMacro.qualifiedName(f))
 }
 
 /** One way of seeing a function, needed by some proof method. Keys compare by identity. */
@@ -267,6 +275,24 @@ object FunctionDef {
           PlutusV3.compile(f)(using UplcBlaster.options)
         )
 
+    /** A four-parameter `@Compile` method, taking its arguments as a tuple of four. */
+    inline def apply[A, B, C, D, R](inline f: (A, B, C, D) => R): FunctionDef[(A, B, C, D), R] =
+        fromCompiled(
+          qualified[(A, B, C, D), R](FunctionMacro.qualifiedName(f), 4),
+          PlutusV3.compile(f)(using UplcBlaster.options)
+        )
+
+    /** A five-parameter `@Compile` method, taking its arguments as a tuple of five:
+      * `FunctionDef(AmmMath.swapResult)`.
+      */
+    inline def apply[A, B, C, D, E, R](
+        inline f: (A, B, C, D, E) => R
+    ): FunctionDef[(A, B, C, D, E), R] =
+        fromCompiled(
+          qualified[(A, B, C, D, E), R](FunctionMacro.qualifiedName(f), 5),
+          PlutusV3.compile(f)(using UplcBlaster.options)
+        )
+
     /** Any one-parameter function under a synthetic name, compiled with the pinned options:
       * `FunctionDef.named("div10", (x: BigInt) => BigInt(10) / x)`.
       */
@@ -290,6 +316,26 @@ object FunctionDef {
     ): FunctionDef[(A, B, C), R] =
         fromCompiled(
           synthetic[(A, B, C), R](name, 3),
+          PlutusV3.compile(f)(using UplcBlaster.options)
+        )
+
+    /** Any four-parameter function under a synthetic name, taking its arguments as a tuple. */
+    inline def named[A, B, C, D, R](
+        name: String,
+        inline f: (A, B, C, D) => R
+    ): FunctionDef[(A, B, C, D), R] =
+        fromCompiled(
+          synthetic[(A, B, C, D), R](name, 4),
+          PlutusV3.compile(f)(using UplcBlaster.options)
+        )
+
+    /** Any five-parameter function under a synthetic name, taking its arguments as a tuple. */
+    inline def named[A, B, C, D, E, R](
+        name: String,
+        inline f: (A, B, C, D, E) => R
+    ): FunctionDef[(A, B, C, D, E), R] =
+        fromCompiled(
+          synthetic[(A, B, C, D, E), R](name, 5),
           PlutusV3.compile(f)(using UplcBlaster.options)
         )
 }

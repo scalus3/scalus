@@ -1,7 +1,13 @@
 import PlutusCore.UPLC
 import Blaster
+import ScalusProofs.Ledger
 
 /-! A budgeted CEK run that keeps a failing program apart from an exhausted budget.
+
+    Every check of Scalus imports this module, and nothing else of the library: so it imports
+    the ledger's rules (`ScalusProofs.Ledger`) too, which a check that states `isValid` reads. A
+    workspace that builds this module, as every workspace Scalus makes does, then builds all a
+    check needs, and every check has the one header, which a server loads once.
 
     PlutusCore's `runSteps` returns `State.Error` both when a program fails and when the step
     budget runs out, so a proof over it cannot say that a program fails. `runFor` makes the same

@@ -75,8 +75,32 @@ class DeBruijnTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbitr
         )
     }
 
-    test("fromDeBruijnTerm rejects an index with no binder") {
-        assertThrows[IndexOutOfBoundsException](DeBruijn.fromDeBruijnTerm(lam("x")(ix("x", 2))))
+    test("fromDeBruijnTerm keeps an index past the binders as a free variable") {
+        assert(DeBruijn.fromDeBruijnTerm(lam("x")(ix("x", 2))) == lam("i0")(ix("free1", 2)))
+        assert(DeBruijn.fromDeBruijnTerm(ix("i3", 3)) == ix("free3", 3))
+        // One free variable seen from two depths gets one name.
+        assert(
+          DeBruijn.fromDeBruijnTerm(lam("x")(ix("y", 2) $ lam("z")(ix("y", 3)))) ==
+              lam("i0")(ix("free1", 2) $ lam("i1")(ix("free1", 3)))
+        )
+    }
+
+    test("fromDeBruijnTerm keeps index 0 as a free variable") {
+        assert(DeBruijn.fromDeBruijnTerm(lam("x")(ix("x", 0))) == lam("i0")(ix("free0", 0)))
+    }
+
+    test("fromDeBruijnTerm does not let a binder capture a free variable") {
+        // The flat decoder names a variable with index 3 `i3`, and the fourth binder is `i3` too.
+        val t = lam("a", "b", "c")(ix("i1", 1)) $ lam("d")(Constr(Word64.Zero, List(ix("i3", 3))))
+        val named = DeBruijn.fromDeBruijnTerm(t)
+        val expected =
+            lam("i0", "i1", "i2")(ix("i2", 1)) $ lam("i3")(
+              Constr(Word64.Zero, List(ix("free2", 3)))
+            )
+        assert(named == expected)
+        val Apply(_, LamAbs(_, Constr(_, List(Var(v, _)), _), _), _) =
+            DeBruijn.deBruijnTerm(named): @unchecked
+        assert(v.index < 0) // still free, not bound by `i3`
     }
 
     test("checkScope accepts a closed term") {

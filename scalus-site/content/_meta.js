@@ -8,6 +8,7 @@ export default {
   'smart-contract-optimisations': 'Advanced Optimisations',
   'transactions': 'Transactions',
   testing: 'Testing',
+  verification: 'Verification',
   'design-patterns': 'Design Patterns',
   'advanced-data-structures': 'Advanced Data Structures',
   security: 'Security',

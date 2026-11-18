@@ -56,10 +56,13 @@ class PlutusVMTest extends AnyFunSuiteLike {
     }
 
     test("evaluateDeBruijnedTerm fails on non-debruijned term") {
-        val term = λ(x => x)
-        assertThrows[Exception] {
+        // A named variable has index 0, which the machine rejects when it looks the variable up.
+        // The term must look it up: like Plutus, the machine returns an unapplied lambda as it is.
+        val term = λ(x => x) $ Const(Constant.Bool(true))
+        val e = intercept[MachineError] {
             v2vm.evaluateDeBruijnedTerm(term, NoBudgetSpender, NoLogger)
         }
+        assert(e.getMessage.contains("DeBruijn.deBruijnTerm"))
     }
 
     test("evaluateDeBruijnedTerm evaluates debruijned term") {

@@ -6,6 +6,8 @@ import scalus.cardano.onchain.plutus.prelude.{require, List as PList, Math}
 import scalus.compiler.Compile
 import scalus.verify.*
 import scalus.verify.Props.*
+import scalus.verify.lean.{LeanServer, LeanServerProvider}
+import scalus.verify.uplcblaster.UplcBlaster.LeafFormula
 
 /** Callers of `Math.clamp`, whose contract expects `lo <= hi`. */
 @Compile
@@ -28,6 +30,11 @@ object ObligationExamples {
 
 class ObligationsTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
+
+    /** The functions here state clauses for the tests of the obligations of calls, which prove some
+      * of them and refute others, on purpose.
+      */
+    override protected def checksSpecifications: Boolean = false
 
     private val clamp = FunctionDef(Math.clamp)
     private val violates = FunctionDef(ObligationExamples.violates)
@@ -72,7 +79,7 @@ class ObligationsTest extends AnyFunSuite with LeanProofsSuite {
         owed.prop match
             case Prop.Forall(x, Prop.Implies(Prop.Denotes(_), Prop.Bool(_))) =>
                 assert(x.tp == scalus.compiler.sir.SIRType.Integer)
-            case other => fail(s"expected for all x, denotes(reach) ==> check, got $other")
+            case other => fail(s"expected for all x, denotes(reach) ==>: check, got $other")
     }
 
     test("a caller's own contract is the premise of its obligations") {
@@ -130,6 +137,31 @@ class ObligationsTest extends AnyFunSuite with LeanProofsSuite {
         prove(unknown, obligation(unknown, passes)) match
             case VerificationResult.Refuted(_) =>
             case other                         => fail(s"expected a refutation, got $other")
+    }
+
+    test("an obligation is checked as written, not in the rejecting form") {
+        // Its premise is the caller's code up to the call, and its claim that code with the
+        // precondition at the call: where `require(lo <= hi)` fails, both fail, and the rejecting
+        // form, whose claim must return, would decide nothing.
+        val checked = verifierWith(checks)
+        val owed = obligation(checked, checks)
+        val functions = FunctionTable(clamp, checks)
+        assert(UplcBlaster.lower(owed.prop, functions).fold(fail(_), _.unrewritten.isDefined))
+        val nothing = new LeanServerProvider {
+            override def server(): Either[String, LeanServer] = Left("Lean was asked")
+            override def workspace: Option[java.nio.file.Path] = None
+        }
+        UplcBlaster(Budget.LeanSteps(120), nothing).prepare(Goal(owed, functions, Nil)) match
+            case Right(goal) =>
+                assert(goal.unrewritten.isEmpty)
+                // A forAll for each of the caller's parameters, around the obligation.
+                def inner(formula: LeafFormula): LeafFormula = formula match
+                    case LeafFormula.Forall(_, body) => inner(body)
+                    case other                       => other
+                inner(goal.body) match
+                    case LeafFormula.Implies(LeafFormula.Denotes(_), LeafFormula.Test(_)) => ()
+                    case other => fail(s"expected the obligation as written, got $other")
+            case Left(report) => fail(report.toString)
     }
 
     test("an obligation is proved when a branch, a contract or a runtime check establishes it") {

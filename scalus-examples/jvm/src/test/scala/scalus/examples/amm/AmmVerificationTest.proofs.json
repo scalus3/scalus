@@ -1,0 +1,125 @@
+{
+  "environment": {
+    "lean-manual": {
+      "Amm": "b68c0d28fc530abd",
+      "Blaster": "a06919767488",
+      "CardanoLedgerApi": "3dd048e3eb86",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "16c4f79c84fecfd5",
+      "proofs": "8097bcd9f8d7f0f7",
+      "toolchain": "leanprover/lean4:v4.24.0"
+    },
+    "uplc-blaster": {
+      "Amm": "b68c0d28fc530abd",
+      "Blaster": "a06919767488",
+      "CardanoLedgerApi": "3dd048e3eb86",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "16c4f79c84fecfd5",
+      "toolchain": "leanprover/lean4:v4.24.0"
+    }
+  },
+  "results": {
+    "amm.deposit.dilutes_no_token": {
+      "tactic": "lean-manual",
+      "result": "proved",
+      "statement": "a89fc1090fad39e5",
+      "programs": [
+        "d607d60fe905d494",
+        "fcc56f8985150c26",
+        "68ceead5c4ec78fe"
+      ],
+      "notes": {
+        "axioms": "propext, Classical.choice, Quot.sound",
+        "cited": "",
+        "kind": "LeanKernelOfOptimizedRuns",
+        "theorem": "Amm.Proofs.Deposit.deposit_dilutes_no_token"
+      },
+      "tests": [
+        "a deposit into a pool with liquidity dilutes no LP token: a proof by hand"
+      ]
+    },
+    "amm.redeem.reserves_kept_without_the_supply_bound": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "cfd1e32755b0d069",
+      "programs": [
+        "4a1c56587f77c31f",
+        "d0fe658f70f63f36",
+        "fb238d871aa2b6a4"
+      ],
+      "notes": {
+        "budget": "319",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "current.lpSupply": 1,
+        "current.r0": 0,
+        "current.r1": 1,
+        "lp": 2
+      },
+      "tests": [
+        "a redemption takes no more than its share"
+      ]
+    },
+    "amm.redeem.stated_contract_holds": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "cfd1e32755b0d069",
+      "programs": [
+        "a460e58483cc375b",
+        "d0fe658f70f63f36",
+        "b6c1482bc1a42f94"
+      ],
+      "notes": {
+        "budget": "556",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "a redemption takes no more than its share"
+      ]
+    },
+    "amm.swap.product_kept_without_the_fee_bound": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "da0ab058c7c31c17",
+      "programs": [
+        "8aa42d9f7bef1d0d",
+        "6c5dff8ba5145e64",
+        "7e77ba8243404965"
+      ],
+      "notes": {
+        "budget": "433",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "amountIn": 2,
+        "current.lpSupply": 0,
+        "current.r0": 7,
+        "current.r1": 2,
+        "feeDenominator": -7,
+        "feeNumerator": 8,
+        "t0In": false
+      },
+      "tests": [
+        "a swap keeps the product of the reserves, and does not drain the pool"
+      ]
+    },
+    "amm.swap.stated_contract_holds": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "da0ab058c7c31c17",
+      "programs": [
+        "e25b3a34ba8df594",
+        "6c5dff8ba5145e64",
+        "b088c75c8c41f04b"
+      ],
+      "notes": {
+        "budget": "614",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "a swap keeps the product of the reserves, and does not drain the pool"
+      ]
+    }
+  }
+}

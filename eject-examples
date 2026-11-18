@@ -17,20 +17,27 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 EXAMPLES_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/main/scala/scalus/examples"
 TESTS_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/test/scala/scalus/examples"
 
-# Known good version (update on tagged releases).
-SCALUS_VERSION="0.18.2"
+# The latest release, as the monorepo's build.sbt names it (`scalusStableVersion`);
+# the pinned value is for a checkout whose build.sbt does not say it.
+SCALUS_VERSION="$(sed -n 's/^val scalusStableVersion = "\(.*\)"$/\1/p' "$SCRIPT_DIR/build.sbt" 2>/dev/null)"
+SCALUS_VERSION="${SCALUS_VERSION:-1.5.0}"
 
 # Ejected projects target sbt 2.0.0 (where `test` is cached and `testFull` runs
 # uncached, like sbt 1.x `test`). Pinned independently of the monorepo, which
 # still builds on sbt 1.x — so we must NOT read it from project/build.properties.
 SBT_VERSION="2.0.0"
-SCALA_VERSION="3.3.8"
+SCALA_VERSION="3.3.9"
 
-EXCLUDED_EXAMPLES="cape setbench buidlerfest linkedlist bilinearAccumulator platform" 
+EXCLUDED_EXAMPLES="cape setbench buidlerfest linkedlist bilinearAccumulator platform"
 
 # Examples that need sources from other examples bundled in.
 # Format: "example:dep1,dep2"
 BUNDLED_DEPS="storage:linkedlist"
+
+# Tests that check what only the monorepo has, and are not ejected: the vesting
+# example's Lean workspace shares the packages of Scalus's own Lean library, and
+# the USDCx statements are checked in a Lean workspace of their own there.
+SKIPPED_TESTS="VestingVerificationSupportTest.scala UsdcxMintingPolicyVerificationTest.scala"
 
 usage() {
     cat <<EOF
@@ -104,9 +111,20 @@ detect_extra_deps() {
             break
         fi
     done
+    if uses_verification "$test_dir"; then
+        extras+=( '"org.scalus" %% "scalus-verification" % scalusVersion % Test' )
+        extras+=( '"org.scalus" %% "scalus-verification-scalatest" % scalusVersion % Test' )
+    fi
     if (( ${#extras[@]} )); then
         printf '%s\n' "${extras[@]}"
     fi
+}
+
+# Whether the example's tests state proofs (scalus-verification).
+uses_verification() {
+    local test_dir="$1"
+    [[ -d "$test_dir" ]] &&
+        grep -rqE '^[[:space:]]*import[[:space:]]+scalus\.verify' "$test_dir" 2>/dev/null
 }
 
 gen_snapshot_resolver() {
@@ -129,6 +147,15 @@ gen_build_sbt() {
             $dep"
         done <<< "$extras"
     fi
+    # Suites of proofs: the statements Lean does not finish wait for their time limit,
+    # so `test` leaves them out (`sbt verify` does as well); `testOnly` runs them.
+    local verification_lines=""
+    if uses_verification "$test_dir"; then
+        verification_lines="
+        Test / testOptions += Tests.Argument(
+          TestFrameworks.ScalaTest, \"-l\", \"scalus.verify.uplcblaster.Unfinished\"
+        ),"
+    fi
     cat <<EOF
 ThisBuild / scalaVersion := "$SCALA_VERSION"
 ThisBuild / organization := "org.scalus.examples"
@@ -150,7 +177,7 @@ lazy val root = (project in file("."))
         ),
         addCompilerPlugin(
             ("org.scalus" %% "scalus-plugin" % scalusVersion).cross(CrossVersion.full)
-        ),
+        ),$verification_lines
         Compile / sources := {
             val base = baseDirectory.value
             val testDir = base / "test"
@@ -193,8 +220,45 @@ project/project/
 EOF
 }
 
+gen_verification_section() {
+    local has_verification="$1"
+    if [[ "$has_verification" != "yes" ]]; then
+        return
+    fi
+    cat <<'EOF'
+
+## Formal verification
+
+The `*VerificationTest` suites prove properties of the compiled validator with
+Lean 4, Blaster and Z3 (see https://scalus.org/docs/verification). They need
+[elan](https://github.com/leanprover/elan) and Z3 5.4.0 or later on the `PATH`.
+
+```sh
+sbt verify
+```
+
+`verify` builds the project's Lean workspace, `src/test/lean/<Project>`, and runs
+the suites with Lean required. The first run clones and builds Blaster and
+PlutusCore, which takes several minutes. The workspace is created automatically
+where it is missing; whether to commit it is up to you.
+
+The results of the proofs are kept beside each suite, in `test/*.proofs.json`.
+Without Lean, `sbt test` takes a kept result that still agrees with the code, and
+cancels the test of one that does not. The kept results come from the Scalus
+monorepo, where the checks ran in another workspace, so the first `sbt verify`
+proves every statement again and rewrites them.
+
+The tests tagged `Unfinished` are statements Lean does not finish; `test` and
+`verify` leave them out, and `testOnly` runs them:
+
+```sh
+sbt "testOnly *VerificationTest -- -n scalus.verify.uplcblaster.Unfinished"
+```
+EOF
+}
+
 gen_getting_started() {
-    local name="$1"
+    local name="$1" has_verification="${2:-no}"
     cat <<EOF
 # Getting Started
 
@@ -262,7 +326,7 @@ sbt "deploy <ContractName>"
 
 The contract is deployed as a reference script UTxO at the sender's own base
 address; the transaction hash is printed on success.
-
+$(gen_verification_section "$has_verification")
 ## Pinned versions
 
 - Scalus: \`$SCALUS_VERSION\`
@@ -290,6 +354,28 @@ rewrite_packages() {
         # Strip the scalus.examples. prefix everywhere — package/import lines AND
         # inline fully-qualified references (e.g. d.to[scalus.examples.pricebet.OracleState]).
         sed_i 's/scalus\.examples\.//g' "$f"
+    done < <(find "$dir" -name '*.scala' -print0)
+}
+
+# Points the suites of proofs at the ejected project's layout. In the monorepo a
+# suite names its kept results by their place there,
+#   LeanProofs.inSources("scalus-examples", ..., "scala", "scalus", "examples", "<name>"),
+# and they are in test/ here. The vesting suite runs its checks in the monorepo's
+# LinearVesting workspace; here it takes the project's own, which the sbt plugin
+# names and the first suite creates.
+rewrite_verification_paths() {
+    local dir="$1"
+    # A call spans several lines, one argument on each, so the file is read whole into
+    # the pattern space (`:a`, `N`, `$!ba`); one command on each line of the script is
+    # how BSD and GNU sed both take the label.
+    local kept=':a
+N
+$!ba
+s/inSources([^)]*"examples",[^)]*)/inSources("test")/g'
+    local workspace='s/LeanProofs\.inSources("scalus-examples", "jvm", "src", "test", "lean", "LinearVesting")/LeanProofs.projectWorkspace/g'
+    while IFS= read -r -d '' f; do
+        sed_i "$kept" "$f"
+        sed_i "$workspace" "$f"
     done < <(find "$dir" -name '*.scala' -print0)
 }
 
@@ -347,21 +433,32 @@ eject_one() {
         done
     fi
 
-    # Copy test sources
+    # Copy test sources, with the kept results of the suites of proofs beside them
     if [[ -d "$test_dir" ]]; then
         mkdir -p "$project_dir/test"
-        find "$test_dir" -maxdepth 1 -name '*.scala' -exec cp {} "$project_dir/test/" \;
+        find "$test_dir" -maxdepth 1 \( -name '*.scala' -o -name '*.proofs.json' \) \
+            -exec cp {} "$project_dir/test/" \;
+        local skipped
+        for skipped in $SKIPPED_TESTS; do
+            rm -f "$project_dir/test/$skipped"
+        done
     fi
 
     # Rewrite package declarations
     rewrite_packages "$project_dir"
 
+    local has_verification="no"
+    if uses_verification "$project_dir/test"; then
+        has_verification="yes"
+        rewrite_verification_paths "$project_dir/test"
+    fi
+
     # Generate build files
-    gen_build_sbt "$out_name" "$src_dir" "$test_dir" > "$project_dir/build.sbt"
+    gen_build_sbt "$out_name" "$src_dir" "$project_dir/test" > "$project_dir/build.sbt"
     gen_plugins_sbt               > "$project_dir/project/plugins.sbt"
     gen_build_properties          > "$project_dir/project/build.properties"
     gen_gitignore                 > "$project_dir/.gitignore"
-    gen_getting_started "$out_name" > "$project_dir/GETTING_STARTED.md"
+    gen_getting_started "$out_name" "$has_verification" > "$project_dir/GETTING_STARTED.md"
 
     # Copy the example's own README if it exists
     if [[ -f "$src_dir/README.md" ]]; then

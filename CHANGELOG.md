@@ -4,9 +4,18 @@
 
 ### Added
 
+- `scalus-plugin` is published for Scala 3.10.1. Scala 3.10.0 is not supported: its compiler
+  crashes on some Scalus code (scala/scala3#27039).
 - `PositionalMerkleTree`: fixed-depth positional commitments with SSZ proofs and multiproofs using
   BLAKE2b-256, streaming off-chain roots, and on-chain `verifyMembership`, `delete` and
   `deleteMany`.
+
+### Fixed
+
+- `PlutusVM.evaluateScript` no longer throws `IndexOutOfBoundsException` when the result has a
+  free variable inside `constr` or `case`. Like Plutus, PlutusV1 and PlutusV2 accept the result and
+  PlutusV3 fails with `InvalidReturnValue`. `DeBruijn.fromDeBruijnTerm` now names such a variable
+  `free<k>` instead of throwing (#474).
 
 ## 1.5.0 (2026-11-04)
 

@@ -29,9 +29,18 @@ enum PropExpr[A] {
   * negation; `!` inside a Boolean expression is part of the test. The two differ when the
   * expression can fail.
   *
-  * Precedence: Scala ranks an operator by its first character, so `==>` binds like `==` and `<=>`
-  * like `<`, both tighter than `&&` and `||`. `p && q ==> r` therefore means `p && (q ==> r)`.
-  * Parenthesize, or use the alphanumeric [[implies]] and [[iff]], which bind loosest of all.
+  * Implication is written `premise ==>: conclusion`. The name ends in `:`, so it is
+  * right-associative, as implication is read: `p ==>: q ==>: r` means `p ==>: (q ==>: r)`. The same
+  * holds of `premise ==>?: claim` ([[Prop.Rejects]]).
+  *
+  * Precedence: Scala ranks an operator by its first character, so `==>:` binds like `==` and `<=>`
+  * like `<`, both tighter than `&&` and `||`, on either side: `p && q ==>: r` means
+  * `p && (q ==>: r)`, and `p ==>: q && r` means `(p ==>: q) && r`. Parenthesize, or use
+  * [[implies_:]] and [[iff]], whose names begin with a letter and so bind loosest of all:
+  * `p && q implies_: r && s` means `(p && q) implies_: (r && s)`. `implies_:` ends in `:`, so it is
+  * right-associative as `==>:` is. Nor does Scala mix operators of one precedence and of both
+  * associativities: `x == y ==>: p` is a compile error, and is written `(x == y) ==>: p`, or
+  * `x == y implies_: p`.
   */
 enum Prop {
 
@@ -60,17 +69,57 @@ enum Prop {
     case And(a: Prop, b: Prop)
     case Or(a: Prop, b: Prop)
     case Implies(a: Prop, b: Prop)
+
+    /** `premise` rejects every value that `claim`, a test, is false of: where the claim returns
+      * `false`, the premise does not hold. Where the claim holds, or fails, it says nothing.
+      * Written `premise ==>?: claim`. Unlike `premise ==>: claim`, a claim that fails is no
+      * counterexample: where the premise holds of a value the claim cannot be evaluated of, as a
+      * validator that accepts a context its claim cannot read, this holds. A tactic checks it in
+      * the rejecting form, `if claim then error else premise`, whose failure on every value it is.
+      * A claim of several tests, `Prop(a) && Prop(b)`, is the one test `a && b`, which reads `b`
+      * only where `a` holds: it fails where `a` fails, and where `a` holds and `b` fails.
+      */
+    case Rejects(premise: Prop, claim: Prop)
+
+    /** `value`'s `Data` satisfies `predicate`, a Boolean function of Lean: a test that no program
+      * runs, which only Lean evaluates, without a budget. `value` is a statement variable, or the
+      * `Data` of a value as a constant ([[Props.isValid]]).
+      */
+    case Satisfies(predicate: LeanPredicate, value: PropExpr[?])
     case Iff(a: Prop, b: Prop)
     case Not(a: Prop)
 
     def &&(q: Prop): Prop = And(this, q)
     def ||(q: Prop): Prop = Or(this, q)
-    def ==>(q: Prop): Prop = Implies(this, q)
+
+    /** [[Prop.Implies]]: `premise ==>: this`. A right-associative operator is a method of its right
+      * operand, so the premise is the argument: `p ==>: q` is `q.==>:(p)`, `Implies(p, q)`.
+      *
+      * The premise is an inline parameter. Scala evaluates the left operand of a right-associative
+      * call first, binding it to a local value, except where it is given to an inline parameter. A
+      * premise written as a Boolean is converted by [[Props.booleanToProp]], into a test of its
+      * code, before Scala binds it; an inline premise is not bound at all, so it reaches the
+      * conversion as code whatever that order is. The right operand, `this`, is then built first,
+      * which changes nothing: the names of a statement's variables are fixed where it is compiled.
+      */
+    inline def ==>:(inline premise: Prop): Prop = Implies(premise, this)
+
+    /** [[Prop.Rejects]]: `premise ==>?: this`, where `this` is a test. The premise rejects every
+      * value the test is false of; a value the test fails on says nothing. Right-associative, as
+      * [[==>:]], so in `p ==>?: q ==>: r` the claim is the implication `q ==>: r`, which is no
+      * test, and a tactic rejects it: the other reading is `(p ==>?: q) ==>: r`.
+      */
+    inline def ==>?:(inline premise: Prop): Prop = Rejects(premise, this)
+
     def <=>(q: Prop): Prop = Iff(this, q)
     def unary_! : Prop = Not(this)
 
-    /** [[==>]] with the lowest precedence: `p && q implies r` means `(p && q) ==> r`. */
-    infix def implies(q: Prop): Prop = Implies(this, q)
+    /** [[==>:]] with the lowest precedence: its name begins with a letter.
+      * `p && q implies_: r && s` means `(p && q) ==>: (r && s)`, and `x == y implies_: p` means
+      * `(x == y) ==>: p`. Its name ends in `:`, so it is right-associative as `==>:` is, and has
+      * its premise inline: `p implies_: q implies_: r` means `p implies_: (q implies_: r)`.
+      */
+    infix inline def implies_:(inline premise: Prop): Prop = Implies(premise, this)
 
     /** [[<=>]] with the lowest precedence. */
     infix def iff(q: Prop): Prop = Iff(this, q)
@@ -79,7 +128,7 @@ enum Prop {
 /** The contract of a function, built by [[Props.contract]] or [[Props.totalContract]], and declared
   * with [[Verifier.contract]].
   *
-  * It says `∀ variables. expects ==> guarantees`: `variables` stand for the function's arguments,
+  * It says `∀ variables. expects ==>: guarantees`: `variables` stand for the function's arguments,
   * `expects` is what every caller must establish, and `guarantees` is what the function then
   * provides, the postcondition last. `returnsWhen` and `failsWhen` on a contract add a guarantee:
   * where a condition holds, the function returns, or fails. A contract is built only by those
@@ -89,7 +138,11 @@ final class FunctionContract[A, R] private[verify] (
     val function: FunctionRef[A, R],
     val variables: List[PropExpr.Ident[?]],
     val expects: Prop,
-    val guarantees: List[Prop]
+    val guarantees: List[Prop],
+    /** The clauses of the function's code the contract was read from
+      * ([[FunctionContract.inSource]]): none for a contract written beside the function.
+      */
+    val clauses: List[Clause]
 ) {
 
     /** The contract as one statement. */
@@ -106,7 +159,8 @@ final class FunctionContract[A, R] private[verify] (
           function,
           variables,
           expects,
-          Props.renameVariables(guarantee, names.zip(variables.map(_.name)).toMap) :: guarantees
+          Props.renameVariables(guarantee, names.zip(variables.map(_.name)).toMap) :: guarantees,
+          clauses
         )
 
     override def toString: String = s"FunctionContract(${function.name})"
@@ -123,7 +177,17 @@ object FunctionContract {
         variables: List[PropExpr.Ident[?]],
         expects: Prop,
         guarantees: List[Prop]
-    ): FunctionContract[A, R] = new FunctionContract(function, variables, expects, guarantees)
+    ): FunctionContract[A, R] = new FunctionContract(function, variables, expects, guarantees, Nil)
+
+    /** [[of]], read from the clauses `clauses` of the function's code. */
+    private[verify] def of[A, R](
+        function: FunctionRef[A, R],
+        variables: List[PropExpr.Ident[?]],
+        expects: Prop,
+        guarantees: List[Prop],
+        clauses: List[Clause]
+    ): FunctionContract[A, R] =
+        new FunctionContract(function, variables, expects, guarantees, clauses)
 
     /** The contract `function` states in its own body, with `Spec.expects` and `ensuring`
       * ([[scalus.cardano.onchain.plutus.prelude.Spec]]), or `None` when it states none. It is the
@@ -176,6 +240,36 @@ object FunctionContract {
             inline when: (A, B, C) => Prop | Boolean
         ): FunctionContract[(A, B, C), R] = ${ PropMacro.contractClause('contract, 'when, true) }
     }
+
+    extension [A, B, C, D, R](contract: FunctionContract[(A, B, C, D), R]) {
+
+        /** [[returnsWhen]] for a function of four parameters. */
+        inline def returnsWhen(
+            inline when: (A, B, C, D) => Prop | Boolean
+        ): FunctionContract[(A, B, C, D), R] =
+            ${ PropMacro.contractClause('contract, 'when, false) }
+
+        /** [[failsWhen]] for a function of four parameters. */
+        inline def failsWhen(
+            inline when: (A, B, C, D) => Prop | Boolean
+        ): FunctionContract[(A, B, C, D), R] =
+            ${ PropMacro.contractClause('contract, 'when, true) }
+    }
+
+    extension [A, B, C, D, E, R](contract: FunctionContract[(A, B, C, D, E), R]) {
+
+        /** [[returnsWhen]] for a function of five parameters. */
+        inline def returnsWhen(
+            inline when: (A, B, C, D, E) => Prop | Boolean
+        ): FunctionContract[(A, B, C, D, E), R] =
+            ${ PropMacro.contractClause('contract, 'when, false) }
+
+        /** [[failsWhen]] for a function of five parameters. */
+        inline def failsWhen(
+            inline when: (A, B, C, D, E) => Prop | Boolean
+        ): FunctionContract[(A, B, C, D, E), R] =
+            ${ PropMacro.contractClause('contract, 'when, true) }
+    }
 }
 
 object Props {
@@ -184,10 +278,16 @@ object Props {
     def forAllSIR[A](ident: PropExpr.Ident[A], body: Prop): Prop = Prop.Forall(ident, body)
 
     /** Every value of `A` satisfies the body. The body is a statement about the lambda's parameter,
-      * such as `forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x != BigInt(0)))`, or a Boolean
+      * such as `forAll[BigInt](x => denotes(BigInt(10) / x) ==>: (x != BigInt(0)))`, or a Boolean
       * test, such as `forAll[BigInt](x => Math.abs(x) >= 0)`. A Boolean body is one test, whatever
       * it contains: `if`, `match` and local `val`s included. In a statement, the parameter may be
       * used in its tests and expressions, not to compute the statement itself.
+      *
+      * A tactic chooses how the variable's value reaches it. `UplcBlaster` passes a case class or
+      * an enum as its fields, and so names a counterexample's values by their fields (`w.a0`), but
+      * one that would be more than 20 Lean variables so, as a `ScriptContext`, as one `Data`: its
+      * counterexample is then one `Data` value, under the variable's name
+      * (docs/design/verification-details/uplc-blaster.md, "Mapping a variable").
       */
     inline def forAll[A: Quantifiable](inline body: A => Prop | Boolean): Prop =
         ${ PropMacro.forAll[A]('body) }
@@ -205,12 +305,30 @@ object Props {
         inline body: (A, B, C) => Prop | Boolean
     ): Prop = ${ PropMacro.forAll3[A, B, C]('body) }
 
-    /** Every value of `A`, as Lean has its `Data` encoding: [[forAll]], with the variable one
-      * `Data` to Lean, restricted to the encodings of the values of `A` ([[DataEncoding.of]]), and
-      * `d.to[A]` to the programs, which read the `Data` themselves. A type that contains itself is
-      * quantified over so as a whole; [[forAll]] maps it by fields down to where it repeats, and as
-      * `Data` there. Where the restriction is not exact, the variable has more values than `A`, and
-      * is a variable only where it stands for every value, as a list's is.
+    /** A statement about four universally quantified values. */
+    inline def forAll[A: Quantifiable, B: Quantifiable, C: Quantifiable, D: Quantifiable](
+        inline body: (A, B, C, D) => Prop | Boolean
+    ): Prop = ${ PropMacro.forAll4[A, B, C, D]('body) }
+
+    /** A statement about five universally quantified values. */
+    inline def forAll[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        E: Quantifiable
+    ](
+        inline body: (A, B, C, D, E) => Prop | Boolean
+    ): Prop = ${ PropMacro.forAll5[A, B, C, D, E]('body) }
+
+    /** Every value of `A`, as its `Data` encoding: [[forAll]], written over the encodings. The
+      * values of a type and their `toData` encodings correspond one to one, so it states what
+      * [[forAll]] does, and a tactic checks it as it checks [[forAll]]: `UplcBlaster` maps the
+      * variable by fields, or as one `Data` where it would be more than `MappingPlan.mostByFields`
+      * Lean variables by fields, as a `ScriptContext`
+      * (docs/design/verification-details/uplc-blaster.md, "Mapping a variable"). The statement is
+      * the one [[forAll]] builds, and `decode` is not read: it says only that `A` has `Data`
+      * encodings.
       *
       * Its values are the encodings that `toData` gives, as the node gives a script its context:
       * `forAllData[ScriptContext]` stands for every context. They are not all the `Data` that
@@ -223,24 +341,25 @@ object Props {
       * `returnsWhen`, `failsWhen`, and of a quantifier of several variables. Its type is the
       * quantifier's. On a type argument, `forAll[A @UplcRepr(Data)]`, the annotation is not seen:
       * the compiler drops it before the statement is built. A call's result and a contract's
-      * variables take no such annotation. The programs read the variable with `d.to[A]`, which the
-      * compiler compiles to its own reading of the type's representation, the one the premise is
-      * derived from, whatever `decode` is.
+      * variables take no such annotation. Such a parameter needs no `FromData`.
       *
       * {{{
-      * forAllData[ScriptContext](ctx => succeeds(validator, ctx) ==> ctx.txInfo.signatories.nonEmpty)
+      * forAllData[ScriptContext](ctx => succeeds(validator, ctx) ==>: ctx.txInfo.signatories.nonEmpty)
       * forAll((ctx: ScriptContext @UplcRepr(UplcRepresentation.Data), n: BigInt) => …)
       * }}}
       */
     inline def forAllData[A](inline body: A => Prop | Boolean)(using
         inline decode: FromData[A]
     ): Prop =
-        ${ PropMacro.forAllData[A]('body, 'decode) }
+        ${ PropMacro.forAllData[A]('body) }
 
     /** [[forAllData]] of the values of `A` that meet the limits `limit` says of the variable: on
       * how many elements its collections have ([[Limits]]). It is the statement
-      * `forAllData[A](x => limit(x) ==> body(x))`, whose limits a tactic may take as the shape of
-      * the values it checks, and need not run.
+      * `forAllData[A](x => limit(x) ==>: body(x))`, whose limits a tactic may take as the shape of
+      * the values it checks, and need not run. `UplcBlaster` maps its variable as one `Data`,
+      * whatever its size, which the guard of its limits walks; the programs read it with `d.to[A]`,
+      * which the compiler compiles to its own reading of the type's representation, the one the
+      * premise is derived from, whatever `decode` is.
       *
       * `limit` is limits joined with `&&`, each of them:
       *   - `maxCollectionLength(x) <= n`, or `< n`: every list and map of `x` (not the fields of a
@@ -259,13 +378,42 @@ object Props {
       * {{{
       * forAllDataLimited[ScriptContext](ctx =>
       *     maxCollectionLength(ctx) <= 2 && ctx.txInfo.inputs.nonEmpty
-      * )(ctx => succeeds(validator, ctx.toData) ==> spendsTheSeed(ctx))
+      * )(ctx => succeeds(validator, ctx.toData) ==>: spendsTheSeed(ctx))
       * }}}
       */
     inline def forAllDataLimited[A](inline limit: A => Boolean)(
         inline body: A => Prop | Boolean
     )(using inline decode: FromData[A]): Prop =
         ${ PropMacro.forAllDataLimited[A]('limit, 'body, 'decode) }
+
+    /** The parameter of a function, in the statements a verifier makes of it, as a
+      * [[forAllDataLimited]] variable: over the `Data` encodings of the values of `A` that meet
+      * `limit`, which says what [[forAllDataLimited]]'s limit does. The function is of one
+      * parameter of type `A`, as the validator's entry point on a typed context:
+      *
+      * {{{
+      * val spends = FunctionDef.named(
+      *   "spends",
+      *   (ctx: ScriptContext) => VestingValidator.validate(ctx.toData)
+      * )
+      * verifier.guarantees(
+      *   spends.ref,
+      *   limitedData[ScriptContext](ctx => ctx.txInfo.inputs.length <= 2)
+      * )
+      * }}}
+      */
+    inline def limitedData[A](inline limit: A => Boolean)(using
+        inline decode: FromData[A]
+    ): LimitedData = ${ PropMacro.limitedData[A]('limit, 'decode) }
+
+    /** The parameter of a function, in the statements a verifier makes of it, as a [[forAllData]]
+      * variable: over the `Data` encodings of all the values of `A`, without limits, which states
+      * what a variable of `A` does. It is [[limitedData]]'s counterpart: a statement over every
+      * script context, of which Lean does not finish a validator that walks a list of the context.
+      * `decode` is not read.
+      */
+    inline def unlimitedData[A](using inline decode: FromData[A]): LimitedData =
+        ${ PropMacro.unlimitedData[A] }
 
     /** The length of the longest list or map of `value`: of no use but in a limit of
       * [[forAllDataLimited]], which says it of the variable, and does not run it.
@@ -310,6 +458,15 @@ object Props {
         inline body: R => Prop | Boolean
     ): Prop = callRef(FunctionRef(f), arg)(body)
 
+    inline def call[A, B, C, D, R](inline f: (A, B, C, D) => R, inline arg: (A, B, C, D))(
+        inline body: R => Prop | Boolean
+    ): Prop = callRef(FunctionRef(f), arg)(body)
+
+    inline def call[A, B, C, D, E, R](
+        inline f: (A, B, C, D, E) => R,
+        inline arg: (A, B, C, D, E)
+    )(inline body: R => Prop | Boolean): Prop = callRef(FunctionRef(f), arg)(body)
+
     inline def call[A, R](fn: FunctionDef[A, R], inline arg: A)(
         inline body: R => Prop | Boolean
     ): Prop = ${ PropMacro.callDef('fn, 'arg, 'body, true) }
@@ -331,13 +488,23 @@ object Props {
         inline body: R => Prop | Boolean
     ): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
 
+    inline def whenReturns[A, B, C, D, R](
+        inline f: (A, B, C, D) => R,
+        inline arg: (A, B, C, D)
+    )(inline body: R => Prop | Boolean): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
+
+    inline def whenReturns[A, B, C, D, E, R](
+        inline f: (A, B, C, D, E) => R,
+        inline arg: (A, B, C, D, E)
+    )(inline body: R => Prop | Boolean): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
+
     inline def whenReturns[A, R](fn: FunctionDef[A, R], inline arg: A)(
         inline body: R => Prop | Boolean
     ): Prop = ${ PropMacro.callDef('fn, 'arg, 'body, false) }
 
     /** The contract of a function of one parameter: for every argument that satisfies `expects`, a
       * result the function returns satisfies `ensures` (partial correctness, design doc §3.7):
-      * `∀ x. expects(x) ==> whenReturns(fn, x)(r => ensures(x)(r))`. A failing call satisfies it;
+      * `∀ x. expects(x) ==>: whenReturns(fn, x)(r => ensures(x)(r))`. A failing call satisfies it;
       * use [[totalContract]] to claim that the function returns.
       *
       * {{{
@@ -371,6 +538,31 @@ object Props {
         inline ensures: (A, B, C) => R => Prop | Boolean
     ): FunctionContract[(A, B, C), R] = ${ PropMacro.contract('fn, 'expects, 'ensures, false) }
 
+    /** The contract of a function of four parameters; see [[contract]]. */
+    inline def contract[A: Quantifiable, B: Quantifiable, C: Quantifiable, D: Quantifiable, R](
+        fn: FunctionDef[(A, B, C, D), R]
+    )(
+        inline expects: (A, B, C, D) => Prop | Boolean,
+        inline ensures: (A, B, C, D) => R => Prop | Boolean
+    ): FunctionContract[(A, B, C, D), R] =
+        ${ PropMacro.contract('fn, 'expects, 'ensures, false) }
+
+    /** The contract of a function of five parameters; see [[contract]]. */
+    inline def contract[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        E: Quantifiable,
+        R
+    ](
+        fn: FunctionDef[(A, B, C, D, E), R]
+    )(
+        inline expects: (A, B, C, D, E) => Prop | Boolean,
+        inline ensures: (A, B, C, D, E) => R => Prop | Boolean
+    ): FunctionContract[(A, B, C, D, E), R] =
+        ${ PropMacro.contract('fn, 'expects, 'ensures, false) }
+
     /** The contract of a function of one parameter, with totality: for every argument that
       * satisfies `expects`, the function returns, and its result satisfies `ensures`.
       */
@@ -393,6 +585,37 @@ object Props {
         inline ensures: (A, B, C) => R => Prop | Boolean
     ): FunctionContract[(A, B, C), R] = ${ PropMacro.contract('fn, 'expects, 'ensures, true) }
 
+    /** The total contract of a function of four parameters; see [[totalContract]]. */
+    inline def totalContract[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        R
+    ](
+        fn: FunctionDef[(A, B, C, D), R]
+    )(
+        inline expects: (A, B, C, D) => Prop | Boolean,
+        inline ensures: (A, B, C, D) => R => Prop | Boolean
+    ): FunctionContract[(A, B, C, D), R] =
+        ${ PropMacro.contract('fn, 'expects, 'ensures, true) }
+
+    /** The total contract of a function of five parameters; see [[totalContract]]. */
+    inline def totalContract[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        E: Quantifiable,
+        R
+    ](
+        fn: FunctionDef[(A, B, C, D, E), R]
+    )(
+        inline expects: (A, B, C, D, E) => Prop | Boolean,
+        inline ensures: (A, B, C, D, E) => R => Prop | Boolean
+    ): FunctionContract[(A, B, C, D, E), R] =
+        ${ PropMacro.contract('fn, 'expects, 'ensures, true) }
+
     /** `e` returns a value: [[denotes]], under the name that pairs with [[fails]]. */
     inline def succeeds[A](inline e: A): Prop = denotes(e)
 
@@ -401,8 +624,8 @@ object Props {
       * showing that `e` fails within its budget, which it tells apart from an exhausted one.
       *
       * {{{
-      * forAll[BigInt](x => (x == BigInt(0)) ==> fails(BigInt(10) / x))
-      * forAll[BigInt](x => (x < BigInt(0)) ==> fails { require(x >= BigInt(0)); x * BigInt(2) })
+      * forAll[BigInt](x => (x == BigInt(0)) ==>: fails(BigInt(10) / x))
+      * forAll[BigInt](x => (x < BigInt(0)) ==>: fails { require(x >= BigInt(0)); x * BigInt(2) })
       * }}}
       */
     inline def fails[A](inline e: A): Prop = !denotes(e)
@@ -416,8 +639,28 @@ object Props {
     /** `fn` applied to `arg` does not return: `!succeeds(fn, arg)`. */
     inline def fails[A, R](fn: FunctionDef[A, R], inline arg: A): Prop = !succeeds(fn, arg)
 
+    /** `ctx` is a script context the ledger can give a script: the rules of IOG's CardanoLedgerApi
+      * (`CardanoLedgerApi.V3.Contexts.validScriptContext`), of whatever purpose, of the context's
+      * `Data` ([[LeanPredicate.validScriptContextV3]]). As the premise of a statement over every
+      * context, it leaves out the contexts of no transaction the ledger accepts:
+      *
+      * {{{
+      * forAllData[ScriptContext](ctx =>
+      *     (isValid(ctx) && isRefund(ctx) && !signedByTheCommitter(ctx)) ==>: fails(validator, ctx.toData)
+      * )
+      * }}}
+      *
+      * Only Lean evaluates it, without a budget, also on the values of a counterexample: a tactic
+      * runs no program for it. `ctx` is a statement variable, which the tactic passes as one `Data`
+      * (a script context is), or a value that has no statement variable in it, whose `Data` is a
+      * constant of the statement. The rules bound no list: a statement that walks one still needs
+      * its limits ([[forAllDataLimited]]).
+      */
+    inline def isValid(inline ctx: scalus.cardano.onchain.plutus.v3.ScriptContext): Prop =
+        ${ PropMacro.satisfies('ctx, '{ LeanPredicate.validScriptContextV3 }) }
+
     /** A function of one parameter returns on every argument that satisfies `when`:
-      * `∀ x. when(x) ==> succeeds(fn, x)`.
+      * `∀ x. when(x) ==>: succeeds(fn, x)`.
       */
     inline def returnsWhen[A: Quantifiable, R](fn: FunctionDef[A, R])(
         inline when: A => Prop | Boolean
@@ -434,8 +677,27 @@ object Props {
     )(inline when: (A, B, C) => Prop | Boolean): Prop =
         ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, false) }
 
+    /** A function of four parameters returns on all arguments that satisfy `when`. */
+    inline def returnsWhen[A: Quantifiable, B: Quantifiable, C: Quantifiable, D: Quantifiable, R](
+        fn: FunctionDef[(A, B, C, D), R]
+    )(inline when: (A, B, C, D) => Prop | Boolean): Prop =
+        ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, false) }
+
+    /** A function of five parameters returns on all arguments that satisfy `when`. */
+    inline def returnsWhen[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        E: Quantifiable,
+        R
+    ](
+        fn: FunctionDef[(A, B, C, D, E), R]
+    )(inline when: (A, B, C, D, E) => Prop | Boolean): Prop =
+        ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, false) }
+
     /** A function of one parameter fails on every argument that satisfies `when`:
-      * `∀ x. when(x) ==> fails(fn, x)`. It states what the function must reject, as its runtime
+      * `∀ x. when(x) ==>: fails(fn, x)`. It states what the function must reject, as its runtime
       * `require`s do in its code.
       *
       * {{{
@@ -455,6 +717,25 @@ object Props {
     inline def failsWhen[A: Quantifiable, B: Quantifiable, C: Quantifiable, R](
         fn: FunctionDef[(A, B, C), R]
     )(inline when: (A, B, C) => Prop | Boolean): Prop =
+        ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, true) }
+
+    /** A function of four parameters fails on all arguments that satisfy `when`. */
+    inline def failsWhen[A: Quantifiable, B: Quantifiable, C: Quantifiable, D: Quantifiable, R](
+        fn: FunctionDef[(A, B, C, D), R]
+    )(inline when: (A, B, C, D) => Prop | Boolean): Prop =
+        ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, true) }
+
+    /** A function of five parameters fails on all arguments that satisfy `when`. */
+    inline def failsWhen[
+        A: Quantifiable,
+        B: Quantifiable,
+        C: Quantifiable,
+        D: Quantifiable,
+        E: Quantifiable,
+        R
+    ](
+        fn: FunctionDef[(A, B, C, D, E), R]
+    )(inline when: (A, B, C, D, E) => Prop | Boolean): Prop =
         ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, true) }
 
     /** `prop` with the statement variables in `names` renamed, in its expressions and binders. */
@@ -478,8 +759,11 @@ object Props {
             case Prop.And(left, right)     => Prop.And(loop(left), loop(right))
             case Prop.Or(left, right)      => Prop.Or(loop(left), loop(right))
             case Prop.Implies(left, right) => Prop.Implies(loop(left), loop(right))
-            case Prop.Iff(left, right)     => Prop.Iff(loop(left), loop(right))
-            case Prop.Not(inner)           => Prop.Not(loop(inner))
+            case Prop.Rejects(left, right) => Prop.Rejects(loop(left), loop(right))
+            case Prop.Satisfies(predicate, value) =>
+                Prop.Satisfies(predicate, expression(value))
+            case Prop.Iff(left, right) => Prop.Iff(loop(left), loop(right))
+            case Prop.Not(inner)       => Prop.Not(loop(inner))
         if names.isEmpty then prop else loop(prop)
     }
 
@@ -530,12 +814,11 @@ object Props {
 
     inline def equal[A](inline a: A, inline b: A): Prop = ${ PropMacro.equal('a, 'b) }
 
+    /** A Boolean, as the test of its code. Through it a Boolean on either side of `==>:`, `==>?:`
+      * or a connective of `Prop` is a test: as their argument, or as the operand they are methods
+      * of.
+      */
     implicit inline def booleanToProp(inline b: Boolean): Prop = ${ PropMacro.test('b) }
-
-    extension (inline b: Boolean) {
-        inline def ==>(q: Prop): Prop = Prop.Implies(Prop(b), q)
-        infix inline def implies(q: Prop): Prop = Prop.Implies(Prop(b), q)
-    }
 }
 
 object Prop {

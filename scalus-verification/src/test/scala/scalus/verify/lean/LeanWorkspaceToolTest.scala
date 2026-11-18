@@ -44,15 +44,25 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
             val lakefile = text(workspace.resolve("lakefile.lean"))
             assert(lakefile.contains("package «Htlc» where"))
             assert(lakefile.contains("lean_lib «Htlc» where"))
-            assert(lakefile.contains("globs := #[.andSubmodules `Htlc]"))
-            // The directory those modules are in: Lake does not build without it.
-            assert(Files.isDirectory(workspace.resolve("Htlc")))
+            // The statements and the proofs are a library of their own, not of the default target.
+            assert(lakefile.contains("lean_lib «HtlcProofs» where"))
+            assert(
+              lakefile.contains("globs := #[.submodules `Htlc.Generated, .submodules `Htlc.Proofs]")
+            )
+            // The directories those modules are in: Lake does not build without them.
+            assert(Files.isDirectory(workspace.resolve("Htlc/Generated")))
+            assert(Files.isDirectory(workspace.resolve("Htlc/Proofs")))
             assert(lakefile.contains("""require ScalusProofs from "../.scalus/ScalusProofs""""))
             assert(lakefile.contains("""packagesDir := "../.scalus/ScalusProofs/.lake/packages""""))
             assert(text(workspace.resolve("Htlc.lean")).startsWith("import ScalusProofs.Run\n"))
             assert(text(workspace.resolve(".gitignore")) == "/.lake\n")
-            // Lake writes the manifest, with the revisions the library's manifest pins.
-            assert(!Files.exists(workspace.resolve("lake-manifest.json")))
+            // The manifest Lake writes on the first build, with the revisions the library's
+            // manifest pins: the workspace is the same before the build as after.
+            assert(LeanWorkspace.pinned(workspace) == LeanWorkspace.pinned(sources))
+            assert(
+              LeanWorkspace.required(workspace) ==
+                  Map("ScalusProofs" -> library(root).toAbsolutePath.normalize)
+            )
 
             // The library is the one in Scalus's sources, file by file, so a check in the
             // workspace rests on the same Lean as one in the sources.
@@ -75,6 +85,48 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
             assert(text(root.resolve(".scalus").resolve(".gitignore")) == "*\n")
             assert(outcome.written.toSet.contains(workspace.resolve("lakefile.lean")))
             assert(outcome.written.toSet.contains(unpacked.resolve("ScalusProofs/Run.lean")))
+        }
+    }
+
+    test("a created workspace has the manifest Lake writes on the first build") {
+        // The vesting example's workspace requires the library in these sources, and its manifest
+        // is the one Lake wrote. The same manifest, but for the spaces between its tokens.
+        val vesting =
+            LeanProofs.inSources("scalus-examples", "jvm", "src", "test", "lean", "LinearVesting")
+        val written = LeanWorkspaceTool.manifestText(
+          Files.readAllBytes(sources.resolve("lake-manifest.json")),
+          "LinearVesting",
+          "../../../../../../scalus-verification/src/main/lean"
+        )
+        def tokens(json: String): String = json.replaceAll("\\s+", "")
+        assert(tokens(written) == tokens(text(vesting.resolve("lake-manifest.json"))))
+    }
+
+    test("a created workspace rests on the Lean side a built one rests on") {
+        // What a kept result rests on, of Lean's side: a checkout that does not have the workspace
+        // creates it, and takes the results kept where it was built.
+        inDirectory { root =>
+            val workspace = root.resolve("Htlc")
+            LeanWorkspaceTool.init(workspace)
+            val created = LeanWorkspace.environment(workspace)
+            val built = LeanWorkspace.environment(sources)
+            assert(created.keySet == built.keySet + "Htlc", created)
+            built.foreach((part, hash) => assert(created(part) == hash, part))
+        }
+    }
+
+    test("a workspace of the project's without a manifest gets the one Lake would write") {
+        inDirectory { root =>
+            val workspace = root.resolve("Htlc")
+            LeanWorkspaceTool.init(workspace)
+            val manifest = workspace.resolve("lake-manifest.json")
+            val first = text(manifest)
+            Files.delete(manifest)
+            val again = LeanWorkspaceTool.init(workspace)
+            assert(!again.created)
+            assert(again.written == List(manifest))
+            assert(again.notes.isEmpty)
+            assert(text(manifest) == first)
         }
     }
 
@@ -276,8 +328,8 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
               library(root).resolve(".lake"),
               leanWorkspace.resolve(".lake").toRealPath()
             )
-            def lakeBuild(): String = {
-                val build = new ProcessBuilder("lake", "build")
+            def lakeBuild(targets: String*): String = {
+                val build = new ProcessBuilder(("lake" :: "build" :: targets.toList)*)
                     .directory(workspace.toFile)
                     .redirectErrorStream(true)
                     .start()
@@ -287,15 +339,16 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
             }
             // As it was created, without a module of the project's own.
             lakeBuild()
-            // With a proof written by hand, which nothing imports.
-            val proof = workspace.resolve("Created").resolve("Proof.lean")
+            // With a proof written by hand, which nothing imports: the library of proofs builds it,
+            // and the default target does not.
+            val proof = workspace.resolve("Created").resolve("Proofs").resolve("Proof.lean")
             Files.writeString(proof, "theorem one_is_one : (1 : Nat) = 1 := rfl\n")
-            val output = lakeBuild()
+            val proofOlean = workspace.resolve(".lake/build/lib/lean/Created/Proofs/Proof.olean")
+            lakeBuild()
             assert(LeanProofs.isBuilt(workspace))
-            assert(
-              Files.isRegularFile(workspace.resolve(".lake/build/lib/lean/Created/Proof.olean")),
-              output
-            )
+            assert(!Files.exists(proofOlean))
+            val output = lakeBuild("CreatedProofs")
+            assert(Files.isRegularFile(proofOlean), output)
             assert(LeanWorkspace.pinned(workspace) == LeanWorkspace.pinned(sources))
             assert(LeanWorkspaceTool.init(workspace).notes.isEmpty)
 
@@ -307,6 +360,58 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
                     case VerificationResult.Proven(_) =>
                     case other                        => fail(s"expected a proof, got $other")
             finally servers.close()
+
+            // A statement written into the workspace as a module, which Lake builds there, and
+            // which the proofs hold to the code from then on.
+            val proofs = LeanProofs(workspace, None, reason => cancel(reason))
+            try
+                val held = proofs.verifier.statement(
+                  "held_to_the_code",
+                  forAll[BigInt](x => x + BigInt(0) == x)
+                )
+                val result = proofs.check(held, 40)
+                assert(proofs.writeStatement(held, result) == "Created.Generated.held_to_the_code")
+                val (_, module) = LeanWorkspace.generated(workspace, "held_to_the_code")
+                // The programs are beside it; their texts are not committed.
+                assert(Files.isRegularFile(module.resolveSibling("held_to_the_code/Leaf0.flat")))
+                assert(text(module.resolveSibling(".gitignore")).contains("*.uplc"))
+                lakeBuild("CreatedProofs")
+                assert(
+                  Files.isRegularFile(
+                    workspace.resolve(
+                      ".lake/build/lib/lean/Created/Generated/held_to_the_code.olean"
+                    )
+                  )
+                )
+                // Checked again, the module is of the code.
+                proofs.check(held, 40)
+                // A module of other programs than the code's fails the statement's check.
+                Files.writeString(
+                  module,
+                  text(module).replaceAll("(?m)^  leaf0 [0-9a-f]{64}$", "  leaf0 " + "0" * 64)
+                )
+                val stale = intercept[AssertionError](proofs.check(held, 40))
+                assert(
+                  stale.getMessage.contains("is not the statement's as the code has it"),
+                  stale.getMessage
+                )
+                assert(stale.getMessage.contains("sbt leanExport"), stale.getMessage)
+                // Another statement whose name is the same as a Lean name is an error, and does not
+                // take the module of the first.
+                val clash = proofs.verifier.statement(
+                  "held.to.the.code",
+                  forAll[BigInt](x => BigInt(0) + x == x)
+                )
+                val clashing = intercept[AssertionError](proofs.check(clash, 40))
+                assert(clashing.getMessage.contains("the module of held_to_the_code"), clashing)
+                // So is one whose module would be that of the Lean types.
+                val types =
+                    proofs.verifier.statement("types", forAll[BigInt](x => x * BigInt(1) == x))
+                val typed = intercept[AssertionError](
+                  proofs.writeStatement(types, proofs.check(types, 40))
+                )
+                assert(typed.getMessage.contains("the module of the Lean types"), typed)
+            finally proofs.close()
         }
     }
 }

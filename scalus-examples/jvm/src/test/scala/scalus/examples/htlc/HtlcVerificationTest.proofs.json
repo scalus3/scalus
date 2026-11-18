@@ -1,52 +1,55 @@
 {
   "environment": {
     "uplc-blaster": {
-      "Blaster": "6c27ff9faa66",
-      "PlutusCore": "2919b66445cd",
-      "ScalusProofs": "99dc026d39db0160",
+      "Blaster": "a06919767488",
+      "CardanoLedgerApi": "3dd048e3eb86",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "16c4f79c84fecfd5",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },
   "results": {
-    "htlc.bounds.refund_ignores_whether_its_lower_bound_is_inclusive": {
+    "htlc.bounds.closure_of_the_lower_bound_does_not_matter_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "e11d1e5f49c7f5e0",
+      "statement": "771e53e2e3a3dcd8",
       "programs": [
-        "c0468f563188290d",
-        "14b259edd1b43710"
+        "cefee615a836301b",
+        "a437510eae69b165",
+        "3670e02de259108d"
       ],
       "notes": {
         "budget": "4000",
         "kind": "Blaster"
       },
       "tests": [
-        "whether a bound of the validity range is inclusive does not matter to the validator"
+        "whether a bound of the validity range is inclusive does not matter to the validator, of two signatures at most"
       ]
     },
-    "htlc.bounds.reveal_ignores_whether_its_upper_bound_is_inclusive": {
+    "htlc.bounds.closure_of_the_upper_bound_does_not_matter_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "1b4e1b8b16bd66b6",
+      "statement": "771e53e2e3a3dcd8",
       "programs": [
-        "42088b3fec06d630",
-        "15bb5c65d55c08a9"
+        "cefee615a836301b",
+        "bbca8bd9d95c93a8",
+        "3670e02de259108d"
       ],
       "notes": {
         "budget": "4000",
         "kind": "Blaster"
       },
       "tests": [
-        "whether a bound of the validity range is inclusive does not matter to the validator"
+        "whether a bound of the validity range is inclusive does not matter to the validator, of two signatures at most"
       ]
     },
     "htlc.context.only_spending_is_validated": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "fc1ffe0c48fb7155",
+      "statement": "254d394a08642220",
       "programs": [
-        "d2a643a94d9ac501",
-        "7d65c34a6bf59fe6"
+        "c1341b222da9d259",
+        "c13ac1fff0ffbd6d"
       ],
       "notes": {
         "budget": "600",
@@ -59,9 +62,10 @@
     "htlc.context.output_without_a_datum_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "ff3d2b5a8500c4d4",
+      "statement": "49b3ab89810d3a32",
       "programs": [
-        "e59e13ac253da501"
+        "b61cd94f97567fcb",
+        "c13ac1fff0ffbd6d"
       ],
       "notes": {
         "budget": "600",
@@ -74,10 +78,11 @@
     "htlc.context.redeemer_of_neither_action_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "1fd0964eeb4b0312",
+      "statement": "9906f520c794a45a",
       "programs": [
-        "5fa25ee310d96502",
-        "277d82654b67870a"
+        "11c308ef2b48a8da",
+        "1df2560259dd4a86",
+        "c13ac1fff0ffbd6d"
       ],
       "notes": {
         "budget": "600",
@@ -87,574 +92,237 @@
         "a redeemer that is neither action is rejected"
       ]
     },
-    "htlc.refund.committer_refunds_after_another_signature": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "d99ace1fc19e8f25",
-      "programs": [
-        "2377001613b53351",
-        "7b9293465af7556d"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "from the timeout on, the committer refunds"
-      ]
-    },
     "htlc.refund.committer_refunds_at_any_time": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "bdb79615e4a06401",
+      "statement": "dbb93dca26598a63",
       "programs": [
-        "beb00424dd60a305"
+        "e7259a666ab0e6dc",
+        "c13ac1fff0ffbd6d"
       ],
       "notes": {
         "budget": "4000",
-        "kind": "Blaster"
+        "kind": "Blaster",
+        "read": "with the parts of ctx_12714 that no value of the type has, which its Lean type has, replaced by values of them"
       },
       "counterexample": {
-        "config.committer.hash": "",
-        "config.image": "",
-        "config.receiver.hash": "",
-        "config.timeout": 0,
-        "from": -1,
-        "rest.certificates": {"list":[{"int":12}]},
-        "rest.currentTreasuryAmount": {"int":4},
-        "rest.data": {"list":[{"int":6}]},
-        "rest.fee": {"list":[{"int":16}]},
-        "rest.id": {"list":[{"int":9}]},
-        "rest.inputs": {"list":[{"int":8}]},
-        "rest.mint": {"list":[{"int":13}]},
-        "rest.otherBound": {"bytes":"213021"},
-        "rest.outputs": {"list":[{"int":15}]},
-        "rest.proposalProcedures": {"list":[{"int":7}]},
-        "rest.redeemers": {"list":[{"int":14}]},
-        "rest.ref": {"bytes":"213121"},
-        "rest.referenceInputs": {"list":[{"int":10}]},
-        "rest.treasuryDonation": {"int":5},
-        "rest.votes": {"list":[{"int":17}]},
-        "rest.withdrawals": {"list":[{"int":11}]}
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":4},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":0,"fields":[]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":0,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":"213321"}]},{"map":[]},{"map":[]},{"bytes":"213021"},{"map":[]},{"list":[]},{"constructor":0,"fields":[{"int":0}]},{"constructor":0,"fields":[{"int":0}]}]},{"constructor":0,"fields":[{"int":13}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"213221"},{"int":8}]},{"constructor":0,"fields":[{"constructor":9,"fields":[{"bytes":"213321"}]}]}]}]}
       },
       "tests": [
-        "from the timeout on, the committer refunds"
+        "from the timeout on, the committer refunds, of two signatures at most"
       ]
     },
-    "htlc.refund.committer_refunds_from_the_timeout": {
+    "htlc.refund.committer_refunds_at_any_time_limited": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "2187ad1e94eddb73",
+      "programs": [
+        "9b566473462b2c1c",
+        "cefee615a836301b",
+        "3670e02de259108d"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster",
+        "read": "with the parts of ctx_13686 that no value of the type has, which its Lean type has, replaced by values of them"
+      },
+      "counterexample": {
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":2},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":0,"fields":[]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":0,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":"213221"}]},{"map":[]},{"map":[]},{"bytes":"213021"},{"map":[]},{"list":[]},{"constructor":0,"fields":[{"int":0}]},{"constructor":0,"fields":[{"int":0}]}]},{"constructor":0,"fields":[]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"213321"},{"int":8}]},{"constructor":0,"fields":[{"constructor":7,"fields":[{"bytes":"213221"}]}]}]}]}
+      },
+      "tests": [
+        "from the timeout on, the committer refunds, of two signatures at most"
+      ]
+    },
+    "htlc.refund.committer_refunds_from_the_timeout_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "192bd6c0ae03570b",
+      "statement": "be0579f2b9352519",
       "programs": [
-        "d8ffed0e6555b361",
-        "beb00424dd60a305"
+        "2105aa1347f8d427",
+        "cefee615a836301b",
+        "3670e02de259108d"
       ],
       "notes": {
         "budget": "4000",
         "kind": "Blaster"
       },
       "tests": [
-        "from the timeout on, the committer refunds"
+        "from the timeout on, the committer refunds, of two signatures at most"
       ]
     },
     "htlc.refund.rejected_at_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "2a6fea27b445256c",
+      "statement": "4be8e002963ae2cc",
       "programs": [
-        "74bb2ac9ec7fcb16",
-        "c0468f563188290d"
+        "945a546acf3fe8a6",
+        "c13ac1fff0ffbd6d"
       ],
       "notes": {
         "budget": "4000",
-        "kind": "Blaster"
+        "kind": "Blaster",
+        "read": "with the parts of ctx_11579 that no value of the type has, which its Lean type has, replaced by values of them"
       },
       "counterexample": {
-        "config.committer.hash": "213021",
-        "config.image": "",
-        "config.receiver.hash": "",
-        "config.timeout": 0,
-        "from": 0,
-        "rest.certificates": {"list":[{"int":10}]},
-        "rest.currentTreasuryAmount": {"int":4},
-        "rest.data": {"list":[{"int":14}]},
-        "rest.fee": {"list":[{"int":15}]},
-        "rest.id": {"list":[{"int":6}]},
-        "rest.inputs": {"list":[{"int":11}]},
-        "rest.mint": {"list":[{"int":12}]},
-        "rest.otherBound": {"bytes":"213121"},
-        "rest.outputs": {"list":[{"int":13}]},
-        "rest.proposalProcedures": {"list":[{"int":8}]},
-        "rest.redeemers": {"list":[{"int":7}]},
-        "rest.ref": {"bytes":"213221"},
-        "rest.referenceInputs": {"list":[{"int":17}]},
-        "rest.treasuryDonation": {"int":5},
-        "rest.votes": {"list":[{"int":9}]},
-        "rest.withdrawals": {"list":[{"int":16}]},
-        "signer": "213021"
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":4},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":36411}]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":0,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":"213321"}]},{"map":[]},{"map":[]},{"bytes":"213021"},{"map":[]},{"list":[]},{"constructor":0,"fields":[{"int":0}]},{"constructor":0,"fields":[{"int":0}]}]},{"constructor":0,"fields":[{"int":16}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"213221"},{"int":8}]},{"constructor":0,"fields":[{"constructor":9,"fields":[{"bytes":"213321"},{"int":14},{"int":15},{"int":36411}]}]}]}]}
       },
       "tests": [
-        "a refund is rejected before the timeout"
+        "a refund is rejected unless its validity range starts at the timeout or later"
       ]
     },
     "htlc.refund.rejected_before_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "2a6fea27b445256c",
+      "statement": "49b3ab89810d3a32",
       "programs": [
-        "46e23b6836940095",
-        "c0468f563188290d"
+        "414ea6fa95079dd0",
+        "c13ac1fff0ffbd6d"
       ],
       "notes": {
         "budget": "4000",
         "kind": "Blaster"
       },
       "tests": [
-        "a refund is rejected before the timeout"
+        "a refund is rejected unless its validity range starts at the timeout or later"
       ]
     },
-    "htlc.refund.rejected_from_neg_inf": {
+    "htlc.refund.rejected_unless_the_committer_signs_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "7c2c86d4cbde84e4",
+      "statement": "70ddfd4fe0c95490",
       "programs": [
-        "0989b2e1b21da959"
+        "539b834ba15003bc",
+        "cefee615a836301b",
+        "3670e02de259108d"
       ],
       "notes": {
         "budget": "4000",
         "kind": "Blaster"
       },
       "tests": [
-        "a refund needs the lower bound of its validity range"
-      ]
-    },
-    "htlc.refund.rejected_from_pos_inf": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "7c2c86d4cbde84e4",
-      "programs": [
-        "f88b4b4f91b9c727"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "a refund needs the lower bound of its validity range"
-      ]
-    },
-    "htlc.refund.rejected_when_another_key_signs": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "a85ef03b92eb5761",
-      "programs": [
-        "242f02a513cb9f56",
-        "c0468f563188290d"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "nobody but the committer refunds"
-      ]
-    },
-    "htlc.refund.rejected_when_two_other_keys_sign": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "7238f07c517cc106",
-      "programs": [
-        "d1591ba1df616118",
-        "1878050e1e4d4bfd"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "nobody but the committer refunds"
-      ]
-    },
-    "htlc.refund.rejected_when_unsigned": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "4fdcb4e10541d594",
-      "programs": [
-        "74e244f75d422f83"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "nobody but the committer refunds"
+        "nobody but the committer refunds, of two signatures at most"
       ]
     },
     "htlc.refund.rejected_whoever_signs": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "7f0850f3a1ab14d7",
+      "statement": "4be8e002963ae2cc",
       "programs": [
-        "c0468f563188290d"
+        "dabc9168a607db26",
+        "c13ac1fff0ffbd6d"
       ],
       "notes": {
         "budget": "4000",
-        "kind": "Blaster"
+        "kind": "Blaster",
+        "read": "with the parts of ctx_9651 that no value of the type has, which its Lean type has, replaced by values of them"
       },
       "counterexample": {
-        "config.committer.hash": "213021",
-        "config.image": "",
-        "config.receiver.hash": "",
-        "config.timeout": 0,
-        "from": 0,
-        "rest.certificates": {"list":[{"int":14}]},
-        "rest.currentTreasuryAmount": {"int":4},
-        "rest.data": {"list":[{"int":17}]},
-        "rest.fee": {"list":[{"int":6}]},
-        "rest.id": {"list":[{"int":8}]},
-        "rest.inputs": {"list":[{"int":10}]},
-        "rest.mint": {"list":[{"int":9}]},
-        "rest.otherBound": {"bytes":"213121"},
-        "rest.outputs": {"list":[{"int":12}]},
-        "rest.proposalProcedures": {"list":[{"int":7}]},
-        "rest.redeemers": {"list":[{"int":11}]},
-        "rest.ref": {"bytes":"213221"},
-        "rest.referenceInputs": {"list":[{"int":15}]},
-        "rest.treasuryDonation": {"int":5},
-        "rest.votes": {"list":[{"int":13}]},
-        "rest.withdrawals": {"list":[{"int":16}]},
-        "signer": "213021"
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":4},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":18457}]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":0,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":"213321"}]},{"map":[]},{"map":[]},{"bytes":"213021"},{"map":[]},{"list":[]},{"constructor":0,"fields":[{"int":0}]},{"constructor":0,"fields":[{"int":0}]}]},{"constructor":0,"fields":[]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"213221"},{"int":8}]},{"constructor":0,"fields":[{"constructor":9,"fields":[{"bytes":"213321"},{"int":15},{"int":14},{"int":-25906}]}]}]}]}
       },
       "tests": [
-        "nobody but the committer refunds"
+        "nobody but the committer refunds, of two signatures at most"
       ]
     },
-    "htlc.reveal.receiver_reveals_after_another_signature": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "5be09d41448e5f58",
-      "programs": [
-        "92c60e7c79f743e3",
-        "d7451a726d907cae"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "up to the timeout, the receiver reveals any preimage of the image"
-      ]
-    },
-    "htlc.reveal.receiver_reveals_at_any_time": {
+    "htlc.refund.rejected_whoever_signs_limited": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "5aebfeb4822a2c7c",
+      "statement": "c1c731791404a7d7",
       "programs": [
-        "ef85a5a16e6ddd6f"
+        "a130bad1bf6aced1",
+        "cefee615a836301b",
+        "3670e02de259108d"
       ],
       "notes": {
         "budget": "4000",
-        "kind": "Blaster"
+        "kind": "Blaster",
+        "read": "with the parts of ctx_10523 that no value of the type has, which its Lean type has, replaced by values of them"
       },
       "counterexample": {
-        "committer": "",
-        "preimage": "",
-        "receiver": "",
-        "rest.certificates": {"list":[{"int":12}]},
-        "rest.currentTreasuryAmount": {"int":4},
-        "rest.data": {"list":[{"int":6}]},
-        "rest.fee": {"list":[{"int":16}]},
-        "rest.id": {"list":[{"int":9}]},
-        "rest.inputs": {"list":[{"int":8}]},
-        "rest.mint": {"list":[{"int":13}]},
-        "rest.otherBound": {"bytes":"213021"},
-        "rest.outputs": {"list":[{"int":15}]},
-        "rest.proposalProcedures": {"list":[{"int":7}]},
-        "rest.redeemers": {"list":[{"int":14}]},
-        "rest.ref": {"bytes":"213121"},
-        "rest.referenceInputs": {"list":[{"int":10}]},
-        "rest.treasuryDonation": {"int":5},
-        "rest.votes": {"list":[{"int":17}]},
-        "rest.withdrawals": {"list":[{"int":11}]},
-        "timeout": -1,
-        "to": 0
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":2},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":18587}]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":0,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[{"bytes":"213321"}]},{"map":[]},{"map":[]},{"bytes":"213021"},{"map":[]},{"list":[]},{"constructor":0,"fields":[{"int":0}]},{"constructor":0,"fields":[{"int":0}]}]},{"constructor":0,"fields":[]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"213221"},{"int":9}]},{"constructor":0,"fields":[{"constructor":7,"fields":[{"bytes":"213321"},{"int":12},{"int":13},{"int":-16907}]}]}]}]}
       },
       "tests": [
-        "up to the timeout, the receiver reveals any preimage of the image"
+        "nobody but the committer refunds, of two signatures at most"
       ]
     },
-    "htlc.reveal.receiver_reveals_up_to_the_timeout": {
+    "htlc.reveal.receiver_reveals_up_to_the_timeout_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "2364e6f153c51d8f",
+      "statement": "be0579f2b9352519",
       "programs": [
-        "71585b7489159cb8",
-        "ef85a5a16e6ddd6f"
+        "7d2bb0bf33846daa",
+        "cefee615a836301b",
+        "3670e02de259108d"
       ],
       "notes": {
         "budget": "4000",
         "kind": "Blaster"
       },
       "tests": [
-        "up to the timeout, the receiver reveals any preimage of the image"
+        "up to the timeout, the receiver reveals any preimage of the image, of two signatures at most"
       ]
     },
     "htlc.reveal.rejected_after_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "6ef3eebd97fef100",
+      "statement": "49b3ab89810d3a32",
       "programs": [
-        "bae1556497820609",
-        "15bb5c65d55c08a9"
+        "8fb116b45b869209",
+        "c13ac1fff0ffbd6d"
       ],
       "notes": {
         "budget": "4000",
         "kind": "Blaster"
       },
       "tests": [
-        "a reveal is rejected when its validity range ends after the timeout"
+        "a reveal is rejected unless its validity range ends by the timeout"
       ]
     },
-    "htlc.reveal.rejected_at_the_timeout": {
-      "tactic": "uplc-blaster",
-      "result": "refuted",
-      "statement": "b56d29226c7d4a2b",
-      "programs": [
-        "57b4789f6dee542e",
-        "ef85a5a16e6ddd6f"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "counterexample": {
-        "committer": "",
-        "preimage": "",
-        "receiver": "",
-        "rest.certificates": {"list":[{"int":12}]},
-        "rest.currentTreasuryAmount": {"int":4},
-        "rest.data": {"list":[{"int":6}]},
-        "rest.fee": {"list":[{"int":16}]},
-        "rest.id": {"list":[{"int":9}]},
-        "rest.inputs": {"list":[{"int":8}]},
-        "rest.mint": {"list":[{"int":13}]},
-        "rest.otherBound": {"bytes":"213021"},
-        "rest.outputs": {"list":[{"int":15}]},
-        "rest.proposalProcedures": {"list":[{"int":7}]},
-        "rest.redeemers": {"list":[{"int":14}]},
-        "rest.ref": {"bytes":"213121"},
-        "rest.referenceInputs": {"list":[{"int":10}]},
-        "rest.treasuryDonation": {"int":5},
-        "rest.votes": {"list":[{"int":17}]},
-        "rest.withdrawals": {"list":[{"int":11}]},
-        "timeout": 0,
-        "to": 0
-      },
-      "tests": [
-        "a reveal is rejected when its validity range ends after the timeout"
-      ]
-    },
-    "htlc.reveal.rejected_up_to_neg_inf": {
+    "htlc.reveal.rejected_unless_the_receiver_signs_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "c1e2a59b6b96dc11",
+      "statement": "70ddfd4fe0c95490",
       "programs": [
-        "5575c6259a9773a7"
+        "e9d8813f1bbddf0e",
+        "cefee615a836301b",
+        "3670e02de259108d"
       ],
       "notes": {
         "budget": "4000",
         "kind": "Blaster"
       },
       "tests": [
-        "a reveal needs the upper bound of its validity range"
+        "nobody but the receiver reveals, of two signatures at most"
       ]
     },
-    "htlc.reveal.rejected_up_to_pos_inf": {
+    "htlc.reveal.rejected_without_a_preimage_limited": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "c1e2a59b6b96dc11",
+      "statement": "70ddfd4fe0c95490",
       "programs": [
-        "9174a561b62caf08"
+        "4adce67a1786db06",
+        "cefee615a836301b",
+        "3670e02de259108d"
       ],
       "notes": {
         "budget": "4000",
         "kind": "Blaster"
       },
       "tests": [
-        "a reveal needs the upper bound of its validity range"
-      ]
-    },
-    "htlc.reveal.rejected_when_another_key_signs": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "cce17cb2e3eb3186",
-      "programs": [
-        "1772bf8f46b03014",
-        "15bb5c65d55c08a9"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "nobody but the receiver reveals"
-      ]
-    },
-    "htlc.reveal.rejected_when_two_other_keys_sign": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "05c1b6ba4a4800b2",
-      "programs": [
-        "e6ad1f9daa9a845e",
-        "3ae5755db262a0e1"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "nobody but the receiver reveals"
-      ]
-    },
-    "htlc.reveal.rejected_when_unsigned": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "0acdf00a56663ef1",
-      "programs": [
-        "b77f68699e5cd647"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "nobody but the receiver reveals"
-      ]
-    },
-    "htlc.reveal.rejected_whoever_signs": {
-      "tactic": "uplc-blaster",
-      "result": "refuted",
-      "statement": "de9306fa827374ee",
-      "programs": [
-        "9436b684a497d2dc"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "counterexample": {
-        "committer": "",
-        "preimage": "",
-        "receiver": "213021",
-        "rest.certificates": {"list":[{"int":14}]},
-        "rest.currentTreasuryAmount": {"int":4},
-        "rest.data": {"list":[{"int":17}]},
-        "rest.fee": {"list":[{"int":6}]},
-        "rest.id": {"list":[{"int":8}]},
-        "rest.inputs": {"list":[{"int":10}]},
-        "rest.mint": {"list":[{"int":9}]},
-        "rest.otherBound": {"bytes":"213121"},
-        "rest.outputs": {"list":[{"int":12}]},
-        "rest.proposalProcedures": {"list":[{"int":7}]},
-        "rest.redeemers": {"list":[{"int":11}]},
-        "rest.ref": {"bytes":"213221"},
-        "rest.referenceInputs": {"list":[{"int":15}]},
-        "rest.treasuryDonation": {"int":5},
-        "rest.votes": {"list":[{"int":13}]},
-        "rest.withdrawals": {"list":[{"int":16}]},
-        "signer": "213021",
-        "timeout": 0,
-        "to": 0
-      },
-      "tests": [
-        "nobody but the receiver reveals"
-      ]
-    },
-    "htlc.reveal.rejected_without_a_preimage": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "cce17cb2e3eb3186",
-      "programs": [
-        "45e21617840663b2",
-        "15bb5c65d55c08a9"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "a reveal of what is not a preimage of the image is rejected"
+        "a reveal of what is not a preimage of the image is rejected, of two signatures at most"
       ]
     },
     "htlc.reveal_and_refund.reveal_ends_before_refund_begins": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "e0354342738579c1",
+      "statement": "3372acd63ef79abe",
       "programs": [
-        "1ffd5f23ba1b4ec5",
-        "4ff6a90d68d0027b",
-        "a4025a6d6d0f71a7"
+        "e0f58d1d697c24b7",
+        "d87e6644d15027e0",
+        "73def3184937c0a0"
       ],
       "notes": {
         "budget": "4000",
         "kind": "Blaster"
-      },
-      "tests": [
-        "an accepted reveal ends before any accepted refund begins"
-      ]
-    },
-    "htlc.reveal_and_refund.reveal_ends_strictly_before_refund_begins": {
-      "tactic": "uplc-blaster",
-      "result": "refuted",
-      "statement": "2903a5a49875d6ac",
-      "programs": [
-        "4a8478a9b6e44bf8",
-        "5e72139d280340d5",
-        "32b2fa8a5290d4ad"
-      ],
-      "notes": {
-        "budget": "4000",
-        "kind": "Blaster"
-      },
-      "counterexample": {
-        "committer": "",
-        "from": 0,
-        "preimage": "",
-        "receiver": "",
-        "refunded.certificates": {"list":[]},
-        "refunded.currentTreasuryAmount": {"int":5},
-        "refunded.data": {"list":[]},
-        "refunded.fee": {"list":[]},
-        "refunded.id": {"list":[]},
-        "refunded.inputs": {"list":[]},
-        "refunded.mint": {"list":[]},
-        "refunded.otherBound": {"bytes":"213021"},
-        "refunded.outputs": {"list":[]},
-        "refunded.proposalProcedures": {"list":[]},
-        "refunded.redeemers": {"list":[]},
-        "refunded.ref": {"bytes":"213121"},
-        "refunded.referenceInputs": {"list":[]},
-        "refunded.treasuryDonation": {"int":6},
-        "refunded.votes": {"list":[]},
-        "refunded.withdrawals": {"list":[]},
-        "revealed.certificates": {"list":[]},
-        "revealed.currentTreasuryAmount": {"list":[]},
-        "revealed.data": {"list":[]},
-        "revealed.fee": {"list":[]},
-        "revealed.id": {"list":[]},
-        "revealed.inputs": {"list":[]},
-        "revealed.mint": {"list":[]},
-        "revealed.otherBound": {"list":[]},
-        "revealed.outputs": {"list":[]},
-        "revealed.proposalProcedures": {"list":[]},
-        "revealed.redeemers": {"list":[]},
-        "revealed.ref": {"list":[]},
-        "revealed.referenceInputs": {"list":[]},
-        "revealed.treasuryDonation": {"list":[]},
-        "revealed.votes": {"list":[]},
-        "revealed.withdrawals": {"list":[]},
-        "timeout": 0,
-        "to": 0
       },
       "tests": [
         "an accepted reveal ends before any accepted refund begins"
@@ -663,76 +331,166 @@
     "htlc.samples.refund_is_accepted": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "2d3cb18e20f505f4",
+      "statement": "ee2f78a45393d0f9",
       "programs": [
-        "74cd0f89ee72d670"
+        "bab65131c846b5d4"
       ],
       "notes": {
         "budget": "4000",
         "kind": "LeanNative"
       },
       "tests": [
-        "a sample reveal and a sample refund are accepted on the Lean machine, and not unsigned"
+        "sample reveals and refunds are accepted on the Lean machine, and not unsigned or late"
+      ]
+    },
+    "htlc.samples.reveal_after_the_timeout_is_rejected": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "8edf8329e2a015c8",
+      "programs": [
+        "e9ad1fb28c920ef6"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "sample reveals and refunds are accepted on the Lean machine, and not unsigned or late"
       ]
     },
     "htlc.samples.reveal_is_accepted": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "2d3cb18e20f505f4",
+      "statement": "d673fcc84d3746e7",
       "programs": [
-        "5e291a4fc246e021"
+        "b2b4b7fbd55fb80a"
       ],
       "notes": {
         "budget": "4000",
         "kind": "LeanNative"
       },
       "tests": [
-        "a sample reveal and a sample refund are accepted on the Lean machine, and not unsigned"
+        "sample reveals and refunds are accepted on the Lean machine, and not unsigned or late"
       ]
     },
     "htlc.samples.reveal_of_another_secret_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "87acb769a9c0ddb7",
+      "statement": "d929e7b927bbf51b",
       "programs": [
-        "a5c9c0f2c17b0f9b"
+        "94c93aa8eff33549"
       ],
       "notes": {
         "budget": "4000",
         "kind": "LeanNative"
       },
       "tests": [
-        "a sample reveal and a sample refund are accepted on the Lean machine, and not unsigned"
+        "sample reveals and refunds are accepted on the Lean machine, and not unsigned or late"
+      ]
+    },
+    "htlc.samples.reveal_up_to_the_timeout_is_accepted": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "e1a490ea1673c37b",
+      "programs": [
+        "e5ba379d33f6085b"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "sample reveals and refunds are accepted on the Lean machine, and not unsigned or late"
       ]
     },
     "htlc.samples.unsigned_refund_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "87acb769a9c0ddb7",
+      "statement": "3944fbfe890e7ad8",
       "programs": [
-        "5a80998cdd905412"
+        "00c294a2f934b0ca"
       ],
       "notes": {
         "budget": "4000",
         "kind": "LeanNative"
       },
       "tests": [
-        "a sample reveal and a sample refund are accepted on the Lean machine, and not unsigned"
+        "sample reveals and refunds are accepted on the Lean machine, and not unsigned or late"
       ]
     },
     "htlc.samples.unsigned_reveal_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "87acb769a9c0ddb7",
+      "statement": "918caf71decde376",
       "programs": [
-        "a07328686b948653"
+        "531e3d30695ed584"
       ],
       "notes": {
         "budget": "4000",
         "kind": "LeanNative"
       },
       "tests": [
-        "a sample reveal and a sample refund are accepted on the Lean machine, and not unsigned"
+        "sample reveals and refunds are accepted on the Lean machine, and not unsigned or late"
+      ]
+    },
+    "htlc.samples.valid_minting_is_no_spending": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "ebb269e7046ef700",
+      "programs": [
+        "aa15abfe83897103"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the premises of the statements of valid contexts hold together of some transaction"
+      ]
+    },
+    "htlc.samples.valid_reveal_and_refund_overlap": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "64f0d52d91ef9ef2",
+      "programs": [
+        "37e11e9717734123"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the premises of the statements of valid contexts hold together of some transaction"
+      ]
+    },
+    "htlc.samples.valid_spend_of_neither_action": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "07ddbf3cc607b216",
+      "programs": [
+        "37e11e9717734123"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the premises of the statements of valid contexts hold together of some transaction"
+      ]
+    },
+    "htlc.samples.valid_spend_without_a_datum": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "a903f2798c5cb62a",
+      "programs": [
+        "37e11e9717734123"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the premises of the statements of valid contexts hold together of some transaction"
       ]
     }
   }

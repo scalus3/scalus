@@ -35,7 +35,7 @@ Preparation accepts statements built with:
   case classes and enums, at any proposition position;
 - `existsLet(w)(x => p)`, which is lowered as the strict binding `let x = w in p` and introduces
   no SMT quantifier;
-- `&&`, `||`, `!`, `==>` and `<=>` over these leaves:
+- `&&`, `||`, `!`, `==>:` and `<=>` over these leaves:
   - a test, `Prop.Bool`;
   - a total `call` whose continuation is a test or another total call;
   - a partial call, `whenReturns(f, a)(r => p)`, whose continuation is the same;
@@ -51,8 +51,10 @@ them.
 ranges over the values of its constructor
 ([statement semantics](prop-semantics.md#1-values-and-quantifiers)), so it stands for one
 variable per field, named `variable.field` in `Lowered.binders` and in a counterexample, and a
-field that is a case class is expanded in turn. Each test that uses the variable starts with
-`let variable = Constructor(fields…)`, which the compiler lowers to the class's own
+field that is a case class is expanded in turn. A class or an enum that would be more than 20
+Lean variables so, as a `ScriptContext`, is one `Data` variable instead
+([Mapping a variable](#mapping-a-variable), rule 3). Each test that uses the variable
+starts with `let variable = Constructor(fields…)`, which the compiler lowers to the class's own
 representation, as it does for a constructor written in the test. `Quantifiable` has an instance
 for every case class whose fields have one. The exception is a function registered without SIR,
 which has no declared type: a call to it can pass only `BigInt`, `Boolean`, `ByteString`,
@@ -69,7 +71,7 @@ names the constructor by that integer. A constructor passes its type parameters 
 enum's, so `Option[BigInt]` is the integer and the `BigInt` of `Some`. A type that contains
 itself and is passed through its constructors has values of every size, which no set of
 variables stands for: where it repeats, its node is one `Data` variable
-([Mapping a variable](#mapping-a-variable-proposed), rule 1), whose premise is a recursive
+([Mapping a variable](#mapping-a-variable), rule 1), whose premise is a recursive
 predicate ([Premises of a type that contains itself](#premises-of-a-type-that-contains-itself)),
 exact where the type's other parts are.
 `Quantifiable` has an instance for every type of several constructors; the tactic checks their
@@ -126,16 +128,21 @@ predicate: an `exists` over a list comes back undetermined, and `existsLet` with
 it. Its length is any length, so a program that walks the list meets [the loops Lean does not
 finish](#statements-that-do-not-finish).
 
-**A variable over the `Data` encodings of a type**, `forAllData[A](x => …)`, is one Lean `Data`
-variable, not built from constructors. It ranges over the values of `A` as `forAll[A]` does, each
-given as its encoding: each test that uses it starts with `let x = d.to[A]`, the decoder the macro
-compiles, so the programs read the `Data` themselves. The quantifier restricts `d` with the
+**A variable over the `Data` encodings of a type**, `forAllData[A](x => …)`, ranges over the
+values of `A` as `forAll[A]` does, each given as its encoding, and states the same: the macro
+builds the statement `forAll[A]` builds, and the tactic maps its variable as any
+([Mapping a variable](#mapping-a-variable)), by fields, or as one `Data` where it would be more
+than 20 Lean variables so, as a `ScriptContext`. A variable as one
+`Data` is one Lean `Data` variable, not built from constructors: each test that uses it starts with
+`let x = d.to[A]`, so the programs read the `Data` themselves. The quantifier restricts `d` with the
 predicate of `A`'s encoding, `DataEncoding.of[A]`, derived as for the items of a list, and the same
 rule applies: where it is exact, as for a case class of integers or a tree of them, `x` can be
 anywhere; where it is not, as for a type with a string field, it is a variable only where it stands
-for every value, and a counterexample outside the type is inconclusive. `forAll[A]` and `forAllData[A]` state the same of an `A` whose predicate is exact;
-they differ in what Lean searches: many typed variables, or one `Data` behind a premise.
-`forAllData` takes a `FromData[A]`, which `d.to[A]` needs. Its values are the encodings of `A`'s
+for every value, and a counterexample outside the type is inconclusive. A variable with limits,
+`forAllDataLimited`, is one `Data` whatever its size, as its guards walk its `Data`
+([Limits of a variable's collections](#limits-of-a-variables-collections)).
+`forAllData` takes a `FromData[A]`, which says that `A` has encodings, and which it does not read;
+`forAllDataLimited` reads its variable with `d.to[A]`, which needs it. Its values are the encodings of `A`'s
 values, the `Data` that `toData` gives: a map's keys in order, a constructor's tag and number of
 fields as declared. That is the `Data` the node gives a script as its context, which it builds
 itself, so `forAllData[ScriptContext]` stands for every context a script can get. It is not every
@@ -153,9 +160,11 @@ the compiler has dropped it by the time the statement is built. The parameter's 
 quantifier's, which it ranges over, and not a wider one. A call's result and a contract's variables
 are given, not quantified over, and take no such annotation: it is a compile error there, and on the
 variable of `forAllData`, which is one already. Another representation is the compiler's, as it was.
-The decoder is `d.to[A]`, which the compiler compiles to its own reading of the type's `Data`
-representation, the one the premise is derived from, whatever `FromData` is given; the tactic checks
-that it is.
+Such a parameter is a variable of its type, as a `forAllData` one is, and needs no `FromData`.
+The decoder of a variable with limits is `d.to[A]`, which the compiler compiles to its own reading of
+the type's `Data` representation, the one the premise is derived from, whatever `FromData` is given;
+the tactic checks that it is. Another variable as one `Data` is decoded by the tactic's own
+`UniversalDataConversion.fromData`.
 
 `<=>` becomes two implications, because each of its operands occurs in both polarities. Each leaf
 program takes only the binders in scope at that leaf. Anything else produces a
@@ -172,7 +181,7 @@ none exists requires checking the whole quantified domain, not one concrete CEK 
 is therefore `Inconclusive`.
 
 A quantifier asks for a witness by its position, not by its name: an `exists` in a positive
-position, and a `forAll` in a negative one, under `!` or in the premise of `==>`. Either side of
+position, and a `forAll` in a negative one, under `!` or in the premise of `==>:`. Either side of
 `<=>` is in both. `!forAll(n => n * n != 4)` is true, with the witness 2; at a budget no run
 finishes in, Lean falsifies it, and the body evaluated at whatever value the model leaves for `n`
 would say that it is false. Where no quantifier asks for a witness, every variable ranges over all
@@ -180,16 +189,19 @@ its values, and the replayed assignment refutes the statement. That includes `!e
 which is `∀ x, ¬ p x`: a value with `p` refutes it. `Refuted` is also available for `existsLet`,
 because its witness has already been fixed and eliminated.
 
-## Mapping a variable (proposed)
+## Mapping a variable
 
-Today the statement chooses how a variable of a case class or an enum reaches Lean: `forAll` maps
-it by its fields, and `forAllData` as one `Data`. This section proposes that the tactic choose,
-part by part of the variable's type, from the statement and the types alone.
+The tactic chooses how a variable of a case class or an enum reaches Lean, by its fields or as one
+`Data`, part by part of the variable's type, from the statement and the types alone. Before, the
+statement chose: `forAll` mapped it by its fields, and `forAllData` as one `Data`.
 
-Status: steps 1 and 2 of [the steps](#steps) are built, and rule 1 of step 3. `lower` records the
-plan as it maps each variable, and `Lowered.plan`, a `MappingPlan`, carries it; a node below the
-root can be `Data`; a type that contains itself is `Data` where it repeats (rule 1). Otherwise the
-plan is the one the statement writes, unless a check is given a fixed one (step 2).
+Status: built, the five steps of [the steps](#steps). `lower` records the plan as it maps each
+variable, and `Lowered.plan`, a `MappingPlan`, carries it; a node below the root can be `Data`; a
+type that contains itself is `Data` where it repeats (rule 1); a node that would be more than 20
+Lean variables by fields is `Data` (rule 3), unless the variable asks for a witness, or its `Data`
+has more values than its type where its fields have not (rule 2). A `forAllData` variable, and a
+parameter written `A @UplcRepr(UplcRepresentation.Data)`, is mapped as a `forAll` one (step 5); a
+`forAllDataLimited` variable is `Data` at its root, which its guards walk.
 
 ### The mapping does not change what a statement means
 
@@ -252,8 +264,8 @@ A node is decided where it is a case class or an enum, and is not inside a list 
 - A list or a map is one Lean variable, and nothing below it is decided: a list of any length
   cannot be split into fields, and its items are restricted by the list's predicate. `Value` is
   one, a map.
-- The root of a variable mapped as `Data` is a node whatever its type, as that of a `forAllData`
-  variable of a list.
+- The root of a variable mapped as `Data` is a node whatever its type, as that of a
+  `forAllDataLimited` variable of a list.
 
 A decided node is mapped one of two ways.
 
@@ -261,12 +273,12 @@ A decided node is mapped one of two ways.
   its fields. An enum is an integer that chooses the constructor, and the fields of every
   constructor ([The fragment](#the-fragment)).
 - **As `Data`.** The node and all below it are one Lean `Data` variable, restricted by the premise
-  of the node's encoding, as a `forAllData` variable is. The test decodes it with
+  of the node's encoding, as a `forAllDataLimited` variable is. The test decodes it with
   `UniversalDataConversion.fromData`, the form the compiler gives `d.to[A]`, which the tactic writes
   itself. Nothing below the node is decided.
 
-`forAll` today is the plan with every node by fields, and `forAllData` the one with the root as
-`Data`. By fields, `out` is 17 Lean variables, of which `stakingCredential` is 8: the case of the
+Before the rules, `forAll` was the plan with every node by fields, and `forAllData` the one with
+the root as `Data`. By fields, `out` is 17 Lean variables, of which `stakingCredential` is 8: the case of the
 `Option`, that of the `StakingCredential`, the case of its `Credential` and two hashes, and the
 three integers of a pointer. As `Data` at the root, it is one. A plan between them maps `address`
 by fields and `address.stakingCredential` as `Data`, in 10 variables:
@@ -297,9 +309,9 @@ where `p3` is the predicate of the encoding of `Option[StakingCredential]`, and 
 ### The plan
 
 `lower` decides each node of a variable as it maps the variable, from the root down, and a node's
-mapping is final before any test that uses the variable is compiled. Rules 1 and 2 decide a node
-before anything below it is mapped; rule 3 decides after the node is expanded by fields, and may
-replace that expansion with one `Data` variable. The plan is recorded by the same walk that makes
+mapping is final before any test that uses the variable is compiled. The rules decide a node
+before anything below it is mapped: rule 3 counts the node's Lean variables by fields with an
+expansion of its own, which it does not record. The plan is recorded by the same walk that makes
 the Lean variables, with each node's final mapping, so it is what they are. A decision reads only
 the statement and the types: the node's type and the types on its path, the encoding of the
 node's type (`DataEncoding.of`) and whether it is exact, whether the compiler gives the type a
@@ -319,28 +331,159 @@ limits, and whether the variable asks for a witness, which the quantifier's posi
      its premise would hold of every `Data`.
    - A variable with limits (`forAllDataLimited`) is `Data` at the root: the guards walk its `Data`
      ([Limits of a variable's collections](#limits-of-a-variables-collections)).
-2. **A witness needs an exact mapping.** Where the variable asks for a witness, a node whose
-   encoding as `Data` is not exact while its fields are, as one with a string field, is by fields:
-   a string is a Lean `String` variable, while as `Data` it is a byte string whose UTF-8 the
-   premise does not check. Found in step 2: by fields, a class with a string field is refused
-   today wherever a test builds the value in its `Data` representation, as `PlanNamed(name,
-   amount)` is, because building it applies `encodeUtf8` to the variable
-   (input-output-hk/Lean-blaster#389). Then the rule leaves no mapping, and the statement is
-   refused either way. A list or a map whose own predicate is not exact, as a map with keys in
-   an order that is not checked, is one variable either way, and is not exact either way.
-3. **Otherwise by fields,** unless the node by fields is more than a number of Lean variables:
-   then it is `Data`. By fields, a test builds its value from typed variables, with no run that
-   fails, and the solver reasons over integers and byte strings. As `Data`, every decoding of a
-   symbolic `Data` is also a run that fails, which its premise does not prune (`#prep_uplc_run`
-   prepares each test for every value), and Z3 seldom finds a witness through a recursive premise.
-   One `Data` is still cheaper than thousands of variables. A node is expanded by fields first,
-   and is one `Data` variable instead where it comes to more; the expansion below it is then not
-   used, and its nodes are not in the plan. The number is to be measured.
+2. **Where `Data` would lose what the fields have, by fields.** A node that rule 3 would map as
+   `Data` is by fields instead (`Reason.LargerByFields(cause)`):
+   - where the variable asks for a witness (`NotAsData.Witness`). The solver finds a witness
+     over typed variables, and seldom through the premise of a `Data`: an `exists` through even a
+     constructor's premise came back undetermined (2026-10-26), and a `Data` that is not exact
+     cannot stand for a witness at all;
+   - where its encoding as `Data` is not exact while its fields are (`NotAsData.Inexact`), as a
+     class with a string field: a string is a Lean `String` variable, while as `Data` it is a byte
+     string whose UTF-8 the premise does not check, so a counterexample can be no value of the
+     type, and a test that reads the string decodes it with `decodeUtf8`, which the tactic
+     refuses (input-output-hk/Lean-blaster#389). Found in step 2: by fields, a class with a
+     string field is refused wherever a test builds the value in its `Data` representation, as
+     `PlanNamed(name, amount)` is, because building it applies `encodeUtf8`. So by fields is
+     exact for a class the compiler builds otherwise, as one marked `@UplcRepr(UplcConstr)`. A
+     list or a map whose own predicate is not exact, as a map with keys in an order that is not
+     checked, is one variable either way, and is not exact either way: a `ScriptContext` is
+     `Data`.
+3. **Otherwise by fields,** unless the node by fields is more than 20 Lean variables
+   (`MappingPlan.mostByFields`): then it is `Data` (`Reason.Larger`), where it can be one: a node
+   with a part that has no `Data` form, or whose encoding is not told, is by fields
+   (`Reason.LargerByFields`), as is one of rule 2. The count is of the node with every node below
+   it by fields, but where a type repeats, which is one variable (rule 1), and stops past 20. So
+   the node that is `Data` is the highest one that is too large, and nothing below it is decided
+   or in the plan: a `ScriptContext`, 141 variables by fields, is one `Data` variable, and its
+   check is the one `forAllData` gave before step 5, to the bytes of its programs, so the results
+   the suites keep of their statements over contexts stand. The number was measured in step 4
+   (below).
 
-The plan depends only on the statement and the types, never on a time or an earlier run, so a
-statement has the same plan, and the same check, in every run. Nothing chooses another mapping:
-`forAllData` and a parameter written `A @UplcRepr(UplcRepresentation.Data)` state what `forAll`
-states, and become another way to write it.
+   By fields, a test builds its value from typed variables, with no run that fails, and the
+   solver reasons over integers and byte strings. But a function takes a case class in its `Data`
+   representation, so the test encodes every field into `Data` first, and an enum's tag is a
+   branch of the symbolic run for each constructor, whether or not the function reads it. As
+   `Data`, the value is no work to build, and is read only where the function reads it; but every
+   decoding of a symbolic `Data` is also a run that fails, which its premise does not prune
+   (`#prep_uplc_run` prepares each test for every value), and the solver works through the
+   premise, and seldom finds a witness through a recursive one. The small node is cheaper by
+   fields, and the large one as `Data`.
+
+   Counting after the nodes below are decided, a node of a few large fields would be by fields,
+   its fields `Data`: a `ScriptContext` would be three variables, its `txInfo` and `scriptInfo`
+   each one `Data`. That plan was measured too, and is slower than the context as one `Data`.
+
+The plan depends only on the statement, the types and the tactic's mapping
+([A mapping the tactic prefers](#a-mapping-the-tactic-prefers)), never on a time or an earlier
+run, so a statement has the same plan, and the same check, in every run. The statement chooses no
+mapping: `forAllData` and a parameter written `A @UplcRepr(UplcRepresentation.Data)` state what
+`forAll` states, and are another way to write it (step 5).
+
+### A mapping the tactic prefers
+
+Status: built (2026-11-13). The default is `VariableMapping.default`, `VariableMapping.auto`: a
+Lean type where the statement's form makes it exact or of no matter (`Auto`, below), the rules
+elsewhere. A tactic, or a suite for all its checks, can prefer another mapping, for every type or
+for a type by name:
+
+```scala
+UplcBlaster(Budget.LeanSteps(4000), lean).withMapping(VariableMapping.rules)
+UplcBlaster(...).withMapping(VariableMapping.rules.preferLeanTypes)  // a Lean type wherever one exists
+UplcBlaster(...).withMapping(VariableMapping.rules.forType[TxOutRef](VariableMapping.Choice.AsData))
+
+class SomeVerificationTest extends AnyFunSuite with LeanProofsSuite {
+    override protected def variableMapping = VariableMapping.rules
+```
+
+A `VariableMapping` is one `Choice` for every type and others by type: `Rules`, `ByFields`,
+`AsData`, `LeanType`, or `Auto`. The choice of a node's type is asked at each decided node, after rule 1:
+a node where a type repeats is `Data` whatever is chosen. A choice that cannot be taken falls back
+to the rules: `Data` where the type has no `Data` form, a Lean type where none exists, and either
+where the variable asks for a witness, which a variable with more values than its type cannot
+stand for. A node the preference maps as one variable is counted as one where the node above it is
+sized (rule 3). The node's reason is `ByPreference`. The mapping shows in
+the check's text, and so in what a kept result rests on: a result kept under one mapping is stale
+under another. `LeanProofs` gives its mapping to a `UplcBlaster` that did not say one
+(`withMappingUnlessSet`), its exports among them, so a module or a property is of the check that was
+proved.
+
+**`Auto`** chooses by the statement's form, for a variable itself of a type a Lean type exists
+for: the Lean type where the statement has `isValid` of the variable as a conjunct of a premise
+(`assumesSatisfied`), of which the statement over the Lean type is exactly the one over its `Data`,
+and where the statement is a negative control, declared with `refute` (the goal's
+`ExpectedOutcome.Falsified`), whose refutation is of a value of the Scala type whatever the mapping;
+the rules elsewhere, and below the variable's root. So the default assumes nothing a statement over
+`Data` does not. The cases are those where the Lean type was measured faster (below).
+
+**A Lean type** (`MappingPlan.Mapping.AsLeanType`) is one that exists for the Scala type in a
+library the checks import, `LeanTypeBinding`; there is one, a script context of Plutus V3 as
+CardanoLedgerApi's `CardanoLedgerApi.V3.Contexts.ScriptContext`. A node so is one Lean variable of
+that type, `(x0 : CardanoLedgerApi.V3.Contexts.ScriptContext)`. Its programs are given its `Data`,
+`Term.Const (Const.Data (IsData.toData x0))`, and decode it as they decode a node mapped as `Data`,
+so they are the same programs, to the bytes. No premise restricts it: the Lean type says which
+values it has. `isValid` of it is CardanoLedgerApi's own predicate of the value,
+`validScriptContext x0`, and not of its `Data`. A `forAllDataLimited` variable takes the Lean type
+too, and its guard walks the `Data` as before.
+
+The programs then get `Data` built from constructors, and the decodings that fail on a `Data` of
+another shape are no paths of the symbolic run. Measured on the HTLC validator (2026-11-12), each
+check alone in one server, `Data` with the encoding's premise, then the same with `isValid`, then
+the Lean type, then the Lean type with `isValid`:
+
+| Statement | Data | Data + valid | typed | typed + valid |
+|---|---|---|---|---|
+| a refund rejected before the timeout | 30 s | 42 s | 24 s | 25 s |
+| a reveal rejected after the timeout | 27 s | 44 s | 23 s | 30 s |
+| a refund unless the committer signs, ≤ 2 signatures | 14 s | 27 s | 10 s | 10 s |
+| a reveal ends before a refund begins, two contexts | 57 s | 87 s | 128 s | 115 s |
+| a refund unless the committer signs, every context | spurious, 85 s | not finished in 6 min | spurious, 108 s | not finished in 6 min |
+| a refund rejected at the timeout (false) | refuted, 35 s | not finished in 10 min | refuted, 27 s | not finished in 10 min |
+
+So of one context, the Lean type with `isValid` costs what `Data` without it does; of two, it
+costs more. What did not finish with `Data` does not with the Lean type either.
+
+**A Lean type can have more values than the Scala type.** CardanoLedgerApi keeps parts of a
+context as any `Data`: the validity range, the treasury's amount and donation, the values of the
+outputs and of the mint. A variable of it is inexact, as a node mapped as `Data` is, and stands only
+for every value: where it asks for a witness, the rules map it. Lean's counterexample is a term of
+the Lean type, which the replay reads by Lean:
+
+1. `SmtValues.leanTerm` writes the solver's term as a Lean term: the solver names Lean's
+   constructors by their full names, so it is the same application, with `List.cons`, `Prod.mk`,
+   `as List.nil …` and the string literals written as Lean writes them;
+2. Lean evaluates the type's encoder of it (`Evaluation.encode`, by `#eval` in the check's server),
+   and writes the `Data` in a form the replay reads (`(I n)`, `(B hex)`, `(C tag …)`, `(L …)`,
+   `(M (P k v) …)`): PlutusCore's own `toString` writes a byte string's characters as they are;
+3. where that `Data` is no value of the Scala type, the parts that are not are replaced by
+   examples of them (`DataEncoding.repaired`; a map whose keys are out of order by the empty map),
+   and the replay is of the repaired value, which it says. Where the statement is false of it,
+   that value of the type refutes it; where it holds, the counterexample is spurious.
+
+A refutation keeps the `Data`, so without Lean it is replayed as before. The export to the
+Universal Annotation Language refuses a statement with a variable of a Lean type, for now.
+
+**What a proof over a Lean type is of.** A statement over a variable of a Lean type is of the
+values of that type, the `Data` its encoder gives: `∀ c, P (toData c)`.
+
+- With `isValid` of the variable as a premise it is the statement over `Data`, exactly:
+  `isValid(d)` holds only where `d` is the encoding of the context it is read as,
+  `toData (fromData d) == d`, and that context is valid (`ScalusProofs/Ledger.lean`), so every `d`
+  the premise admits is `toData c` of a valid `c`. The ledger gives a script the encoding of a
+  context, so the check of the encoding leaves out no context it gives.
+- Without it, it is the statement over the Scala type where every value of the Scala type is the
+  encoding of a value of the Lean type: that the Lean type has a counterpart of every script
+  context Scalus has. `LeanPredicateTest` checks it of sample contexts; no lemma proves it
+  ([Lean types](lean-types.md#what-comes-next), item 1). Choosing `LeanType` is choosing that
+  assumption; `VariableMapping.rules` makes none.
+
+A refutation is of a value of the Scala type, as the replay repairs and checks it, whatever the
+mapping.
+
+Measured on the HTLC suite (2026-11-12), with `preferLeanTypes`: the suite took 4 min 55 s with Lean, its statements of
+one context 2 to 15 s each, the two contexts 85 s; with the rules, the same statements, run with
+the four other suites at once, took 20 to 120 s each. Eight counterexamples of the negative
+controls were repaired, and refuted.
+
 
 ### What is reported
 
@@ -390,9 +533,9 @@ counterexample are named by their nodes' paths, as now
    (the next step, below), so it may be anywhere a variable may; before, it was exact at its first
    level only, and a variable that asked for a witness was refused. A node of a type with a part
    that has no `Data` form is refused. Rule 2's choice of fields over an inexact
-   `Data` has no node to apply to yet: no rule maps as `Data` a node that has fields, until rule 3.
-   It is left to step 4, with the knowledge it needs as `lower` goes, whether a quantifier asks for
-   a witness, which today `lower` tells only once the statement is lowered. `UplcBlasterTest`
+   `Data` had no node to apply to: no rule mapped as `Data` a node that has fields, until rule 3.
+   It was left to step 4, with the knowledge it needs as `lower` goes, whether a quantifier asks
+   for a witness. `UplcBlasterTest`
    proves a statement that decodes a subtree of a `BlasterTree`, and refutes one with the
    counterexample `Node(Leaf, Leaf)`, replayed.
 
@@ -401,8 +544,66 @@ counterexample are named by their nodes' paths, as now
    It lifts the limit of rule 1's nodes, whose premise described their first level only: a test
    may read the value at any depth below such a node, and a witness Lean gives is a value of the
    type.
-4. Rule 3: the suites run under fixed plans, to measure the number.
-5. `forAllData` as `forAll`, and its parameter annotation with it.
+4. Rule 3, and rule 2 with it: the suites run under fixed plans, to measure the number. Built,
+   with 20. `lower` gives each quantifier its position, and so knows whether the variable asks
+   for a witness; the same record says where a variable that is not exact must stand for every
+   value. A fixed plan's `asData` maps the nodes above the ones it names by fields, and
+   `onlyAsData` every other node, but neither where a type repeats. `MappingPlanTest` checks the
+   rules on the plan; no kept result changed, as no variable of the suites' statements is more
+   than 20 Lean variables by fields but a `forAllData` one, which stays `Data` until step 5.
+   Measured for `forAll`, not for a witness: rule 2 keeps a witness by fields on the earlier
+   finding that the solver seldom finds one through a `Data` premise.
+
+   Measured on 2026-11-09 by `MappingMeasurementTest` (scalus-examples, run where
+   `SCALUS_MEASURE_PLANS` names the file of its results), which checks statements of the suites
+   under fixed plans, each with `Budget.Auto` and 8 minutes, in seconds; the budget the search
+   came to is in brackets. A case class by fields and as one `Data`:
+
+   | Statement | The check's Lean variables by fields | By fields | As `Data` |
+   |---|---|---|---|
+   | `vesting.schedule.zero_before_start` | 5 | 23 (with the server's start) [213] | 3 [135] |
+   | `vesting.schedule.returns` | 5 | 2 [261] | 6 [183] |
+   | `vesting.schedule.does_not_decrease` | 6 | 5 [397] | 9 [319] |
+   | `vesting.schedule.does_not_decrease_for_any_amount`, refuted | 6 | 2 [349] | 6 [271] |
+   | `one_shot_mint.mint.seed_mints_the_tokens` | 19 | 59 [2098] | 58 [1681] |
+   | `one_shot_mint.mint.seed_mints_any_quantity`, refuted | 19 | 31 [2098] | 12 [241] |
+   | `one_shot_mint.mint.burns_without_the_seed` | 19 | 73 [2020] | 60 [1603] |
+   | `one_shot_mint.mint.accepted_only_with_the_seed`, refuted | 19 | 29 [1743] | 69 [1843] |
+
+   A `Config` is 4 variables, a `Mint` 19, and the other variables are integers. As `Data` the
+   programs take fewer steps, as the test does not encode the fields, but the solver works
+   through the premise: a `Config` is two to three times faster by fields, a `Mint` about as fast
+   either way.
+
+   A statement over every script context, `forAll[ScriptContext]`, under five plans: the context
+   as one `Data`; its `txInfo` and `scriptInfo` as `Data`, which is what counting after the nodes
+   below are decided gives; its `scriptInfo` as `Data`; only the certificate and the proposal of
+   its `scriptInfo` as `Data`; and every node by fields.
+
+   | Statement | 1 variable | 3 | 25, of 4 tags | 45, of 10 tags | 141, of 43 tags |
+   |---|---|---|---|---|---|
+   | `htlc.context.output_without_a_datum_is_rejected` | 28 [138] | 38 [187] | 232 [761] | over 480, past 963 steps | over 480, past 1953 steps |
+   | `htlc.context.only_spending_is_validated` | 24 [107] | 22 [156] | 248 [730] | over 480 | over 480 |
+   | `vesting.validator.no_datum_is_rejected` | 19 [210] | 32 [259] | 156 [833] | not run | not run |
+
+   The context as one `Data` is the check of the statement as the suites write it, with
+   `forAllData`, to the bytes of its programs, and took as long. Every node of a context that is
+   by fields is a field the test encodes into `Data` before the validator reads it, and a tag a
+   branch of the symbolic run: with its `txInfo` by fields, 25 variables, a check takes 8 to 10
+   times as long as with one `Data`. Hence 20, between a `Mint` and a `txInfo`, and the count from the root down.
+5. `forAllData` as `forAll`, and its parameter annotation with it. Built. The macros build a
+   variable over the `Data` encodings of its type, without limits, as one of its values: the
+   statement of `forAllData[A]`, of a parameter `A @UplcRepr(Data)` and of `unlimitedData[A]` is
+   that of `forAll[A]`, with its identity, the rules decide its nodes, and no decoder is compiled
+   for it. The `FromData` `forAllData` takes is not read, and the annotation needs none.
+   `Reason.OverEncodings` is gone; a variable with limits stays `Data` at its root
+   (`Reason.Limited`), as its guards walk its `Data`. The suites' `forAllData` variables are script contexts, one `Data` by rule 3 with the
+   check as before, to the bytes: no kept result changed, and a run without Lean took every one of
+   them as kept. The tactic's tests of a variable as one `Data` at its root, over small types, are
+   under a fixed plan (`Fixed.asData("p")`) now. A `forAllData` variable of a small type is by
+   fields: an `exists` over a `BlasterPair @UplcRepr(Data)` is proved, where through the premise of
+   its `Data` Z3 answered unknown, and one over a class with a string field, which as `Data` was
+   refused where it asks for a witness, is a variable by fields (2026-11-09).
 
 ### Follow-ups
 
@@ -432,6 +633,54 @@ through the types around it.
   value and nothing is unsound; a counterexample that the two disagree on is replayed against a
   layout Lean did not read, and ends as inconclusive. A name of the depth the layout is cut at
   would tell them apart, with the types in it that repeat one of them named for it too.
+- **A claim compiled total.** The rejecting form needs a claim that returns, and falls back to
+  the statement as written where one fails. A claim compiled so that each place it can fail, an
+  `error`, a partial builtin, returns `false` instead would make the rejecting form exact for
+  every claim, with neither the claim that it returns nor the fallback: in effect exceptions in
+  UPLC, a transformation of the claim and of what it calls.
+- **The limits of what the rejected runs read.** A limit on a part the runs never read multiplies
+  the guard's shapes (Vesting: 31 min with the outputs limited, 5 without). The tactic does not
+  tell which parts a run reads, so the limits are the author's; it could tell from the programs'
+  reads, or warn of a limited part that no program reads.
+- **Vesting's third guarantee and liveness over real contexts.** Both are tagged `Unfinished`
+  (see [What `VestingVerificationTest` covers](#what-vestingverificationtest-covers)): the third
+  guarantee's search for its budget climbs past 2500 steps by spurious counterexamples, and an
+  accepted run is the whole validator on every path. Lean's profiler on a check written at a small
+  budget would show which reads branch; a clause that read the datum once, as the validator does,
+  or tighter limits for liveness alone, are what to try.
+- **The payment splitters' payouts.** Their statements about a payout, and the optimized spend's
+  withdrawal, are tagged `Unfinished` (see
+  [What `PaymentSplitterVerificationTest` covers](#what-paymentsplitterverificationtest-covers)):
+  their runs are long, 1500 to 3400 steps for a rejection and 3652 to 5569 for an accepted run,
+  and Lean's time grows far faster than the budget past about 1100 steps. Lean's profiler on one
+  of them at a small budget would show which reads branch most; exact lengths in the limits, one
+  shape of each value, are the next thing to try.
+- **Liveness under its premise.** `premise ==>: succeeds(validator, …)` has Lean run the validator on
+  every context, the premise pruning none. Two accepting forms, which run the validator only where
+  the premise holds, were built and measured on the suites (2026-11-09), and dropped:
+  - One program, `if premise then validator else true`, which returns `true` exactly where the
+    statement holds, for a premise that returns. The suites' premises do not: HTLC's and the
+    splitter's read the redeemer with a decoder that fails on other `Data`. The attempt in that
+    form ended at a context where the premise fails, after 24 to 52 s, and the statement as
+    written was checked after it.
+  - `premise ==>: (if premise then validator else true)`, which states the same on every value,
+    so with no fallback. One program runs the premise and then the validator, so the budget must
+    cover both, and a check has one budget for every program: the premise's own is explored at
+    it too. The three `Unfinished` liveness statements, Vesting's withdrawal after the end and the
+    splitters' honest payouts, did not finish in 20 minutes with `Budget.Auto`: after a spurious
+    counterexample at about 2030 steps, Lean was in the premise's symbolic run at 2280 to 2859.
+    Of the statements that finish, HTLC's refund from the timeout took 50 s at 4000 steps (24 s as
+    written), the mint's two were 10 to 20% faster at budgets 15% higher, and the optimized
+    splitter's spend with its withdrawal was no longer proved at its given 1600 steps.
+
+  A budget of each program, the accepting program's the premise's and the validator's, would
+  keep the premise's at its own; that is a change of the Lean check.
+- **An exact order of the keys of a map keyed by a case class.** Lean's restriction of a map,
+  and the tactic's check of a value, test the order of the keys only where they are byte strings
+  or integers. A map keyed by a credential, as a context's withdrawals, can then be one whose keys
+  are out of order: such a counterexample refutes nothing, and where a statement reads the order,
+  as `get` does, no budget proves it. An order derived from the key type's `Ord`, of a type the
+  compiler knows it of, would make the restriction exact for these maps.
 - **Two walks of one name throw.** `LeanRecursions` fails with an exception where two walks of
   different text have one 64-bit name, inside `lower`, whose other failures are a `Left`. It is
   an invariant, not an error a statement can meet, but it could be told as a reason.
@@ -539,7 +788,7 @@ Through an inline helper, a test cannot read the variable of an outer expansion:
 its caller's lambda is no variable of the statement, and lowering refuses the test. A test whose
 own variables have one name, which an expansion of a helper could give, is a compile error.
 
-A partial call, `whenReturns(f, a)(r => k)`, is rewritten to `denotes(f(a)) ==> call(f, a)(r => k)`
+A partial call, `whenReturns(f, a)(r => k)`, is rewritten to `denotes(f(a)) ==>: call(f, a)(r => k)`
 before it is lowered: if the function returns, the continuation holds of its result. The
 `denotes` leaf returns the function's result rather than a Boolean. Where the call is a
 conclusion, the polarity rule reads that `denotes` weakly, so a run of `f` that exhausts the
@@ -655,6 +904,107 @@ The weak readings need `runFor`. With `runSteps`, the negative reading of `denot
 reject `State.Error`, which might be an exhausted budget, so it would be `True`. A premise
 `denotes(f(x))` would then say nothing, and `!denotes(e)` could never be proved.
 
+## The rejecting form
+
+A statement that a success implies a claim, `succeeds(validator, ctx) ==>: signedBy(ctx)`, is as
+written two programs: the validator's, whose run Lean explores on every path to its end, and the
+claim's. The rejecting form is one program, `if claim then error else validator`, which fails on
+every value where the statement holds. Lean's run of it ends where the claim holds, and on every
+other path at the check that rejects it: it does not run the validator's paths where the claim
+holds, which are most of them, and the longest.
+
+Measured on Vesting's "every accepted spend is signed by the beneficiary" (2026-11-05), with the
+budget fixed from a replayed context:
+
+| Statement | Limits | Result |
+|---|---|---|
+| as written, one input | outputs and signatories at most one, values of one token | proved at 2444 steps, 8 min |
+| rejecting form, two inputs | as above | proved at 3600 steps, 31 min |
+| rejecting form, two inputs | inputs, signatories and the inputs' values only | proved at 3300 steps, 5 min |
+
+A limit on what no run that matters reads costs: the guard walks it, and each shape it lets
+through runs the program again. A rejected run reads no output.
+
+`lower` uses the rejecting form for `premise ==>: claim` in a positive position, where the premise
+is a success, of an expression (`denotes`) or of a call (`succeeds`), the claim is tests (a
+`Bool`, an `Equal` or a conjunction of them, one claim `a && b`), and the statement quantifies over
+values. Elsewhere the rewritten statement, which is stronger, would prove less: under `!`, in a
+premise, inside `<=>`. A test as the premise may guard a conclusion that fails where it is false,
+as `(x != 0) ==>: (10 / x > 1)`, and so may a call whose continuation is a test; the expansion of
+`whenReturns` calls the function in its conclusion, which need not return; and a closed statement
+has nothing to prune. A check within a budget (`Budget.Within`) is of the statement as written:
+there a run the budget cuts counts for the statement, and where the claim is false the rejecting
+program runs the validator after it, so its bound would not be that of the validator's run.
+
+The claim and the premise go inside the rejecting program without the definitions the compiler put
+around them of the functions the statement registers, as the operands of `==` do: a call of such a
+function inside the program is linked to its registered program, as a call at the top of a test is,
+and not compiled again from its source.
+
+The rewritten statement claims that the claim returns on every value, and that the rejecting
+program fails: a claim that failed would fail the program whatever the validator does, where the
+statement is false if the validator succeeds. `lower` lowers the statement as written too
+(`Lowered.unrewritten`), over the same binders, and the replay of a counterexample decides by it,
+running the premise's program, which Lean does not:
+
+- false as written: a refutation;
+- true as written and false as rewritten: the claim fails where the premise does not hold, as
+  `denotes(unIData(d)) ==>: equal(iData(unIData(d)), d)` does where `d` is no integer. The rejecting
+  form decides nothing.
+
+The rejecting form is an attempt. Where it ends inconclusive, for that reason or another, the
+statement as written is checked: a check at a given budget again at that budget, and a search
+again from its start. The attempt has half the time, and the statement as written what is left of
+it, so the time limit is that of both; where neither decides, the reason is both forms'. Without
+a time limit the attempt has none either, and the statement as written is checked only where the
+attempt ends. An attempt that failed, as on an error of Lean's, is reported as it is, without the
+statement as written. A spurious counterexample of a check at a given budget is not measured in
+the attempt, but in the check as written; in a search, a counterexample of the solver's
+characters, on whose renamed bytes both forms hold, ends the attempt, as no budget changes it.
+Another reason is the solver's byte strings: they
+may hold characters no byte string has (Lean-blaster#389), and the claim that the claim returns,
+which the statement as written does not make where the premise fails, can be false of them only.
+The one-shot mint's deployed statement met it: its counterexample was of such characters, which
+replay as bytes on which both forms hold.
+
+A result the statement as written decided says so (`Artifact.asWritten`), with the programs of
+the statement as written, and is kept with the note `form: as written`: a later run checks the
+statement as written first, and the rejecting form in the time left, where the statement as
+written decides nothing now. What is kept rests on both lowerings: the fingerprint has the text
+and the programs of both. So a claim that returns `false` where it does not hold gets the speed,
+and a statement the statement as written decided is checked as written first.
+`premise ==>?: claim` (`Prop.Rejects`) is the rejecting form itself:
+it holds where the claim fails ([its semantics](prop-semantics.md#4-connectives)), so its check is
+the rejecting program alone, in any position, with no claim that the claim returns and no fallback.
+A claim of several tests is the one test `a && b`, which fails where `a` fails, and where `a` holds
+and `b` fails. Within a budget its bound is that of its rejecting program. A claim that failed
+wherever the premise holds would be proved of every value: `LeanProofs.holdsAsImplicationOn`
+reads the statement with `==>:` on a value, on the Scalus CEK, so that a sample the function
+accepts shows the claims return `true` there, as the vesting suite's samples do for `spend`'s
+clauses.
+
+The one-shot mint's deployed statement as the script reads its context is stated with `==>?:`:
+its claim reads the context with the script's own deserializer, and fails where that cannot read
+it, where the statement of the context's own type says what the script does. Its rejecting program
+runs the deserializer and then the script, so its budget is about twice theirs: 5000 steps, proved
+in 75 s.
+
+A guarantee the Verifier makes of a function's clauses, `denotes(body) ==>: clause`, is in the
+rejecting form too. A clause that fails where the function fails makes the attempt end
+inconclusive, and the first run spends up to half its time on it. The one-shot mint's clauses read
+the policy's own tokens, and failed where the mint names none, as the policy does; `ownTokens`
+returns none there now, and the rejecting form proves them at 4010 steps, where the statement as
+written took 5740.
+
+A call obligation (`Origin.Obligation`) is checked as written. Its premise is the caller's code up
+to the call, `reach`, and its claim that code with the precondition at the call, `check`: the
+rejecting form would prune nothing, would run that code once more, and its claim fails wherever
+that code fails, as at a `require` before the call. Follow-up: where the precondition returns on
+every value of its variables, `check` fails exactly where `reach` does, and the obligation is the
+one program `check`, which never returns `false` (`true ==>?: check`), so that the caller's code up
+to the call runs once instead of twice. That the precondition returns would be a statement of its
+own, over the callee's variables.
+
 ## The Lean check
 
 For a statement over `x0 : BigInt` and `x1 : Boolean` with one leaf, the tactic writes the file
@@ -690,6 +1040,11 @@ messages, each after a `Content-Length` header, on the server's standard input a
   `textDocument/didChange` every later one. The workspace's libraries are loaded once, and Lean
   elaborates again only from the first command that changed. The header, the imports, is the same
   text in every check, so a check pays for its own commands and not for loading the libraries.
+  `ScalusProofs.Run` imports `ScalusProofs.Ledger` for that, and a check imports `Run` alone, so
+  every check has the ledger's rules, whether it reads them or not. A workspace that builds `Run`,
+  as every workspace Scalus makes does from its root module, builds them too. They cost a check
+  nothing measurable: the minting policy's statements, which read none, took 74 s together with
+  them and 104 s without, each run alone on a quiet machine (2026-11-16).
 - **The result is the document's diagnostics.** The tactic waits with Lean's request
   `textDocument/waitForDiagnostics` for the version it sent, and takes what
   `textDocument/publishDiagnostics` published for that version: Blaster's messages and Lean's
@@ -738,6 +1093,13 @@ messages, each after a `Content-Length` header, on the server's standard input a
   a directory, the tactic writes every check it runs there, each in a directory of its own.
   `tactic.withChecksKeptIn(directory)` says the same in code, in place of the variable, and so do
   `LeanProofs` and a `LeanProofsSuite`'s `keptChecksDirectory`.
+- **Tracing a run.** With the environment variable `SCALUS_BLASTER_TRACE` set, the tactic says
+  what it does, a line at a time on the standard output, each line starting with
+  `[uplc-blaster] <statement>:`: the lowering of each statement (its programs and its formula,
+  with `(as written)` after the name for the lowering as written), the rejecting form's attempt
+  and what it came to, each check with its budget, its time and its outcome, the budget Lean's
+  machine counted next, and on each replay what each program did on the values (`#n` is the
+  program `n` of the formula), in each lowering.
 
 The verdict is read from the messages Lean reports, which are Blaster's:
 
@@ -826,6 +1188,62 @@ The result depends on what `holds` finds:
   `opaque` builtins the programs apply.
 - **Undecided, because a leaf exhausted the replay budget:** `Inconclusive`.
 
+## Lean predicates: the ledger's validity
+
+A statement may say of a value's `Data` what a Boolean function of Lean says: `Prop.Satisfies`
+of a `LeanPredicate`, its Lean name and the module that defines it. `Props.isValid(ctx)`, of a
+`v3.ScriptContext`, is the one there is: `ScalusProofs.Ledger.validScriptContextV3`, which reads
+the `Data` as IOG's CardanoLedgerApi reads it (`IsData.fromData`) and holds where
+`CardanoLedgerApi.V3.Contexts.validScriptContext` does, of whatever purpose. Among the rules: the
+transaction has inputs, ascending, and the input it spends with its datum; its outputs carry
+positive ada; its fee is positive and it is balanced; its validity range is not empty; its
+signatories, withdrawals, redeemers and datums are sorted as the ledger sorts them, and the
+redeemer of the script's purpose is the context's. A `Data` that is no context meets none.
+
+```scala
+forAllData[ScriptContext](ctx =>
+    isValid(ctx) ==>: (isRefund(ctx) && !startsFromTheTimeout(ctx)) ==>: fails(validator, ctx.toData)
+)
+```
+
+- **No program.** The predicate is a leaf of the formula, `LeafFormula.Satisfies(predicate,
+  argument)`, and Lean evaluates it: `(ScalusProofs.Ledger.validScriptContextV3 x0 = true)`, the
+  same in a positive and in a negative position, as no budget cuts it. A check that has one
+  imports its module after `ScalusProofs.Run`; one without has the text it had, so its kept result
+  is not changed by it.
+- **Of a variable passed as one `Data`, or of a constant.** Lean has a term only of those: a
+  variable mapped as `Data` at its root (a script context is, by rule 3; a `forAllDataLimited`
+  variable is), or a value without statement variables, whose `Data` the macro computes with its
+  `ToData` where the statement is built. `isValid` of an expression over variables is a compile
+  error; of a variable passed by its fields, `lower` refuses it.
+- **The replay asks Lean.** The CEK cannot run a Lean predicate, so the replay of a counterexample
+  has Lean `#eval` each predicate on the values it replays (`Evaluation.in`, one document for all
+  of them) and evaluates the formula with those verdicts and the programs' outcomes. Where Lean
+  does not evaluate them, the counterexample decides nothing. A refutation keeps the verdicts
+  (`lean-predicates` in its notes), and without Lean its counterexample is replayed with them,
+  as a kept proof is taken as it was proved. `holdsAsImplicationOn`, which runs on the CEK only,
+  refuses a statement with one.
+- **Not exported** to the Universal Annotation Language yet: the predicate is of Scalus's
+  library, of `Data`, which a consumer does not have. CardanoLedgerApi's own, of its types, would
+  be, with the statements over typed values ([Lean types](lean-types.md#what-comes-next)).
+
+Cost, on the HTLC validator (2026-11-12), each check alone in one Lean server, the same statement
+without and with the premise: 5 to 11 s more a check, whatever the check is. 11 s became 22 s
+for the rejections at 600 steps, 25 s became 36 s for a refund before the timeout, 44 s became
+50 s for the two contexts, and 12 to 15 s became 17 to 20 s for those of at most two signatures.
+The predicate is the same in every check, so its cost is about the same too. A negative control with it, where the solver has to build a transaction the
+ledger accepts, balanced among the rest, that the validator accepts, did not finish in 20 minutes;
+so the HTLC suite's negative controls are of every context, valid or not, and its samples are
+valid transactions, stated as `isValid(sample) && succeeds(validator, sample.toData)`. Of a
+statement Lean did not finish of every context, the solver gave a spurious counterexample, a list
+of signatures longer than the budget's runs search, within two minutes without the premise; with
+it, it does not finish in five. The rules bound no list: the signatories ascend, of any number, so
+a statement that walks a list still needs its limits (`forAllDataLimited`).
+
+A note on timing by hand: `lake env lean` on a check the tactic kept did not finish in 20 minutes
+where the suite's Lean server took about 40 s for it. Time a check through the tactic
+(`SCALUS_BLASTER_TRACE=1`).
+
 ## Budgets
 
 The budget counts Lean CEK transitions, both `Eval` and `Return`. It is not Plutus `ExUnits`.
@@ -880,7 +1298,7 @@ lengthen a list within 100.
 
 ### Limits of a variable's collections
 
-`forAllDataLimited[A](x => limit)(x => body)` is `forAllData[A](x => limit ==> body)`, where `limit`
+`forAllDataLimited[A](x => limit)(x => body)` is `forAllData[A](x => (limit) ==>: body)`, where `limit`
 says how many elements the collections of `x` have. A collection is a list or a map of the type, as
 its `Data` encoding has it: the fields of a case class are none, and neither is a list in a field of
 type `Data`. The macro turns `limit` into `Limits` at compile time, a list of `Limit`s:
@@ -964,13 +1382,14 @@ given.
 ## Lean workspace and pins
 
 The workspace is `scalus-verification/src/main/lean`: Lean 4.24.0 (`lean-toolchain`),
-`lakefile.lean`, and a committed `lake-manifest.json`. `ScalusProofs.lean` only imports
-`ScalusProofs.Run`. The checks are generated for each statement and are never stored.
+`lakefile.lean`, and a committed `lake-manifest.json`. `ScalusProofs.lean` imports
+`ScalusProofs.Run` and `ScalusProofs.Ledger`. The checks are generated for each statement and are
+never stored.
 
-- **PlutusCore** comes from the fork `nau/PlutusCoreBlaster` @ `fix/case-scrutinee-smt-blowup`,
-  until input-output-hk/PlutusCoreBlaster#40 merges. Without the fix, Blaster does not terminate
-  on UPLC `case`, which every PV11 program uses. The fix addresses two problems in the
-  `Frame.CaseScrutinee` handler:
+- **PlutusCore** comes from the fork `rssh/PlutusCoreBlaster` @ `case-scrutinee-on-main`,
+  input-output-hk/PlutusCoreBlaster#40 brought up to `main`, until #40 merges. Without the fix,
+  Blaster does not terminate on UPLC `case`, which every PV11 program uses. The fix addresses two
+  problems in the `Frame.CaseScrutinee` handler, of which `main` has since fixed the first:
   - splitting `Const.Bool` left the decision tree stuck on `Bool.casesOn` for a symbolic value;
   - `Ms[n.toNat]?` is an opaque recursive application for a symbolic tag.
 
@@ -980,6 +1399,11 @@ The workspace is `scalus-verification/src/main/lean`: Lean 4.24.0 (`lean-toolcha
   `Int.ediv`/`Int.emod` fix that integer programs need.
 - **Upstream force-pushes.** A lost revision shows up as `git exited with code 128`. Run
   `lake update` again, and commit the new manifest.
+- **CardanoLedgerApi** comes from `input-output-hk/CardanoLedgerApiBlaster` @ `3dd048e`, for
+  `ScalusProofs.Ledger` ([Lean predicates](#lean-predicates-the-ledgers-validity)). Its lakefile
+  names PlutusCore and Blaster `main`; the requirements above take precedence over them, and it
+  builds against them (about three minutes). A workspace that requires the library, as the
+  vesting example's, pins it too, as inherited.
 - **The toolchain** is `elan` and `z3`, from the default and `ci` nix shells.
 
 CI: `.github/workflows/lean-proofs.yml` runs on a push that changes the verification module,
@@ -997,9 +1421,9 @@ is canceled.
   a list or a map, or a case class or an enum of them. A list or a map is restricted to its type's
   values by a predicate derived from the type; where that cannot be exact it is a variable only in a
   universal position. A type that contains itself and is passed through its constructors is
-  quantified over with `forAll` by fields down to where it repeats, and as `Data` there, and with
-  `forAllData` as one `Data`: either way with a recursive premise, exact where its other parts
-  are. `forAll[Data](d => denotes(d.to[A]) ==> …)` does not stand for it: `d.to[A]`
+  quantified over with `forAll` or `forAllData` by fields down to where it repeats, and as `Data`
+  there, and with `forAllDataLimited` as one `Data`: either way with a recursive premise, exact
+  where its other parts are. `forAll[Data](d => denotes(d.to[A]) ==>: …)` does not stand for it: `d.to[A]`
   checks nothing itself, and the premise holds of every `d` that the program's conversion to `A`'s
   representation reads without failing, which is part of what makes `d` a value of `A`, and a part
   that depends on the representation. Nor can one constructor of `Data`, such as `Data.I`, be
@@ -1103,6 +1527,13 @@ What is not stated, and why:
 properties of the vesting example. The JVM tests of `scalus-examples` depend on this module and
 on its ScalaTest layer (`LeanProofsSuite`), so a contract's proofs sit next to its other tests.
 
+Its statements about the validator quantify over real script contexts, `forAllData[ScriptContext]`
+or a `forAllDataLimited` one, never over a transaction built in the statement: a closed sample is
+the only context written out. Each statement over limited contexts has its counterpart over every
+context beside it: the one over every context has the plain name, and the limited one the name with
+`Limited`. The counterpart is proved where the validator rejects before it reads a list of the
+context, and otherwise its test is `Unfinished`, which shows what the limits are for.
+
 | About | Statement | Quantified over | Budget | Time |
 |---|---|---|---|---|
 | `linearVesting` | nothing is vested before the start | the datum, a `Config`, and the time | 400 | 7 s |
@@ -1110,57 +1541,52 @@ on its ScalaTest layer (`LeanProofsSuite`), so a contract's proofs sit next to i
 | | it returns: no division by a zero duration | | | 1 s |
 | | its contract, read from its body: it returns, and for `initialAmount >= 0`, `0 <= vested <= initialAmount` | | | 4 s |
 | | it does not decrease with time, for `initialAmount >= 0` | and a second time | | 2 s |
-| the validator | an output without a datum cannot be spent | `txInfo`, redeemer, reference: any `Data` | 600 | 2 s |
-| | a non-positive amount is rejected | `txInfo`, reference, datum: any `Data` | | 1 s |
-| | nothing but spending is validated | `txInfo`, redeemer, script info: any `Data` | | 2 s |
-| a withdrawal | a sample is accepted, and rejected unsigned | closed, `native_decide` | 12000 | 1 s |
-| | unsigned, it is rejected | datum, locked and requested amounts, time, fee; outputs: any `Data` | | 14 s |
-| | it leaves at least what has not vested | the same, and the amount paid | | 24 s |
-| | after the end, everything locked can be withdrawn | datum, locked amount, time, fee | | 15 s |
-| | the three guarantees `spend` states with `Spec.ensures`: the beneficiary signed, something is withdrawn, at least the unvested amount stays locked | a `Withdrawal`: the shape's numbers, and one signer of any key | | 17 s, together |
-| | had `linearVesting` expected `initialAmount >= 0`, its call would owe it: refuted; proved under the withdrawal's own contract | a `Withdrawal` | | 11 s |
+| the validator | an output without a datum cannot be spent | every script context, `forAllData[ScriptContext]` | 600 | 13 s |
+| | a non-positive amount is rejected | | | 9 s |
+| | nothing but spending is validated | | | 9 s |
+| a withdrawal | samples: everything after the end is accepted, and rejected unsigned; halfway, what has vested is accepted, and one lovelace more rejected | closed, `native_decide` | 20000 | under 1 s each |
+| | `spend`'s guarantees, stated with `==>?:`: the beneficiary signed | every context of at most two inputs and one signatory, the inputs' values of one token, `limitedData` | 3300 | 149 s |
+| | something is withdrawn | every script context, `unlimitedData` | | 10 s |
+| | at least the unvested amount stays locked | of at most two inputs, as the first | | not finished (`Unfinished`) |
+| | the first and the third | every script context | | not finished (`Unfinished`) |
+| | had `linearVesting` expected `initialAmount >= 0`, its call would owe it: refuted; proved under the validator's own contract | of at most two inputs, as the first guarantee | 3000 | 289 s; 310 s |
+| | the same two | every script context | | not finished (`Unfinished`) |
+| | after the end, everything locked can be withdrawn | every context of at most two inputs and two outputs | | not finished (`Unfinished`) |
+| | the same | every script context | | not finished (`Unfinished`) |
 
-The times are of the tests, each with its negative controls, in the suite's Lean server; the
-first includes loading the workspace. The suite takes about 2 min. Before the tactic used the
-language server, with a Lean process for every check, it took about 5, and the three guarantees
-alone 67 s together and 3 min one by one.
+The times are of single checks with Blaster compiled, in the suite's Lean server (2026-11-06).
 
 The validator's specification is written in `VestingValidator` itself. `spend` states its three
-guarantees at its head; `Verifier.guarantees` finds them in the code of the function that builds
-a withdrawal and validates it, where the inlined handler ends up, and they are proved as one
-statement, which runs the validator once and not once per clause. The
-schedule's contract is an `ensuring` clause of `linearVesting`, read with
+guarantees at its head; `Verifier.guarantees(spends.ref, fewInputs, Connective.Rejects)` finds them
+in the code of `spends`, the validator on a typed context, where the inlined handler ends up, over
+the contexts `fewInputs` says ([`Props.limitedData`](../verification-overview.md#37-function-contracts-pre--and-postconditions)). Each
+is proved alone: one rejecting program of all three would run every way one of them is false on
+into the validator. They are stated with `==>?:`, as a clause reads the datum, the redeemer and the
+spent input as the validator does, and fails where they cannot be read, where the validator
+rejects too: there it says nothing, and the rejecting program ends at once. A clause written to
+return there, reading a default instead, lets each of the datum's twenty-odd unreadable shapes run
+on into the validator, which reads the datum after it walks the inputs, and Lean does not finish.
+
+The schedule's contract is an `ensuring` clause of `linearVesting`, read with
 `FunctionContract.inSource` and proved over a `Config` variable. Its bound is conditional, not a
 precondition, because the validator would not establish one. It has two negative controls, stated
 with `contract(linearVesting)(expects, ensures)`: a wrong postcondition and a bound without its
-condition; the monotonicity statement and the three statements about withdrawals have
-one each. For two of the latter, a refutation is an accepted withdrawal: the solver finds one in
-about 45 s, and it is replayed on the Scalus CEK.
+condition; the monotonicity statement has one. The samples are what the statements about
+withdrawals are not vacuous of: the validator accepts a withdrawal, and the bound of what stays
+locked is exact.
 
-The obligation is `Verifier.obligations` on a function of a `Withdrawal` that builds the context
-and calls the validator; see
-[call-site obligations](prop-semantics.md#call-site-obligations). The registered validator itself
-takes any `Data`, and its obligation is one of the
-[statements that do not finish](#statements-that-do-not-finish).
-
-**Withdrawals have one shape.** The context is written with the ledger types in the statement
-(`ScriptContext(TxInfo(inputs = …), …).toData`), over integer variables: one input, the vesting
-output; at most one output, to the beneficiary; a fixed beneficiary. A statement says nothing about
-another shape.
+The obligation is `Verifier.obligations` of `spends` over the same contexts; see
+[call-site obligations](prop-semantics.md#call-site-obligations). It is checked as written, as
+every obligation is ([The rejecting form](#the-rejecting-form)).
 
 What the suite shows about the tactic:
 
-- **The budget is not the limit for a program without a data-dependent loop.** The validator makes
-  thousands of steps on a withdrawal, and those statements prove at a budget of 12000. The cost
-  explosion measured on `gcd` ([Budgets](#budgets)) comes from a loop whose length depends on a
-  symbolic value, where every further step can branch.
-- **A loop over a list of unknown length is not finished by Lean.** The outputs can be left as
-  any `Data` in the statement about an unsigned withdrawal, because every run fails before the
-  validator reads them. In the statement about the unvested amount only the runs it is about
-  fail before that, and the others go on into the list. It is proved at a budget just beyond
-  the rejection, which the tactic finds, and gives no result at the budget of a whole
-  withdrawal. See
-  [Statements that do not finish](#statements-that-do-not-finish).
+- **A budget just beyond the runs a statement is about.** A rejected run ends at the check that
+  rejects it; every further step lets the runs that have not ended read on, and doubles the time.
+  The first two guarantees prove at 3300; the third's search climbed from 1173 to 2517 steps, by
+  counterexamples of a minute or two each, and did not finish there.
+- **An accepted run is the whole validator on every path.** Liveness has Lean run the validator to
+  its end on every context within the limits, and Lean was still in that run after 16 minutes.
 - **The proofs are not about the published script.** `VestingContract` compiles with
   `Options.release`, which uses the `Value` builtins that Lean's model lacks
   ([Limits](#limits)); the statements are about the validator compiled with `UplcBlaster.options`.
@@ -1170,62 +1596,80 @@ What the suite shows about the tactic:
 ## What `HtlcVerificationTest` covers
 
 `scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala` states
-properties of the hashed timelock example, in the library's Lean workspace. The validator reads
-the datum, the redeemer, one bound of the validity range and the signatures. A statement is
-about every datum: a `Config` variable, which is one variable per field for Lean, the two keys
-among them. And it is about a transaction whose other parts are any `Data`: an `Unread` variable
-has the fourteen other fields of the transaction, the other bound of the validity range and the
-reference of the output. So that the validator reads nothing else is proved with each
-statement, and not only seen in its source. The context is written field by field, as the
-ledger encodes it; a test without Lean checks that against the ledger's types.
+properties of the hashed timelock example, in the library's Lean workspace. Its statements
+quantify over real script contexts, as the vesting suite's do: `forAllData[ScriptContext]`, or a
+`forAllDataLimited` one of at most two signatures (`forAllContextsMax2Signatures`), with the
+ledger's validity of the context as the first premise, `isValid(ctx)`
+([Lean predicates](#lean-predicates-the-ledgers-validity)), and what a statement is about as the
+second, over the typed context (a refund, a reveal, a validity range):
+`isValid(ctx) ==>: premise ==>: claim`. Its negative controls are of every context, valid or not:
+with `isValid` the solver does not finish them. Its samples are valid transactions, and say so
+(`isValid(sample) && succeeds(…)`). Each statement about a refund or a reveal is of every context; where Lean does not
+finish it so, it is stated again beside it, of at most two signatures, under the name with
+`Limited`. The validator reads the
+datum, the redeemer, the validity range and the signatures; a statement holds whatever the rest
+of the context is, and of every datum and redeemer that the premise does not exclude. A premise
+reads the context as the validator does, so where the datum is not a `Config` it fails, and does
+not hold. A test without Lean checks that the samples the validator accepts meet the premises of
+the statements that it accepts, which are so not vacuous.
 
 Its source states no contract: the validator is the read of a bound and two or three `require`s
 on each of two branches, and a clause would say them again.
 
-| About | Statement | Quantified over | Budget |
-|---|---|---|---|
-| the validator | an output without a datum cannot be spent | `txInfo`, redeemer, reference: any `Data` | 600 |
-| | nothing but spending is validated | `txInfo`, redeemer, script info: any `Data` | |
-| | a redeemer that is neither action is rejected | `txInfo`, reference, datum, redeemer: any `Data` | |
-| a refund | signed by another key, by two other keys, or by nobody, it is rejected | the datum, the lower bound, the signers; what is not read | 4000 |
-| | before the timeout it is rejected | the datum, the lower bound, the signer; what is not read | |
-| | with a lower bound of the validity range that is no time it is rejected | the datum; what is not read, the upper bound with it | |
-| | from the timeout on the committer's is accepted, also where another signature comes first | the datum, the lower bound, the other signer; what is not read | |
-| a reveal | signed by another key, by two other keys, or by nobody, it is rejected | the datum, the preimage, the upper bound, the signers; what is not read | |
-| | with a validity range that ends after the timeout it is rejected | the datum, the preimage, the upper bound, the signer; what is not read | |
-| | with an upper bound of the validity range that is no time it is rejected | the datum, the preimage; what is not read, the lower bound with it | |
-| | of what is not a preimage of the image it is rejected | the datum, the preimage, the upper bound, the signer; what is not read | |
-| | up to the timeout the receiver's of a preimage is accepted, also where another signature comes first | both keys, the preimage, the timeout, the upper bound, the other signer; what is not read | |
-| both | an accepted reveal ends before any accepted refund begins | the datum, the preimage, two signers, both bounds; what is not read, of each transaction | |
-| | it accepts a transaction with the one closure of a bound where it accepts it with the other | the datum, the bound, the signer, the preimage; what is not read | |
-| samples | a reveal and a refund are accepted, and rejected unsigned or with another secret | closed, `native_decide`, on a transaction the ledger's types build | |
+| About | Statement | Budget | Of every valid context | Of at most two signatures (`Limited`) |
+|---|---|---|---|---|
+| the validator | an output without a datum cannot be spent | 600 | 75 s | |
+| | nothing but spending is validated | | 61 s | |
+| | a redeemer that is neither action is rejected | | 50 s | |
+| a refund | rejected unless the committer signs; negative control, of every context: whoever signs | 4000 | not finished in 5 min; refuted, 50 s | 58 s; 32 s |
+| | rejected unless its validity range starts at the timeout or later; negative control, of every context: after it | | 120 s; refuted, 56 s | |
+| | from the timeout on, the committer's is accepted; negative control, of every context: at any time | | not finished in 5 min; refuted, 86 s | 60 s; 38 s |
+| a reveal | rejected unless the receiver signs | | not finished in 5 min | 35 s |
+| | rejected unless its validity range ends by the timeout | | 28 s | |
+| | of what is not a preimage of the image, rejected | | not finished in 5 min | 17 s |
+| | up to the timeout, the receiver's of a preimage is accepted | | not finished in 5 min | 38 s |
+| both | of two valid spends under one datum, where the refund starts before the reveal ends, one is rejected | | 104 s | |
+| | the validator accepts a context where it accepts the one with the closure of either bound of its validity range the other way | | not finished in 5 min | 60 s; 60 s |
+| samples | a reveal and a refund of valid transactions are accepted, the reveal up to the timeout and the refund from it, and rejected unsigned, late or with another secret | | closed, `native_decide`, with the ledger's rules evaluated too: under 1 s each | |
 
-The suite keeps the results of 35 statements, seven of them negative controls that are refuted,
-and takes about 3 min with Lean. On its kept results it takes up to a minute: a refutation is
-replayed, and one statement is asked of Lean every time, the second point below.
+The times are of a run of the five suites of proofs at once, in each suite's Lean server
+(2026-11-12), so a check alone takes less: `rejected_before_the_timeout` took 63 s alone. A
+statement of every valid context that Lean does not finish is tagged `Unfinished`: without
+`isValid`, Lean's counterexample was a list of signatures longer than the budget's runs search,
+spurious, within two minutes; with it the solver has a valid transaction to build as well, and does
+not finish in five. A statement Lean proves of every context has no statement of at most two
+signatures, which would say less. The suite keeps the results of 25 statements, five of them
+negative controls that are refuted, and takes about 15 min with Lean. On its kept results it takes
+under a minute: a refutation is replayed, and one statement is asked of Lean every time, the second
+point below.
 
 What the suite shows about the tactic:
 
 - **A hash of unknown bytes is a function.** Lean's model declares `sha3_256` `opaque`, so a
   proof knows nothing of it but that equal bytes have equal hashes. That is enough for both
-  directions of the hash lock: a reveal is accepted where the image is written as
-  `sha3_256(preimage)`, and rejected under the premise `sha3_256(preimage) != image`. A proof
-  holds whatever the function is, and says nothing of how hard a preimage is to find. A closed
-  statement runs the real hash.
-- **A counterexample cannot name a preimage.** To "no reveal is accepted", over any image, the
-  solver gives an image it takes for the hash of its preimage. Replayed with the real hash that
-  reveal is rejected, so the counterexample is spurious and the result inconclusive: one test
-  states this. A negative control that needs an accepted reveal therefore writes the image as
-  the hash of the preimage, and is refuted. The tactic's message says that the budget is not at
-  fault, and names the hash ([Replay](#replay)).
-- **Unknown `Data` costs where a program reads it.** A refund or a reveal has no loop but the
-  search of at most two signatures: with `Budget.Auto` a refund proves at about 750 steps and a
-  reveal at about 830, and the suite's statements about them prove at its budget of 4000, with
-  sixteen parts of the context that are any `Data` and never read. With those parts written out
-  as constants the suite took 1 min 43 s. The three statements over a transaction that is any
-  `Data` as a whole took nearly three minutes together at that budget and a quarter of a minute
-  at 600: there Lean also runs the contexts that pass the check, on into the unknown
-  transaction, as for the vesting statement with any outputs.
+  directions of the hash lock: a reveal is accepted under the premise
+  `sha3_256(preimage) == image`, and rejected under its negation, where premise and validator
+  apply the one function to the one preimage. A proof holds whatever the function is, and says
+  nothing of how hard a preimage is to find. A closed statement runs the real hash.
+- **A counterexample cannot name a preimage.** To "no reveal is accepted", the solver gives a
+  context whose datum has an image it takes for the hash of the preimage. Replayed with the real
+  hash that reveal is rejected, so the counterexample is spurious and the result inconclusive:
+  one test states this. The tactic's message says that the budget is not at fault, and names the
+  hash ([Replay](#replay)). Over a context variable the image is the datum's, a value the solver
+  chooses, not one a statement computes, so no negative control can need an accepted reveal: the
+  samples, run with the real hash, show a reveal accepted up to the timeout and not after it.
+- **A real context costs no more than a written one where the validator reads little.** With the
+  context as one variable, a check of a refund or a reveal takes about 20 s, as the former
+  statements over a context written field by field, with sixteen parts of it any `Data`, did:
+  every run ends within the budget, at most two signatures searched, so a larger budget costs
+  nothing. The three statements over every context are rejections before the signatures, at 600.
+- **A loop over a list of any length is not followed.** Of every context, a statement that rests
+  on the search of the signatures got, without `isValid`, a counterexample of a hundred and more
+  signatures, on which the runs do not end within the budget and the statement holds: spurious,
+  at any budget. With `isValid` the solver does not finish such a statement in five minutes. A
+  statement the validator decides by the time, which it checks before the search, is proved of
+  every valid context, in one to two minutes: the two of the time, and that a reveal ends before
+  a refund begins.
 - **`.toData` on an enum case without fields did not lower**: `Action.Timeout.toData` gave
   "Unsupported conversion for `Action$.Timeout` from ProdDataList to DataConstr", in any compiled
   code and not only in a statement
@@ -1233,8 +1677,93 @@ What the suite shows about the tactic:
   `constrData(0, [])` until that was fixed, and now writes `Action.Timeout.toData`.
 
 What it does not show: that a bound of the validity range is inclusive or not, which the
-validator does not read and the ledger decides; a transaction of more than two signatures; and
+validator does not read and the ledger decides; of a transaction of more than two signatures,
+what rests on the search of the signatures; and
 the published script, which `HtlcContract` compiles with other options.
+
+## What `PaymentSplitterVerificationTest` covers
+
+`scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala`
+states properties of the naive and the optimized payment splitters, in the library's Lean
+workspace. Its statements quantify over the payees, a `forAllDataLimited` list of two keys, and
+over real script contexts, as the vesting and HTLC suites' do. A rejection is stated as what an
+accepted context is, `succeeds(validator, …) ==>: claim`, which the tactic checks in the rejecting
+form: the validator runs only where the claim is false. Stated as `premise ==>: fails(…)`, the
+validator ran on every context within the limits, and Lean did not finish the first statement in
+ten minutes. A claim that reads the context as the validator does, and fails where it cannot read
+it, is stated with `==>?:`; a test on the Scalus CEK shows each claim true on the samples the
+validators accept, and a JVM test shows that the samples meet the premises of the statements that
+the validators accept.
+
+Each statement over limited contexts, below, has its counterpart over every script context beside
+it, of the same payees: the one over every context has the plain name, and the limited one the name
+with `Limited`. Lean finishes none of the counterparts, whose runs walk lists of any length: their
+tests are `Unfinished`.
+
+| About | Statement | Quantified over | Budget | Time |
+|---|---|---|---|---|
+| the naive validator | an accepted payout spends an input of a payee | two payees; contexts of two inputs of values of one token, any outputs | | not finished (`Unfinished`) |
+| | and no input of another key than a payee's and the contract's | | | not finished (`Unfinished`) |
+| | and no contract input with a token besides ADA | the same, values of two tokens | | not finished (`Unfinished`) |
+| | the other payee is paid exactly the split; negative control: half | two payees; contexts of two inputs and two outputs at most, values of one token | | not finished (`Unfinished`) |
+| | nobody but the payees is paid; every payee is paid | | | not finished (`Unfinished`) |
+| | an honest payout is accepted; negative control: any payout | | | not finished (`Unfinished`) |
+| the optimized validator | an accepted spend withdraws from the stake credential of the script of the input its redeemer names | any parameter; contexts of two inputs and two withdrawals at most | 2211, found | within 30 min, with Lean-blaster `a069197` (2026-11-11); not finished with `6c27ff9` |
+| | its redeemer names the spent input | | 1730, found | 490 s |
+| | a spend that names its input, with its withdrawal, is accepted | | 1431, found | 128 to 160 s |
+| | the stake validator pays the other payee exactly the split | as the naive validator's payouts | | not finished (`Unfinished`) |
+| | the stake validator accepts an honest payout | | | not finished (`Unfinished`) |
+| | an accepted certificate registers or deregisters the stake credential; registration is accepted | any parameter; every script context | 297; 190, found | 8 s; 8 s |
+| samples | an honest payout is accepted by the naive validator, and by the optimized one's spend and stake validator | closed, `native_decide` | 5569, 693, 3652 | under 1 s each |
+
+The times are of single checks with Blaster compiled, in the suite's Lean server (2026-11-07).
+
+What the suite shows about the tactic:
+
+- **A limit on what the rejected runs do not read costs the most.** The statements about a
+  payout's inputs are rejected in the walk of the inputs, before an output is read. With the
+  outputs limited too, to two of one token each, the guard's shapes were thirteen times as many,
+  and the rejecting form was still in Lean's symbolic run at 2002 steps after five minutes;
+  without, a check at 1295 steps took 26 s.
+- **The rejected runs of a payout's inputs are long.** They walk both inputs and the values of the
+  contract's (`withoutLovelace`, `getLovelace`): on Lean's counterexamples they took up to 3357
+  steps. The budget search climbed there by spurious counterexamples, each round longer than the
+  one before, 26 s at 1295 steps, 47 s at 1673, 108 s at 2099, and at 3357 it did not finish in 27
+  minutes.
+- **A counterexample outside the type stops the search.** Lean's restriction of a context checks
+  the order of the keys of a map whose keys are bytes, not of one whose keys are credentials, as
+  the withdrawals': its variable ranges over unsorted maps too, which is sound, as a proof is then
+  of more values than the type's. But a counterexample with such a map is no context, and the
+  search neither replays it nor counts its steps. In the rejecting form it gave up at 747 steps,
+  where Lean's machine counts 772 on that counterexample; as written, and with `==>?:`, it doubles
+  the budget. The spend's statements are stated with `==>?:`, so that the search doubles.
+- **A claim's cost is part of every rejected run.** The rejecting program runs the claim first.
+  Stated as "some input of the spent reference has its script withdrawn", the claim searched the
+  inputs and looked each one's script up, 1854 steps on two inputs, and the rejecting program
+  took 2816; at 3200 steps it did not finish in 15 minutes, where at 1000 a check took 46 s. Stated
+  of the input the redeemer names, which the validator reads, the claim reads one input, and with
+  "the redeemer names the spent input" it says the same. The search for its budget then climbed
+  by spurious counterexamples, 11 s at 728 steps, 16 s at 856, 38 s at 1115, 230 s at 1487 and
+  582 s at 1661, and at 1743 it did not finish in the 15 minutes left of 30 (2026-11-09): the
+  claim and the validator read the input and look its script up each, and the time grew far
+  faster than the budget past 1100 steps. With Lean-blaster `a069197` the same search goes on, by
+  1791, 1965 and 2095 steps, to 2211, where it proves the statement within the 30 minutes
+  (2026-11-11). Before the solver's characters in a counterexample were
+  counted as Lean's own, the search doubled the budget at 1661, to 3322.
+- **A liveness statement wants the budget of its longest accepted run.** That a spend with its
+  withdrawal is accepted is stated as written, and Lean runs the validator on every context: its
+  search climbs by spurious counterexamples, 633, 752, 1081, 1103, 1122 and 1146 steps, and then
+  by counterexamples of two withdrawals, a map keyed by a credential, whose keys' order neither
+  Lean nor the tactic checks: they may be no context, but Lean's variable has them, and the
+  statement holds on them on the Scalus CEK, so their runs are counted too, 1315, 1366 and 1431
+  steps. At 1431 it is proved in 128 to 160 s, after a search of about 10 minutes
+  (2026-11-10). Before they were counted, the search doubled the budget there, which did not
+  finish, and the test gave 1600 by hand, at which it is proved in 333 s. On the longest spend
+  measured, the premise takes 1434 steps of Lean's machine and the validator 1347.
+- **What a payout pays is beyond Lean's symbolic run.** The runs of a statement about the outputs
+  walk the inputs, the outputs, and the sums of the payees, which the naive validator builds as an
+  association list; an accepted payout is 5569 steps on the sample. Lean was still in the
+  symbolic run at about 1900 to 2400 steps after five to ten minutes, in both forms.
 
 ## What `MintingPolicyVerificationTest` covers
 
@@ -1319,7 +1848,7 @@ What the suite shows:
 **The script on every context is stated, and not finished.** A test tagged `Unfinished` states of
 the script as the ledger runs it, `deployed` (the optimized deserializer and the policy, with a
 seed and tokens of the test's own), that only the seed mints:
-`forAllData[v1.ScriptContext](ctx => succeeds(deployed, ctx.toData) ==> onlyTheSeedMints(ctx))`.
+`forAllData[v1.ScriptContext](ctx => succeeds(deployed, ctx.toData) ==>: onlyTheSeedMints(ctx))`.
 The context is one `Data`, with no shape. Within 2000 steps (`Budget.Within`) Lean was still in the
 symbolic run of a test after 10 minutes. Within smaller budgets it finishes, and the time grows
 steeply with the budget:
@@ -1350,9 +1879,12 @@ larger context; and the published scripts, which `MintingPolicy` compiles with o
 
 ## Statements that do not finish
 
-Some statements are natural to write, and Lean does not return on them. `UplcBlasterLimitsTest`
-and one test of `VestingVerificationTest` state them, with a time limit. In each, how long a loop
-runs depends on a quantified value.
+Some statements are natural to write, and Lean does not return on them. `UplcBlasterLimitsTest`,
+tests of `VestingVerificationTest` and tests of `PaymentSplitterVerificationTest` state them, with
+a time limit: the third of vesting's `spend` guarantees, and that everything can be withdrawn after
+the end, over contexts of at most two inputs; and the payment splitters' statements of what a
+payout pays. In each, how long a loop runs depends on a quantified value, or the paths of the
+symbolic run multiply over the walks of several lists.
 
 These tests carry the ScalaTest tag `Unfinished`. The build leaves it out of `test` and
 `testQuick`, in `Test / test / testOptions`, so `testOnly` still runs them: by suite, by name with
@@ -1368,7 +1900,7 @@ These tests carry the ScalaTest tag `Unfinished`. The build leaves it out of `te
 | | 400 | spurious counterexample | 101 s |
 | `gcd(x, y) >= 0` | 200 | spurious counterexample | 5 s |
 | | 400 | none | over 200 s |
-| vesting: at least the unvested amount stays locked, for any outputs | 1000 | spurious counterexample | 10 s |
+| vesting, of one shape of withdrawal (the suite's former statement): at least the unvested amount stays locked, for any outputs | 1000 | spurious counterexample | 10 s |
 | | 1500 | spurious counterexample | 18 s |
 | | 2000 to 12000 | none | over 150 s; at 4000, over 7 min |
 
@@ -1452,7 +1984,7 @@ What could change this:
 - **A budget for the runs the statement is about.** Done: `Budget.Auto` finds it from Lean's
   counterexamples ([Finding the budget](blaster-budget-search.md)). It needs a program whose runs of
   interest end before its loop starts.
-- **Prepare a conclusion under its premise.** For `p ==> fails(f(a))`, one program that tests
+- **Prepare a conclusion under its premise.** For `p ==>: fails(f(a))`, one program that tests
   `p` first and runs `f(a)` only then. The runs that `p` excludes disappear only if the symbolic
   run asks the solver whether a path is feasible, which Blaster's does not.
 - **Bound a list in the statement.** Done for a variable's collections, with a guard that every

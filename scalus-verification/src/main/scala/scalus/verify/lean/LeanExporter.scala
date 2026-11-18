@@ -46,6 +46,10 @@ object LeanExporter {
             s"(${renderProp(left, names)} ∨ ${renderProp(right, names)})"
         case Prop.Implies(left, right) =>
             s"(${renderProp(left, names)} → ${renderProp(right, names)})"
+        // It holds where its claim fails, which a proposition of Lean does not tell.
+        case Prop.Rejects(_, _) => unsupported("==>?:, which holds where its claim fails")
+        // A predicate of the `Data` of a value, which this exporter has no term of.
+        case Prop.Satisfies(predicate, _) => unsupported(s"the Lean predicate ${predicate.name}")
         case Prop.Iff(left, right) =>
             s"(${renderProp(left, names)} ↔ ${renderProp(right, names)})"
         case Prop.Not(inner) => s"(¬ ${renderProp(inner, names)})"

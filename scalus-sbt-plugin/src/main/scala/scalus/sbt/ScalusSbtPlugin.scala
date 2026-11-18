@@ -42,13 +42,33 @@ import sbtcompat.PluginCompat.*
   * directory `leanWorkspace`: `src/test/lean/<Project>` unless the build says another.
   * `leanInit` makes it ready: it creates it where it is missing, and brings Scalus's Lean
   * library up to date in `.scalus` of the repository, which the workspaces of a build share.
-  * Once it is there, the project's tests are told the workspace, by a resource on their class
-  * path. So a suite of proofs does not name it, and brings the library to it itself when it
-  * runs: a checkout that has the workspace does not need `leanInit` before `test`.
+  * The project's tests are told the workspace, by a resource on their class path, whether it is
+  * there or not. So a suite of proofs does not name it, and makes it ready itself when it runs:
+  * creates it where it is missing, and brings the library to it. `test` needs no `leanInit`
+  * before it, and whether to commit the workspace is the project's.
   * `leanBuild` runs `lake build` in the workspace, which a suite needs before it asks Lean. It
   * is not part of `test`: the first build clones and builds what the library requires, which
   * takes minutes and the network. A project without `scalus-verification` is passed over by
   * both tasks.
+  *
+  * `leanProve` builds the library of proofs, `<Package>Proofs`, of every Lean workspace of the
+  * project that declares one: the statements `leanExport` writes, and the proofs written by hand
+  * of them. The workspaces of a project are the Lake packages beside `leanWorkspace`, in
+  * `src/test/lean`: its own, and any other it keeps there.
+  *
+  * Two tasks export what the proofs prove, by running the project's tests with the export on: all
+  * of them, or those named, as `testOnly` takes them (`leanExport *VestingVerificationTest`).
+  * `leanExport` writes every named statement into the workspace as a Lean module, under
+  * `<Package>/Generated`, where a proof written by hand is a theorem of it. `ualExport` writes
+  * the statements as documents of the Universal Annotation Language, in a directory for each
+  * suite of proofs under `ualExportDirectory`, `target/ual` unless the build says another.
+  *
+  * `verify` is all of it in one task: `leanBuild`, then the project's suites of proofs, those that
+  * extend `LeanProofsSuite`, or the tests named (`verify *HtlcVerificationTest`), with Lean
+  * required, so that a statement that cannot be checked fails and is not canceled, and then the
+  * library of proofs of every workspace that has proofs written by hand. The kept results are
+  * used: a statement whose kept result still agrees is not asked of Lean again. The tests tagged
+  * `Unfinished` are left out.
   */
 object ScalusSbtPlugin extends AutoPlugin {
 
@@ -84,6 +104,26 @@ object ScalusSbtPlugin extends AutoPlugin {
         val leanBuild =
             taskKey[Unit](
               "Run `lake build` in the Lean workspace, which the checks of the proofs need"
+            )
+        val leanProve =
+            taskKey[Unit](
+              "Run `lake build <Package>Proofs` in every Lean workspace of the project that declares it: the statements leanExport wrote, and the proofs written by hand of them"
+            )
+        val leanExport =
+            inputKey[Unit](
+              "Run the project's tests, or the ones named, and write every named statement they prove into the Lean workspace as a module"
+            )
+        val ualExportDirectory =
+            settingKey[java.io.File](
+              "Where ualExport writes: a directory for each suite of proofs, under it"
+            )
+        val ualExport =
+            inputKey[java.io.File](
+              "Run the project's tests, or the ones named, and export the statements they prove as documents of the Universal Annotation Language"
+            )
+        val verify =
+            inputKey[Unit](
+              "Build the Lean workspace, run the project's suites of proofs, or the tests named, with Lean required, and build the proofs written by hand in every Lean workspace of the project"
             )
     }
 
@@ -319,14 +359,20 @@ object ScalusSbtPlugin extends AutoPlugin {
       * (`LeanProofs.workspaceResource`). A project has one workspace and the build has it, so
       * its tests are told, and name none: they need not know where sbt runs them.
       *
-      * They are told of a workspace that is there, which `leanInit` has created. A project that
-      * has none is told nothing, and its tests create none: running them writes no workspace
-      * into the sources.
+      * They are told of the workspace where it is there, and where the project has
+      * `scalus-verification` among its test dependencies, also where it is not: the first suite of
+      * proofs that runs creates it (`LeanProofs.ready`), which needs neither Lean nor the network.
+      * So a checkout that does not have the workspace gets it as its tests run, and whether to
+      * commit it is the project's. A project of neither, as Scalus's own examples, which have the
+      * module as a project and the library's workspace, is told nothing.
       */
     lazy val leanWorkspaceResourceTask: Def.Initialize[Task[Seq[java.io.File]]] = Def.task {
+        implicit val conv: xsbti.FileConverter = fileConverter.value
         val file = (Test / resourceManaged).value / "scalus" / "verify" / "lean" / "workspace"
         val workspace = leanWorkspace.value
-        if ((workspace / "lakefile.lean").isFile || (workspace / "lakefile.toml").isFile) {
+        val dependencies = toFiles((Test / externalDependencyClasspath).value)
+        val there = (workspace / "lakefile.lean").isFile || (workspace / "lakefile.toml").isFile
+        if (there || LeanLayout.hasLeanTool(dependencies)) {
             val directory = workspace.getAbsolutePath
             if (!file.isFile || IO.read(file) != directory) IO.write(file, directory)
             Seq(file)
@@ -350,41 +396,56 @@ object ScalusSbtPlugin extends AutoPlugin {
         val workspace = leanWorkspace.value
         val project = name.value
         val log = streams.value.log
-        val urls = cp.map(_.toURI.toURL).toArray
+        readyWith("leanInit", cp, workspace, log) match {
+            case None =>
+                log.info(
+                  s"leanInit: $project has no scalus-verification jar among its test " +
+                      "dependencies, and gets no Lean workspace of the plugin's: its suites " +
+                      "name their own"
+                )
+                None
+            case Some(notes) => Some((workspace, notes))
+        }
+    }.tag(LeanTag)
+
+    /** Makes `workspace` ready through the tool of `scalus-verification` on `classpath`
+      * (`LeanWorkspaceTool.init`), for the task `task`, and returns where the workspace does not
+      * agree with Scalus's Lean library. None where the classpath has no `scalus-verification`.
+      */
+    private def readyWith(
+        task: String,
+        classpath: Seq[java.io.File],
+        workspace: java.io.File,
+        log: sbt.util.Logger
+    ): Option[Seq[String]] = {
+        val urls = classpath.map(_.toURI.toURL).toArray
         val cl = new java.net.URLClassLoader(urls, ClassLoader.getPlatformClassLoader)
         try {
-            loadLeanTool(cl) match {
-                case None =>
-                    log.info(
-                      s"leanInit: $project has no scalus-verification among its test " +
-                          "dependencies, and gets no Lean workspace"
-                    )
-                    None
-                case Some(toolClass) =>
-                    val tool = toolClass.getField("MODULE$").get(null)
-                    val outcome = toolClass
-                        .getMethod("init", classOf[java.nio.file.Path])
-                        .invoke(tool, workspace.toPath)
-                    def lines(method: String): Seq[String] = {
-                        val list = outcome.getClass
-                            .getMethod(method)
-                            .invoke(outcome)
-                            .asInstanceOf[java.util.List[String]]
-                        (0 until list.size).map(i => list.get(i))
-                    }
-                    lines("doneLines").foreach(line => log.info(line))
-                    val notes = lines("noteLines")
-                    notes.foreach(note => log.warn(s"The Lean workspace $workspace: $note"))
-                    Some((workspace, notes))
+            loadLeanTool(cl).map { toolClass =>
+                val tool = toolClass.getField("MODULE$").get(null)
+                val outcome = toolClass
+                    .getMethod("init", classOf[java.nio.file.Path])
+                    .invoke(tool, workspace.toPath)
+                def lines(method: String): Seq[String] = {
+                    val list = outcome.getClass
+                        .getMethod(method)
+                        .invoke(outcome)
+                        .asInstanceOf[java.util.List[String]]
+                    (0 until list.size).map(i => list.get(i))
+                }
+                lines("doneLines").foreach(line => log.info(line))
+                val notes = lines("noteLines")
+                notes.foreach(note => log.warn(s"The Lean workspace $workspace: $note"))
+                notes
             }
         } catch {
             case e: java.lang.reflect.InvocationTargetException =>
                 // The cause as a whole: the message of a file system's exception is a path only.
-                sys.error(s"leanInit failed: ${e.getCause}")
+                sys.error(s"$task failed: ${e.getCause}")
         } finally {
             cl.close()
         }
-    }.tag(LeanTag)
+    }
 
     lazy val leanInitTask: Def.Initialize[Task[java.io.File]] = Def.task {
         val _ = leanReady.value
@@ -398,30 +459,285 @@ object ScalusSbtPlugin extends AutoPlugin {
       */
     lazy val leanBuildTask: Def.Initialize[Task[Unit]] = Def.task {
         val log = streams.value.log
-        leanReady.value match {
-            case None => ()
-            case Some((workspace, notes)) =>
-                if (notes.nonEmpty)
-                    sys.error(
-                      (s"leanBuild: the Lean workspace $workspace does not agree with Scalus's Lean library" +: notes)
-                          .mkString("\n  ")
-                    )
-                log.info(s"Running `lake build` in $workspace")
-                val output =
-                    scala.sys.process.ProcessLogger(line => log.info(line), line => log.info(line))
-                val exit =
-                    try {
-                        scala.sys.process.Process(Seq("lake", "build"), workspace).!(output)
-                    } catch {
-                        case e: java.io.IOException =>
-                            sys.error(
-                              s"leanBuild could not run `lake`: ${e.getMessage}. " +
-                                  "Install Lean with elan, and have `lake` on the PATH of sbt."
-                            )
-                    }
-                if (exit != 0) sys.error(s"`lake build` failed in $workspace, with exit code $exit")
+        leanReady.value.foreach { case (workspace, notes) =>
+            lakeBuild("leanBuild", workspace, notes, Nil, log)
         }
     }.tag(LeanTag)
+
+    /** Runs `lake build <Package>Proofs` in every Lean workspace of the project whose lakefile
+      * declares that library: the statements Scalus wrote under `<Package>/Generated`
+      * (`leanExport`), and the proofs written by hand under `<Package>/Proofs`, which are theorems
+      * of them. A proof that does not hold fails it. The workspaces are those beside
+      * `leanWorkspace` ([[LeanLayout.workspaces]]), so a project that keeps several has all of them
+      * built, and one that has none yet gets none created.
+      */
+    lazy val leanProveTask: Def.Initialize[Task[Unit]] = Def.taskDyn {
+        val directory = leanWorkspace.value.getParentFile
+        val log = streams.value.log
+        val workspaces = LeanLayout.workspaces(directory).filter(LeanLayout.hasProofsLibrary)
+        if (workspaces.isEmpty) {
+            log.info(
+              s"leanProve: no Lean workspace under $directory declares a library of proofs " +
+                  "(<Package>Proofs), so there is nothing to build"
+            )
+            Def.task(())
+        } else proofsBuilt("leanProve", workspaces)
+    }
+
+    /** Runs `lake build <Package>Proofs` in each of `workspaces`, for the task `task`, each made
+      * ready first, as `leanInit` makes the project's own. The tool that makes them ready is looked
+      * for among all the test dependencies, a jar or a project of the build, as Scalus's own
+      * examples have it. A project without `scalus-verification` is passed over.
+      */
+    private def proofsBuilt(
+        task: String,
+        workspaces: Seq[java.io.File]
+    ): Def.Initialize[Task[Unit]] = Def.task {
+        implicit val conv: xsbti.FileConverter = fileConverter.value
+        val cp = toFiles((Test / dependencyClasspath).value)
+        val project = name.value
+        val log = streams.value.log
+        workspaces.foreach { workspace =>
+            readyWith(task, cp, workspace, log) match {
+                case None =>
+                    log.info(
+                      s"$task: $project has no scalus-verification among its test " +
+                          s"dependencies, so $workspace is not built"
+                    )
+                case Some(notes) =>
+                    val library = LeanLayout.proofsLibrary(workspace)
+                    lakeBuild(task, workspace, notes, Seq(library), log)
+            }
+        }
+    }.tag(LeanTag)
+
+    /** Runs `lake build` of `targets`, or of the default target, in `workspace`, for the task
+      * `task`. A workspace that does not agree with Scalus's Lean library, as `notes` say, is not
+      * built: its proofs would be checked with another Lean, or other packages, than the library
+      * is for.
+      */
+    private def lakeBuild(
+        task: String,
+        workspace: java.io.File,
+        notes: Seq[String],
+        targets: Seq[String],
+        log: sbt.util.Logger
+    ): Unit = {
+        if (notes.nonEmpty)
+            sys.error(
+              (s"$task: the Lean workspace $workspace does not agree with Scalus's Lean library" +: notes)
+                  .mkString("\n  ")
+            )
+        val command = Seq("lake", "build") ++ targets
+        log.info(s"Running `${command.mkString(" ")}` in $workspace")
+        val output = scala.sys.process.ProcessLogger(line => log.info(line), line => log.info(line))
+        val exit =
+            try {
+                scala.sys.process.Process(command, workspace).!(output)
+            } catch {
+                case e: java.io.IOException =>
+                    sys.error(
+                      s"$task could not run `lake`: ${e.getMessage}. " +
+                          "Install Lean with elan, and have `lake` on the PATH of sbt."
+                    )
+            }
+        if (exit != 0)
+            sys.error(s"`${command.mkString(" ")}` failed in $workspace, with exit code $exit")
+    }
+
+    /** Where the tasks that run the tests for the proofs leave word for the resource generator
+      * below, while they run them: a file for each word that is on, with what its resource is to
+      * say.
+      */
+    private val runFlags =
+        settingKey[java.io.File]("Where leanExport, ualExport and verify say that they run")
+
+    /** The flag of each word, and the resource under `scalus/verify` that says it to the tests:
+      * the exports (`LeanProofs.leanExportResource`, `LeanProofs.ualExportResource`), and that Lean
+      * is required (`LeanProofs.requireLeanResource`).
+      */
+    private val runWords =
+        Seq("lean" -> "lean/export", "ual" -> "ual/export", "require" -> "lean/require")
+
+    private val runResources =
+        taskKey[Seq[java.io.File]](
+          "The resources on the test class path that say which exports of the proofs are on, and whether Lean is required"
+        )
+
+    /** Tells the project's tests which exports are on, and whether Lean is required, by resources
+      * on their class path, as they are told their workspace. A resource is there while its task
+      * runs the tests, and is deleted after: a plain `test` exports nothing, and requires no Lean.
+      */
+    lazy val runResourcesTask: Def.Initialize[Task[Seq[java.io.File]]] = Def.task {
+        val managed = (Test / resourceManaged).value / "scalus" / "verify"
+        val flags = runFlags.value
+        runWords.flatMap { case (word, resource) =>
+            val flag = flags / word
+            val file = managed / resource
+            if (flag.isFile) {
+                val said = IO.read(flag)
+                if (!file.isFile || IO.read(file) != said) IO.write(file, said)
+                Seq(file)
+            } else {
+                IO.delete(file)
+                Seq.empty[java.io.File]
+            }
+        }
+    }
+
+    lazy val runResourcesGenerator: Def.Initialize[Task[Seq[java.io.File]]] = Def.task {
+        runResources.value
+    }
+
+    /** Runs the project's tests with the export `kind` on, saying `said` to them: all of them,
+      * or those the arguments name, as `testOnly` takes them. The proofs of the tests do the
+      * export (`scalus.verify.uplcblaster.LeanProofs`): a statement is exported as it is proved,
+      * or as its kept result says where Lean does not run.
+      */
+    private def exporting[A](kind: String, said: java.io.File => String)(
+        result: java.io.File => A
+    ): Def.Initialize[InputTask[A]] = Def.inputTaskDyn {
+        val tests = spaceDelimited("<test>").parsed
+        val flag = runFlags.value / kind
+        val directory = ualExportDirectory.value
+        IO.write(flag, said(directory))
+        // `testOnly` without a test runs all of them. It returns no result in sbt 1 and a
+        // `TestResult` in sbt 2, which is not read: a test that fails fails the task.
+        val selected = tests.mkString(" ", " ", "")
+        Def
+            .task {
+                val _ = (Test / testOnly).toTask(selected).value
+                result(directory)
+            }
+            .andFinally(IO.delete(flag))
+    }
+
+    /** Writes every named statement the tests prove into the Lean workspace, under
+      * `<Package>/Generated`, where a proof written by hand is a theorem of it.
+      */
+    lazy val leanExportTask: Def.Initialize[InputTask[Unit]] =
+        exporting("lean", _ => "on")(_ => ())
+
+    /** Exports the statements the tests prove as documents of the Universal Annotation Language:
+      * `assurance.json`, `annotations.ual` and the checking contexts, in a directory for each
+      * suite of proofs under `ualExportDirectory`.
+      */
+    lazy val ualExportTask: Def.Initialize[InputTask[java.io.File]] =
+        exporting("ual", _.getAbsolutePath)(directory => directory)
+
+    /** The project's suites of proofs: its tests that extend `LeanProofsSuite`, by name. */
+    private val proofSuites =
+        taskKey[Seq[String]](
+          "The project's suites of proofs: its tests that extend LeanProofsSuite"
+        )
+
+    /** Finds the suites of proofs among the tests sbt found, by their classes, which are loaded and
+      * not initialized. A project without `scalus-verification-scalatest` has none.
+      */
+    lazy val proofSuitesTask: Def.Initialize[Task[Seq[String]]] = Def.task {
+        val loader = (Test / testLoader).value
+        val names = (Test / definedTestNames).value
+        val project = name.value
+        val log = streams.value.log
+        val suite: Option[Class[?]] =
+            try {
+                Some(Class.forName(LeanLayout.ProofsSuite, false, loader))
+            } catch {
+                case _: ClassNotFoundException =>
+                    log.info(
+                      s"verify: $project has no scalus-verification-scalatest among its test " +
+                          "dependencies, and no suites of proofs"
+                    )
+                    None
+            }
+        suite.toSeq.flatMap { proofs =>
+            names.filter { test =>
+                try {
+                    proofs.isAssignableFrom(Class.forName(test, false, loader))
+                } catch {
+                    case e @ (_: ClassNotFoundException | _: LinkageError) =>
+                        log.warn(
+                          s"verify: cannot load the test $test to see whether it is a suite " +
+                              s"of proofs: $e"
+                        )
+                        false
+                }
+            }
+        }.sorted
+    }
+
+    /** The library of proofs of each Lean workspace of the project that has proofs written by
+      * hand under `<Package>/Proofs`, as `leanProve` builds it. Every workspace beside
+      * `leanWorkspace` is looked at, and not only the project's own. A workspace without proofs
+      * written by hand has nothing that the checks of the suites did not prove already, and is
+      * not built.
+      */
+    lazy val proofsByHandTask: Def.Initialize[Task[Unit]] = Def.taskDyn {
+        val directory = leanWorkspace.value.getParentFile
+        val log = streams.value.log
+        val workspaces = LeanLayout.workspaces(directory).filter(LeanLayout.hasProofsByHand)
+        if (workspaces.isEmpty) {
+            // Lean proofs of the project's own are the advanced use: most projects have none, and
+            // their `verify` is the suites alone. So the step that is not needed is not spoken of,
+            // as something missing would be, unless sbt is asked for its debug log.
+            log.debug(
+              s"verify: skipping the full recheck (leanProve): it is needed only for proofs " +
+                  s"written by hand, and no Lean workspace under $directory has any, in " +
+                  "<Package>/Proofs. The suites above checked every statement."
+            )
+            Def.task(())
+        } else {
+            log.info(
+              s"verify: building the proofs written by hand in " +
+                  workspaces.map(_.getName).mkString(", ")
+            )
+            proofsBuilt("verify", workspaces)
+        }
+    }
+
+    /** Builds the workspace, runs the suites of proofs with Lean required, and builds the proofs
+      * written by hand. The word that Lean is required is written before the tests' resources are
+      * made, which the discovery of the suites makes, and is deleted after the run.
+      */
+    lazy val verifyTask: Def.Initialize[InputTask[Unit]] = Def.inputTaskDyn {
+        val tests = spaceDelimited("<test>").parsed
+        val flag = runFlags.value / "require"
+        IO.write(flag, "on")
+        Def
+            .taskDyn {
+                val _ = leanBuild.value
+                val discovered = proofSuites.value
+                val defined = (Test / definedTestNames).value
+                val project = name.value
+                val log = streams.value.log
+                // A name that selects no test would have `testOnly` run none, and the task pass
+                // having checked nothing: it is an error.
+                val (named, unmatched) = LeanLayout.selectTests(tests, defined)
+                if (unmatched.nonEmpty)
+                    sys.error(
+                      s"verify: no test of $project is ${unmatched.mkString(", ")}. Name a test " +
+                          "by its class, its simple name, or a pattern with *. The suites of " +
+                          s"proofs: ${if (discovered.isEmpty) "none" else discovered.mkString(", ")}"
+                    )
+                val selected = if (tests.nonEmpty) named else discovered
+                if (selected.isEmpty) {
+                    log.warn(
+                      s"verify: $project has no suites of proofs: no test extends " +
+                          LeanLayout.ProofsSuite
+                    )
+                    proofsByHandTask
+                } else {
+                    log.info(s"verify: running ${selected.mkString(", ")}, with Lean required")
+                    val arguments = LeanLayout.verifyArguments(selected)
+                    Def.taskDyn {
+                        // As in `exporting`: a test that fails fails the task, in sbt 1 and 2.
+                        val _ = (Test / testOnly).toTask(arguments).value
+                        proofsByHandTask
+                    }
+                }
+            }
+            .andFinally(IO.delete(flag))
+    }
 
     override lazy val globalSettings: Seq[Setting[?]] = Seq(
       Global / concurrentRestrictions += Tags.limit(LeanTag, 1)
@@ -451,7 +767,16 @@ object ScalusSbtPlugin extends AutoPlugin {
       Test / resourceGenerators += leanWorkspaceGenerator.taskValue,
       leanReady := Def.uncached(leanReadyTask.value),
       leanInit := Def.uncached(leanInitTask.value),
-      leanBuild := Def.uncached(leanBuildTask.value)
+      leanBuild := Def.uncached(leanBuildTask.value),
+      leanProve := Def.uncached(leanProveTask.value),
+      runFlags := target.value / "scalus-export",
+      runResources := Def.uncached(runResourcesTask.value),
+      Test / resourceGenerators += runResourcesGenerator.taskValue,
+      ualExportDirectory := target.value / "ual",
+      leanExport := Def.uncached(leanExportTask.evaluated),
+      ualExport := Def.uncached(ualExportTask.evaluated),
+      proofSuites := Def.uncached(proofSuitesTask.value),
+      verify := Def.uncached(verifyTask.evaluated)
     )
 
     /** Derive a simple file name from a fully qualified class name. */

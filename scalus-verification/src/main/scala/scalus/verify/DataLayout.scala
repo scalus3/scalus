@@ -53,6 +53,31 @@ private[verify] enum DataLayout {
         case Recursive(name, inner) => DataEncoding.Recursive(name, inner.encoding)
 }
 
+/** What the values of a type are made of, one level down: as [[DataLayout]] says it, with the types
+  * of the parts in place of their layouts. Code that names the types of the parts, as the Lean
+  * types of [[scalus.verify.lean.LeanTypes]] do, reads a type by it.
+  */
+private[verify] enum DataShape {
+
+    /** A type without parts that have names. */
+    case Plain(encoding: DataEncoding)
+
+    /** A case class: `Constr 0` of its fields. */
+    case Record(fields: List[(String, SIRType)])
+
+    /** A type of several constructors, each with its fields. */
+    case Choice(constructors: List[(String, List[(String, SIRType)])])
+
+    /** A case class encoded as its one field, `field`. */
+    case Wrapper(field: String, inner: SIRType)
+
+    /** A list. */
+    case Collection(items: SIRType)
+
+    /** A map, with its keys in `order`. */
+    case Mapping(keys: SIRType, values: SIRType, order: KeyOrder)
+}
+
 private[verify] object DataLayout {
 
     /** The layout of the values of `tp`, by the `Data` representation the compiler gives it with
@@ -235,32 +260,69 @@ private[verify] object DataLayout {
     private def representedLayout(tp: SIRType, inner: Set[String], parts: Parts)(using
         LoweringContext
     ): DataLayout = {
-        val generator = SirTypeUplcGenerator(tp)
-        if !generator.canBeConvertedToData(tp) then withoutDataForm(tp, parts)
-        else representedBy(generator.defaultDataRepresentation(tp), tp, inner, parts)
+        def layout(of: SIRType): DataLayout = layoutOf(of, inner, parts)
+        def named(fields: List[(String, SIRType)]) =
+            fields.map((name, field) => name -> layout(field))
+        representedShape(tp) match
+            case None                            => withoutDataForm(tp, parts)
+            case Some(DataShape.Plain(encoding)) => Plain(encoding)
+            case Some(DataShape.Record(fields))  => Record(named(fields))
+            case Some(DataShape.Choice(constructors)) =>
+                Choice(constructors.map((name, fields) => name -> named(fields)))
+            case Some(DataShape.Wrapper(field, of)) => Wrapper(field, layout(of))
+            case Some(DataShape.Collection(items))  => Collection(layout(items))
+            case Some(DataShape.Mapping(keys, values, order)) =>
+                Mapping(layout(keys), layout(values), order)
     }
 
-    /** [[representedLayout]] of a type the compiler represents as `Data` by `representation`. */
+    /** What the values of `tp` are made of, one level down, by the types of the parts
+      * ([[DataShape]]): what [[of]] lays out, part by part. A part without a `Data` form is an
+      * unknown encoding, as it is there.
+      */
+    def shape(tp: SIRType): DataShape = {
+        given LoweringContext = UplcBlaster.representations
+        def unknown(reason: String) = DataShape.Plain(DataEncoding.Unknown(reason))
+        unwrap(tp) match
+            case SIRType.Integer             => DataShape.Plain(DataEncoding.Integer)
+            case SIRType.ByteString          => DataShape.Plain(DataEncoding.Bytes)
+            case SIRType.String              => DataShape.Plain(DataEncoding.Text)
+            case SIRType.Boolean             => DataShape.Plain(DataEncoding.Bool)
+            case whole if isWholeData(whole) => DataShape.Plain(DataEncoding.AnyData)
+            case none @ (_: SIRType.Fun | _: SIRType.TypeLambda | SIRType.Unit |
+                SIRType.BLS12_381_MlResult) =>
+                unknown(s"${none.show} has no Data form")
+            case other @ (_: SIRType.CaseClass | _: SIRType.SumCaseClass) =>
+                representedShape(other).getOrElse(unknown(s"${other.show} has no Data form"))
+            case other => unknown(s"${other.show} has no Data encoding told here")
+    }
+
+    /** [[shape]] of a case class or a sum type, by its `Data` representation: none for one the
+      * compiler gives no `Data` representation.
+      */
+    private def representedShape(tp: SIRType)(using LoweringContext): Option[DataShape] = {
+        val generator = SirTypeUplcGenerator(tp)
+        Option.when(generator.canBeConvertedToData(tp))(
+          representedBy(generator.defaultDataRepresentation(tp), tp)
+        )
+    }
+
+    /** [[representedShape]] of a type the compiler represents as `Data` by `representation`. */
     private def representedBy(
         representation: LoweredValueRepresentation,
-        tp: SIRType,
-        inner: Set[String],
-        parts: Parts
-    )(using LoweringContext): DataLayout = {
-        def unknown(reason: String) = Plain(DataEncoding.Unknown(reason))
+        tp: SIRType
+    ): DataShape = {
+        def unknown(reason: String) = DataShape.Plain(DataEncoding.Unknown(reason))
         def arguments: List[SIRType] = typeArgumentsOf(tp)
-        def layout(of: SIRType): DataLayout = layoutOf(of, inner, parts)
-        def mapping(keyType: SIRType, valueType: SIRType, order: KeyOrder) =
-            Mapping(layout(keyType), layout(valueType), order)
         def named(constructor: scalus.compiler.sir.ConstrDecl, types: List[SIRType]) =
-            constructor.params.map(_.name).zip(types.map(layout))
+            constructor.params.map(_.name).zip(types)
         representation match {
             case ProductCaseClassRepresentation.OneElementWrapper(_) =>
                 unwrap(tp) match
                     case SIRType.CaseClass(constructor, typeArguments, _) =>
                         fieldTypes(constructor, typeArguments) match
-                            case List(field) => Wrapper(constructor.params.head.name, layout(field))
-                            case _           => unknown(s"${tp.show} does not wrap one field")
+                            case List(field) =>
+                                DataShape.Wrapper(constructor.params.head.name, field)
+                            case _ => unknown(s"${tp.show} does not wrap one field")
                     case _ => unknown(s"${tp.show} does not wrap one field")
             case ProductCaseClassRepresentation.PackedDataMap =>
                 (declarationName(tp), arguments) match
@@ -269,23 +331,24 @@ private[verify] object DataLayout {
                             case SIRType.ByteString => KeyOrder.Bytes
                             case SIRType.Integer    => KeyOrder.Integers
                             case _                  => KeyOrder.Unchecked
-                        mapping(keyType, valueType, order)
+                        DataShape.Mapping(keyType, valueType, order)
                     case (AssocMapName, List(keyType, valueType)) =>
-                        mapping(keyType, valueType, KeyOrder.Any)
+                        DataShape.Mapping(keyType, valueType, KeyOrder.Any)
                     case _ => unknown(s"${tp.show} is a map of no known keys and values")
             case SumCaseClassRepresentation.SumDataAssocMap =>
                 pairTypes(tp) match
-                    case Some((keyType, valueType)) => mapping(keyType, valueType, KeyOrder.Any)
+                    case Some((keyType, valueType)) =>
+                        DataShape.Mapping(keyType, valueType, KeyOrder.Any)
                     case None => unknown(s"${tp.show} is a map of no known keys and values")
             case SumCaseClassRepresentation.PackedSumDataList =>
                 arguments match
-                    case List(element) => Collection(layout(element))
+                    case List(element) => DataShape.Collection(element)
                     case _             => unknown(s"${tp.show} is a list of no known items")
             case ProductCaseClassRepresentation.ProdDataConstr |
                 SumCaseClassRepresentation.DataConstr =>
                 unwrap(tp) match
                     case SIRType.CaseClass(constructor, typeArguments, None) =>
-                        Record(named(constructor, fieldTypes(constructor, typeArguments)))
+                        DataShape.Record(named(constructor, fieldTypes(constructor, typeArguments)))
                     case SIRType.SumCaseClass(declaration, typeArguments) =>
                         val constructors = declaration.constructors.map(constructor =>
                             ownArguments(constructor, typeArguments).map(own =>
@@ -294,7 +357,7 @@ private[verify] object DataLayout {
                         )
                         if constructors.isEmpty || constructors.contains(None) then
                             unknown(s"the constructors of ${tp.show} are not told here")
-                        else Choice(constructors.flatten)
+                        else DataShape.Choice(constructors.flatten)
                     case _ => unknown(s"the constructors of ${tp.show} are not told here")
             case other =>
                 unknown(s"${tp.show} is represented as ${other.show}")

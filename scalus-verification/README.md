@@ -33,6 +33,16 @@ validator actually runs on chain.
 - `src/main/scala/scalus/verify/lean/LeanServer.scala` - a running Lean language server for a
   workspace: `LeanServer.start(directory)`, `check(source, timeout)` and `close()`. The tactic
   runs its checks in one; see `docs/design/verification-details/lean-server.md`.
+- `src/main/scala/scalus/verify/lean/LeanTypes.scala` - Lean types for Scala types: a
+  `structure` for a case class and an `inductive` for an enum, each with `toData`, `fromData`,
+  `wellFormed` and `isEncoding`, as the compiler encodes the type. `LeanTypes.of(types).module(name)`
+  is the text of a Lean module, which a workspace has under `<Package>/Generated`
+  (`LeanWorkspace.generated`), for proofs written by hand; see
+  `docs/design/verification-details/lean-types.md`.
+- `src/main/scala/scalus/verify/ual/UalExport.scala` - statements as documents of the Universal
+  Annotation Language: `assurance.json`, the checking contexts and the annotations. With
+  `LeanProofs.writeStatement` and the sbt plugin's `leanExport` and `ualExport`, see
+  `docs/design/verification-details/lean-export.md`.
 - `src/main/scala/scalus/verify/lean/LeanServerProvider.scala` - what gives a tactic its server,
   and `LeanServers`, the provider for a workspace: one server at a time, started when a check
   needs it.
@@ -53,14 +63,16 @@ validator actually runs on chain.
   script contexts and withdrawals. The JVM tests of `scalus-examples` depend on
   `scalus-verification-scalatest`, as a project outside these sources does.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala` -
-  properties of the hashed timelock contract, for every datum and whatever else the transaction
-  has: who refunds and who reveals, when, and of what, and that there is no time at which both
-  can.
+  properties of the hashed timelock contract, over real script contexts the ledger accepts
+  (`forAllData`, or `forAllDataLimited` of at most two signatures, with `isValid(ctx)` as a
+  premise): who refunds and who reveals, when, and of what, and that there is no time at which
+  both can.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala`
-  - properties of the two payment splitters, for two payees and whatever else the transaction
-  has: who submits a payout and who is paid, that every payee is paid exactly the split, that only
-  ADA is split, that an honest payout is accepted, and for the optimized one, that a spend needs
-  its stake validator, which checks the same split, and that its stake is never delegated.
+  - properties of the two payment splitters, for two payees, over real script contexts of a few
+  inputs and outputs: for the optimized one, that a spend's redeemer names its input, that a spend
+  with its withdrawal is accepted, and that its stake is never delegated. Who submits a payout, who is paid, the split, that only ADA is split,
+  that an honest payout is accepted and that a spend needs its stake validator's withdrawal, Lean
+  does not finish there: those tests are tagged `Unfinished`.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/oneshotmint/MintingPolicyVerificationTest.scala`
   - properties of the one-shot minting policy, on minting contexts of the shape the ledger gives a
   script of version 1: the two guarantees that `MintingPolicy.mint` states with `Spec.ensures`,
@@ -80,7 +92,7 @@ verifier.addFunction(clamp)
 val inRange = verifier.statement(
   "clamp_in_range",
   forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-      (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+      (lo <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
   )
 )
 
@@ -98,19 +110,25 @@ inputs whose runs end within `n` steps, whose proof is a `ProvenWithin` and no t
 
 `UplcBlaster` proves statements with universal and existential quantifiers over `BigInt`,
 `Boolean`, `ByteString`, `String`, `Data`, lists and maps, and case classes and enums of them:
-Boolean tests, calls, `denotes` and `equal`, combined with `&&`, `||`, `!`, `==>` and `<=>`.
+Boolean tests, calls, `denotes` and `equal`, combined with `&&`, `||`, `!`, `==>:` and `<=>`.
 `existsLet` supplies and eliminates an explicit witness, avoiding an SMT quantifier; ordinary
 `exists` is emitted to Blaster as the classically equivalent `¬∀¬`. A variable of a case class, as in
-`forAll[Config, BigInt]((config, time) => …)`, is one variable per field for Lean;
-`forAllData[A](x => …)` makes it one `Data`, restricted to the encodings of `A`'s values, which
-the tests decode with `d.to[A]`, and so does a parameter written
-`(x: A @UplcRepr(UplcRepresentation.Data)) => …` of a quantifier.
-`forAllDataLimited[A](x => limit)(x => body)` is `forAllData` of the values that meet `limit`: limits
+`forAll[Config, BigInt]((config, time) => …)`, is one variable per field for Lean, and one that
+would be more than 20 variables so, as a `ScriptContext`, is one `Data`, restricted to the
+encodings of its type's values, which the tests decode. `forAllData[A](x => …)`, over the `Data`
+encodings of `A`'s values, states the same as `forAll[A]` and is checked as it is, and so is a
+parameter written `(x: A @UplcRepr(UplcRepresentation.Data)) => …` of a quantifier.
+`forAllDataLimited[A](x => limit)(x => body)` is `forAllData` of the values that meet `limit`, one
+`Data` whatever its size: limits
 on how many elements the collections of `x` have, as `maxCollectionLength(x) <= 2`,
 `x.txInfo.inputs.length <= 3`, `isEmpty`, `nonEmpty`, and `forall` over a list or a map's keys or
 values, joined with `&&` (`Limits`). Each test checks them first, with a walk that ends, so a loop
 over a limited list runs to its end, and the statement of the values within the limits is proved
-as a theorem. Each test becomes
+as a theorem. `isValid(ctx)`, of a `v3.ScriptContext`, is a premise that Lean evaluates and no
+program runs: the ledger's rules of the context, as IOG's CardanoLedgerApi states them
+(`validScriptContext`), of the context's `Data` (`ScalusProofs/Ledger.lean`). It is of a
+statement variable, which the tactic passes as one `Data`, or of a value without variables; the
+replay of a counterexample has Lean evaluate it on the values. Each test becomes
 its own closed UPLC predicate over the quantified values in its scope. The tactic writes them
 to files, gives its Lean server a check that imports them, and reads Blaster's verdict from
 what Lean reports. The server loads the workspace once, so a small check takes a fraction of a
@@ -183,9 +201,14 @@ of Blaster and Z3. This also works for programs Blaster cannot reduce, such as t
 `integerToByteString` ([Lean-blaster#273](https://github.com/input-output-hk/Lean-blaster/issues/273)).
 
 A call of a function registered in the verifier is linked to that function's compiled program, so
-the proof is about those exact bytes. A `call` is total: it claims that the function returns.
+the proof is about those exact bytes. That is so wherever a test applies the function, written as
+Scala, as in `VestingValidator.linearVesting(config, time) == BigInt(0)`: the test gets the
+registered program in place of a copy compiled from the source, as `call(linearVesting, (config,
+time))(v => v == BigInt(0))` does. So a statement about a function's result is written so, and
+`call` is for a result a statement goes on about, with quantifiers or implications, and for the
+partial `whenReturns`. A `call` is total: it claims that the function returns.
 `whenReturns(f, a)(r => p)` is partial: it claims `p` only where the function returns, and is
-proved as `denotes(f(a)) ==> call(f, a)(r => p)`. The proof still needs `f` to return or fail
+proved as `denotes(f(a)) ==>: call(f, a)(r => p)`. The proof still needs `f` to return or fail
 within the budget on every input: a run that exhausts the budget counts as one that may return,
 so `p` must then hold, and a partial function that loops on some inputs cannot be proved. Other
 `@Compile` definitions a test uses are compiled with the test. A function of several parameters is
@@ -195,11 +218,11 @@ included: the compiler passes them. A `FunctionDef` records how its program take
 and the tactic rejects a function compiled with options that pass them differently.
 
 A binder's body is a statement or a Boolean. Statements nest quantifiers, calls and connectives:
-`forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x != BigInt(0)))`. A Boolean body is one test,
+`forAll[BigInt](x => denotes(BigInt(10) / x) ==>: (x != BigInt(0)))`. A Boolean body is one test,
 `if`, `match` and local `val`s included: `forAll[Boolean, BigInt]((c, x) => if c then x > 0 else x < 0)`.
 A Boolean operand of a connective is one test too. Each test or expression is compiled as a closed
 lambda over the variables it uses. In a statement body, a variable may only be used inside them:
-an `if` that chooses between statements is a compile error; state the cases with `==>`.
+an `if` that chooses between statements is a compile error; state the cases with `==>:`.
 `Prop(...)` is needed only to make a Boolean a separate test on purpose: `!Prop(t)` holds when
 `t` fails, while `!t` is one test that fails with it.
 
@@ -220,7 +243,7 @@ val inRange = verifier.contract(
 verifier.verify(inRange, UplcBlaster(Budget.LeanSteps(120), lean)) // Proven
 ```
 
-`contract` is partial: `∀ args. expects(args) ==> whenReturns(f, args)(r => ensures(args)(r))`,
+`contract` is partial: `∀ args. expects(args) ==>: whenReturns(f, args)(r => ensures(args)(r))`,
 so a call that fails satisfies it. `totalContract` also claims that the function returns where
 `expects` holds. `verifier.contract` registers the statement as the function's contract, and
 `verifier.contracts(clamp.ref)` lists them. The function's parameters must be quantifiable:
@@ -242,8 +265,8 @@ left open. `totalContract` is the contract with `.returnsWhen(_ => true)`.
 The same two exist as statements of their own:
 
 ```scala
-returnsWhen(div10)(x => x != BigInt(0))   // ∀ x. x ≠ 0 ==> succeeds(div10, x)
-failsWhen(div10)(x => x == BigInt(0))     // ∀ x. x = 0 ==> fails(div10, x)
+returnsWhen(div10)(x => x != BigInt(0))   // ∀ x. x ≠ 0 ==>: succeeds(div10, x)
+failsWhen(div10)(x => x == BigInt(0))     // ∀ x. x = 0 ==>: fails(div10, x)
 ```
 
 `succeeds(f, a)` is the total call `call(f, a)(_ => true)`, and `fails(f, a)` is its negation.
@@ -300,6 +323,13 @@ that contract's precondition.
 `VestingValidator` is specified this way: three guarantees on `spend`, and the postcondition of
 `linearVesting`.
 
+Every clause a function of the verifier states is held to being checked:
+`verifier.specifications` says, for each, whether a proof checks it, and which; a statement in a
+suite's own words checks a clause where the tactic finds it the same statement as the one
+`guarantees` makes of it. `verifier.open(statement, reason)` declares one not proved. A
+`LeanProofsSuite` whose tests all passed fails where a clause is neither, and prints the open ones;
+see `docs/design/verification-details/specification-checks.md`.
+
 ### Call-site obligations
 
 A precondition is an obligation of every caller. `verifier.obligations` declares it for each call
@@ -332,7 +362,7 @@ precondition.
 cd scalus-verification/src/main/lean && lake build && cd -   # once, and after a Lean change
 sbt scalusVerification/test                                                        # about 1 min of tests
 sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 2 min
-sbt "scalusExamplesJVM/testOnly scalus.examples.htlc.HtlcVerificationTest"         # about 3 min
+sbt "scalusExamplesJVM/testOnly scalus.examples.htlc.HtlcVerificationTest"         # about 8 min
 sbt "scalusExamplesJVM/testOnly scalus.examples.paymentsplitter.PaymentSplitterVerificationTest"
 sbt "scalusExamplesJVM/testOnly scalus.examples.oneshotmint.MintingPolicyVerificationTest"   # about 3 min
 sbt "scalusVerification/testOnly *UplcBlasterLimitsTest"   # the statements Lean does not finish
@@ -343,6 +373,20 @@ the built library. A suite starts one Lean server for its checks, in its workspa
 it after its last test. Without them a test that asks Lean is canceled, as in ci-jvm, and a
 suite that keeps its results passes on them (below). With the
 `SCALUS_REQUIRE_LEAN` environment variable set, as in the Lean-Proofs workflow, they fail instead.
+
+`verify` of the sbt plugin runs suites with Lean required as well, and uses what is kept, so it
+asks Lean only what changed:
+
+```bash
+sbt "scalusExamplesJVM/verify scalus.examples.htlc.HtlcVerificationTest"
+```
+
+In this build the examples depend on this module as a project, so the plugin's `leanBuild` has
+no workspace of theirs to build. The build sets their `leanBuild` to run `lake build` in the
+library's workspace and then in `LinearVesting`'s, and `verify` runs it first. `testOnly` does
+not: after a Lean change, or a new pin in the library's manifest, run
+`sbt scalusExamplesJVM/leanBuild`, or `lake build` as above. A check whose imports are not built
+fails with "Imports are out of date and must be rebuilt".
 
 ### `LeanProofs` and a test framework
 
@@ -484,26 +528,36 @@ contracts/src/test/lean/Htlc/   a workspace: lakefile.lean, lean-toolchain, Htlc
   `.git`, or without one, beside the workspace. Every workspace of the project requires
   `ScalusProofs` from it and uses the library's `packagesDir`, so Blaster and PlutusCore are
   cloned and built once for the project.
-- Its library has every module under `<Name>/`, so `lake build` checks a proof written by hand
-  there without it being imported. Lake does not build without that directory, and a checkout
-  does not have it while it is empty: `init` makes it.
+- Its default library is its root module, `<Name>.lean`, which is all a check needs: `lake build`
+  builds it in seconds. A second library, `<Name>Proofs`, has the statements Scalus writes under
+  `<Name>/Generated` (`leanExport`) and the proofs written by hand under `<Name>/Proofs`:
+  `lake build <Name>Proofs`, or `sbt leanProve`, builds them, so a proof is checked without being
+  imported. A statement runs its programs symbolically where it is built, which takes minutes, so
+  it is not of the default target. Lake does not build a library without its directories, and a
+  checkout does not have them while they are empty: `init` makes them.
 - It is created where the directory has no lakefile, and is the project's from then on: nothing
-  in it is written again. Every call says where its `lean-toolchain` or the revisions its
-  manifest pins are not the library's.
+  in it is written again, but a manifest where it has none. Every call says where its
+  `lean-toolchain` or the revisions its manifest pins are not the library's.
 - The library is Scalus's: every call brings it up to the version in the build, where the
   workspace's lakefile requires it from, and writes only the files that changed. Only a library
   in a `.scalus` is written. A workspace that requires it from another path, as `LinearVesting`
   here does, is only looked at.
-- Lake writes the workspace's `lake-manifest.json` on its first build, with the revisions the
-  library's manifest pins. Commit it with the workspace.
+- It is created with the `lake-manifest.json` that Lake writes on its first build: the library by
+  its path, and the revisions the library's manifest pins. So what a kept result rests on, of
+  Lean's side, is the same in it before the build as after, and a checkout that does not have
+  the workspace, and creates it, takes the results kept where it was built. Whether to commit it
+  is the project's.
 
 A project has one workspace, and its build has it: with the Scalus sbt plugin, the setting
-`leanWorkspace`, `src/test/lean/<Project>` unless the build says another. `sbt leanInit` creates
-it. Once it is there, the plugin tells the project's tests, by a resource on their class path,
-and `LeanProofs.projectWorkspace` is that directory, made ready: `init` is called, and it fails
-where the workspace does not agree with the library. So a suite names no workspace, the suites
-of a project have the same one, and it does not matter where sbt runs the tests. A project
-without a workspace is told nothing, and its tests create none.
+`leanWorkspace`, `src/test/lean/<Project>` unless the build says another. The plugin tells the
+project's tests, by a resource on their class path, where the project has `scalus-verification`
+among its test dependencies, whether the workspace is there or not, and
+`LeanProofs.projectWorkspace` is that directory, made ready: `init` is called, which creates it
+where it is missing, and it fails where the workspace does not agree with the library. So a suite
+names no workspace, the suites of a project have the same one, it does not matter where sbt runs
+the tests, and the first suite of proofs that runs creates the workspace. `sbt leanInit` creates it
+without running a test. The examples here have this module as a project, not as a jar, and are
+told nothing: their suites take the library's workspace.
 
 That needs neither Lean nor the network. So a fresh checkout has the library, which is not
 committed, before a suite asks what is kept for it, and its kept results stand where no Lean
@@ -514,20 +568,38 @@ which does the same for that directory. A directory that is not absolute is take
 working directory.
 
 What does need Lean and the network is the build of the workspace, which is not part of `test`.
-Two tasks of the plugin do the work:
+Tasks of the plugin do the work:
 
 ```
 sbt leanInit     # make the workspace ready, as a suite does
 sbt leanBuild    # leanInit, then `lake build` in the workspace
+sbt leanProve    # `lake build <Name>Proofs` in every workspace of the project that declares it
+sbt verify       # leanBuild, the suites of proofs with Lean required, then the proofs by hand
 ```
+
+`verify` runs the project's suites of proofs, the tests that extend `LeanProofsSuite`, or the tests
+it is given, by their class, their class's simple name or a pattern with `*`, and leaves out those
+tagged `Unfinished`. A name that selects no test is an error: `testOnly` would run none, and the
+task pass having checked nothing. It tells them that
+Lean is required by a resource on their class path (`LeanProofs.requireLeanResource`), as the
+exports are told: a statement that cannot be checked fails, and is not canceled. Unlike
+`SCALUS_REQUIRE_LEAN`, it uses the kept results, and asks Lean only what changed;
+`SCALUS_KEPT_RESULTS=recalculate` asks it everything. Then it builds the library of proofs,
+`lake build <Name>Proofs`, of every Lean workspace of the project that has a Lean module under
+`<Name>/Proofs`, and skips the step where none has.
+
+The workspaces of a project are the Lake packages beside its `leanWorkspace`, in `src/test/lean`:
+its own, and any other it keeps there, as Scalus's examples keep `LinearVesting`. `leanProve` and
+`verify` build all of them, each made ready first, with the `scalus-verification` among the test
+dependencies, a jar or a project of the build.
 
 - The first `leanBuild` clones and builds Blaster and PlutusCore, which takes minutes. Until
   then a suite that would ask Lean is canceled, and says to run it.
 - `leanBuild` does not build a workspace that does not agree with the library, and says what
   differs: after a Scalus upgrade that moves the library's Lean or its packages, run
   `lake update` in the workspace.
-- Both tasks pass over a project without `scalus-verification` among its test dependencies, so
-  they can be run for a whole build, and they run one at a time.
+- The tasks pass over a project without `scalus-verification` among its test dependencies, so
+  they can be run for a whole build, and those that write a workspace run one at a time.
 
 Without sbt, the same is `scalus.verify.lean.LeanWorkspaceTool init <directory>` and
 `lake build` there.
@@ -590,14 +662,24 @@ its search starts at the steps the tests take on the largest values the limits a
 
 ## Pinned dependencies
 
-- `PlutusCore` from `nau/PlutusCoreBlaster` @ `fix/case-scrutinee-smt-blowup`. **Temporary
-  fork.** Switch to upstream `main` once
+- `PlutusCore` from `rssh/PlutusCoreBlaster` @ `case-scrutinee-on-main`. **Temporary fork.**
+  It is
   [input-output-hk/PlutusCoreBlaster#40](https://github.com/input-output-hk/PlutusCoreBlaster/pull/40)
-  merges. Without that fix, `blaster` does not terminate on any program using UPLC `case`,
-  which is every PV11 program Scalus emits.
-- `Blaster` from `input-output-hk/Lean-blaster` @ `main`. Not the
+  brought up to upstream `main` ([nau/PlutusCoreBlaster#1](https://github.com/nau/PlutusCoreBlaster/pull/1),
+  into #40's branch). `main` still selects the branch of a `case` on an integer tag with
+  `Ms[n.toNat]?`, on which `blaster` does not terminate, and every PV11 program Scalus emits uses
+  `case`. Switch to upstream `main` once #40 merges, and to #40's branch once #1 does.
+- `Blaster` from `input-output-hk/Lean-blaster` @ `main` (`a069197`). Not the
   `beta-lambda-cache-optimization` branch: the two have diverged and neither is a superset.
-  `main` carries the `Int.ediv`/`Int.emod` fix these integer targets need.
+  `main` carries the `Int.ediv`/`Int.emod` fix these integer targets need. It needs Z3 5.4.0 or
+  later, which every shell of the flake that has Lean has (`blasterZ3`).
+
+From Lean-blaster `1fe209e` (#155) on, `#blaster` does not return on a function that recurses on
+a sublist bound by an as-pattern
+([Lean-blaster#463](https://github.com/input-output-hk/Lean-blaster/issues/463)). The check that
+a map's keys ascend, which every statement about a script context has, is written with the
+previous key as an argument instead, as CardanoLedgerApiBlaster writes `validSigners`
+(`DataEncoding.leanDefinitions`, and the `ascending` of `LeanTypes`).
 
 Upstream force-pushes. If `lake build` fails with `git exited with code 128`, a pinned rev is
 gone; re-run `lake update` and commit the new `lake-manifest.json`.
@@ -622,14 +704,17 @@ for the reasons.
    evidence for that model is that it passes the plutus-conformance corpus.
 4. **`Value` and array builtins are out of scope.** Targets must compile with
    `valueBuiltins = false`; the model has no CIP-153 or CIP-138 builtins.
-5. **Functions reading single bytes or reaching the CIP-121/122 bitwise builtins cannot be
-   proved generically.** Blaster cannot translate `BitVec`, whose width is a value index rather
-   than a type parameter. The model reads a byte through a `Char`, whose value is a `BitVec 32`,
-   and the bitwise builtins use `BitVec` directly. Any property quantifying over a symbolic input
-   whose CEK trace reaches `indexByteString`, `shiftByteString`, `integerToByteString` or
-   `byteStringToInteger` fails to translate, at every budget. Comparing, appending and measuring
-   byte strings, as `Data` values need, translate. This is why `Math.exp2` is proved only on its
-   `exp < 0` early return. `encodeUtf8` and `decodeUtf8` go through a character's `UInt32`
+5. **Functions that build or take apart a byte string by its bytes, or reach the CIP-121/122
+   bitwise builtins, cannot be proved generically.** Blaster cannot translate `BitVec`, whose
+   width is a value index rather than a type parameter. The model reads a byte through a `Char`,
+   whose value is a `BitVec 32`, and the bitwise builtins use `BitVec` directly. A property
+   quantifying over a symbolic byte string whose CEK trace reaches `sliceByteString`,
+   `indexByteString`, `consByteString`, `integerToByteString`, `shiftByteString` or
+   `complementByteString` fails to translate, at every budget (measured 2026-11-11, with
+   Lean-blaster `a069197` and Z3 5.4.0). `byteStringToInteger` translates, though a statement
+   about its value can come back inconclusive: the solver's byte strings have characters above
+   255 (see 6). Comparing, appending and measuring byte strings, as `Data` values need,
+   translate. This is why `Math.exp2` is proved only on its `exp < 0` early return. `encodeUtf8` and `decodeUtf8` go through a character's `UInt32`
    value too. A statement with variables whose programs apply them is refused when it is
    lowered (see 6). Appending and comparing strings translate.
 6. **The solver's strings are not Plutus's.** A `String` variable ranges over the solver's

@@ -2,18 +2,15 @@ package scalus.examples.vesting
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.cardano.onchain.plutus.prelude
-import scalus.cardano.onchain.plutus.v3.{ScriptContext, ScriptInfo, TxId, TxInfo, TxOutRef}
 import scalus.compiler.Options
 import scalus.uplc.PlutusV3
-import scalus.uplc.builtin.ByteString.hex
-import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.Data.toData
+import scalus.cardano.onchain.plutus.v3.ScriptContext
 import scalus.verify.{FunctionDef, Representation}
+import scalus.verify.lean.{LeanTypes, LeanWorkspace}
 import scalus.verify.uplcblaster.LeanProofs
 
 /** What [[VestingVerificationTest]] rests on, checked without Lean: the example's Lean workspace,
-  * the specification's erasure, and the contexts the statements build.
+  * and the specification's erasure.
   */
 class VestingVerificationSupportTest extends AnyFunSuite {
     import VestingVerificationTest.*
@@ -50,21 +47,23 @@ class VestingVerificationSupportTest extends AnyFunSuite {
         assert(!script.contains("postcondition"))
     }
 
-    test("the contexts built from Data are the ledger's encoding") {
-        // The statements of `VestingVerificationTest` say that the validator fails, which a malformed context would make
-        // true for the wrong reason.
-        val ref = TxOutRef(TxId(hex"00"), 0)
-        val datum = config(BigInt(1), BigInt(2), BigInt(3)).toData
-        val redeemer = Action(BigInt(4)).toData
-        def expected(datum: prelude.Option[Data]) =
-            ScriptContext(
-              TxInfo.placeholder,
-              redeemer,
-              ScriptInfo.SpendingScript(ref, datum)
-            ).toData
-        def built(datum: Data) =
-            scriptContext(TxInfo.placeholder.toData, redeemer, spendingInfo(ref.toData, datum))
-        assert(built(noDatum) == expected(prelude.Option.None))
-        assert(built(someDatum(datum)) == expected(prelude.Option.Some(datum)))
+    test("the workspace has the Lean types of the contract's Scala types") {
+        // What a proof written in Lean names the datum, the redeemer and the script context by:
+        // `LinearVesting/Generated/Types.lean`, which `lake build` there builds. It is written
+        // from the Scala types, so it is written again here where they have changed, and the
+        // test fails once: the file is to be committed with the change.
+        val types = LeanTypes.of(
+          List(
+            LeanTypes.typeOf[Config],
+            LeanTypes.typeOf[Action],
+            LeanTypes.typeOf[ScriptContext]
+          )
+        )
+        val (module, file) = LeanWorkspace.generated(workspace, "Types")
+        assert(module == "LinearVesting.Generated.Types")
+        assert(types.codec(LeanTypes.typeOf[Config]).map(_.leanType).contains("Config"))
+        assert(types.untyped.isEmpty, types.untyped)
+        val written = LeanWorkspace.write(file, types.module(module))
+        assert(!written, s"$file was not the types of the Scala sources: it is written again")
     }
 }

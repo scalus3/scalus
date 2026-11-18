@@ -24,6 +24,44 @@ object LeanWorkspace {
         Option.when(Files.isRegularFile(file))(readFromArray[Manifest](Files.readAllBytes(file)))
     }
 
+    /** The directory of a workspace's package, under that of its library's modules, that holds the
+      * modules Scalus writes from Scala sources ([[generated]]).
+      */
+    val GeneratedDirectory = "Generated"
+
+    /** The directory of a workspace's package, under that of its library's modules, that holds the
+      * proofs written by hand of the statements under [[GeneratedDirectory]].
+      */
+    val ProofsDirectory = "Proofs"
+
+    /** The name of the workspace's package: that of its manifest, or of its directory where it has
+      * no manifest yet.
+      */
+    def packageName(workspace: Path): String =
+        manifest(workspace).fold(workspace.getFileName.toString)(_.name)
+
+    /** The module `name` that Scalus writes for `workspace`, as `Types`: its Lean name,
+      * `<Package>.Generated.Types`, and its file. A module there is written again whenever the
+      * Scala sources it comes from change, and is nobody's to edit.
+      */
+    def generated(workspace: Path, name: String): (String, Path) = {
+        val own = packageName(workspace)
+        s"$own.$GeneratedDirectory.$name" ->
+            workspace.resolve(own).resolve(GeneratedDirectory).resolve(s"$name.lean")
+    }
+
+    /** Writes `text` to `file` where the file is not that text already, and says whether it wrote.
+      */
+    def write(file: Path, text: String): Boolean = {
+        val current =
+            Option.when(Files.isRegularFile(file))(Files.readString(file, StandardCharsets.UTF_8))
+        val changed = !current.contains(text)
+        if changed then
+            Files.createDirectories(file.getParent)
+            Files.writeString(file, text, StandardCharsets.UTF_8)
+        changed
+    }
+
     /** The Lean that `workspace` pins. */
     def toolchain(workspace: Path): String =
         Files.readString(workspace.resolve("lean-toolchain")).trim
@@ -75,21 +113,46 @@ object LeanWorkspace {
       * paths in the package and their texts.
       *
       * Other Lean files of the directory are not the package's: a check that is kept there to be
-      * run by hand, or a file someone tries something in, changes no result.
+      * run by hand, or a file someone tries something in, changes no result. Nor do the modules
+      * under `<name>/Generated` ([[generated]]): they are written from the Scala sources, whose
+      * statements and programs a result's entry has the hashes of already, and a type added to one
+      * of them is no reason to prove every statement of the workspace again. Nor do the proofs
+      * written by hand, under `<name>/Proofs` ([[ProofsDirectory]]): a check imports Scalus's
+      * library, and no module of the workspace, so a proof changes no check.
       */
     private def sources(directory: Path, name: String): String = {
         val modules = directory.resolve(name)
+        val written = modules.resolve(GeneratedDirectory)
+        val byHand = modules.resolve(ProofsDirectory)
         val below =
             if Files.isDirectory(modules) then
                 val walked = Files.walk(modules)
-                try walked.iterator().asScala.filter(Files.isRegularFile(_)).toList
+                try
+                    walked
+                        .iterator()
+                        .asScala
+                        .filter(file =>
+                            Files.isRegularFile(file) && !file.startsWith(written) &&
+                                !file.startsWith(byHand)
+                        )
+                        .toList
                 finally walked.close()
             else Nil
-        val files =
-            (directory.resolve("lakefile.lean") :: directory.resolve(s"$name.lean") :: below)
-                .filter(file => file.toString.endsWith(".lean") && Files.isRegularFile(file))
-                .sortBy(file => directory.relativize(file).toString)
-        val text = files.map { file =>
+        hashOf(
+          directory,
+          directory.resolve("lakefile.lean") :: directory.resolve(s"$name.lean") :: below
+        )
+    }
+
+    /** A hash of the Lean sources among `files`, by their paths from `directory` and their texts:
+      * the `.lean` files that exist, in the order of their paths. Another file, as an editor's swap
+      * file or a `README.md`, is no source and changes nothing.
+      */
+    private[verify] def hashOf(directory: Path, files: List[Path]): String = {
+        val sources = files
+            .filter(file => file.toString.endsWith(".lean") && Files.isRegularFile(file))
+            .sortBy(file => directory.relativize(file).toString)
+        val text = sources.map { file =>
             s"${directory.relativize(file)}\n${Files.readString(file, StandardCharsets.UTF_8)}"
         }
         Fingerprint.hash(text.mkString("\n"))
