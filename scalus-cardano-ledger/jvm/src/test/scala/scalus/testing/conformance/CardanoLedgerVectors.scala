@@ -87,8 +87,12 @@ object CardanoLedgerVectors {
                     )
                 (old, next)
             }
-            states match
-                case Failure(e) =>
+            // The fixtures may fail to give a case's pparams; that case then has no verdict, and
+            // the other cases of the vector keep theirs.
+            val caseParams = Try(if useParams then vectorParams(vector) else None)
+                .map(_.getOrElse(UtxoEnv.default.params))
+            (states, caseParams) match
+                case (Failure(e), _) =>
                     VectorRun(
                       file,
                       vector.success,
@@ -96,10 +100,10 @@ object CardanoLedgerVectors {
                       None,
                       floor
                     )
-                case Success((oldState, newState)) =>
+                case (_, Failure(e)) =>
+                    VectorRun(file, vector.success, Failure(e), None, floor)
+                case (Success((oldState, newState)), Success(params)) =>
                     val state = oldState.ruleState
-                    val params = (if useParams then vectorParams(vector) else None)
-                        .getOrElse(UtxoEnv.default.params)
                     val epoch =
                         (floor :: oldState.utxos.govState.proposals.map(_.proposedIn).toList ++
                             transaction.toOption.flatMap(tx =>

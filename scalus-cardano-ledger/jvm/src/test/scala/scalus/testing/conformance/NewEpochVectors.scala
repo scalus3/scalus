@@ -147,7 +147,10 @@ object NewEpochVectors {
       * expired, delayed]` (conway Governance/Internal.hs:672-680).
       */
     private def readGovStateTail(nes: Element): GovStateTail = {
-        val govState = elems(elems(elems(elems(elems(nes)(3))(1))(1))(3))
+        val ledger = elems(elems(nes)(3))(1)
+        val govState = VectorLedgerState.conwayGovState(ledger).getOrElse {
+            sys.error("expected a Conway GovState in the epoch vector")
+        }
         val pulser = elems(govState(6))
         val snapshot = elems(pulser(0))
         val ratifyState = elems(pulser(1))

@@ -4,6 +4,7 @@ import io.bullet.borer.*
 import io.bullet.borer.Dom.{ArrayElem, ByteArrayElem, Element, MapElem}
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import scalus.cardano.ledger.*
+import scalus.utils.Hex
 
 import java.nio.file.{Files, Path}
 import scala.util.Using
@@ -25,6 +26,22 @@ object VectorLedgerState {
     def fromCbor(cbor: Array[Byte]): VectorLedgerState = {
         given OriginalCborByteArray = OriginalCborByteArray(cbor)
         Cbor.decode(cbor).to[VectorLedgerState].value
+    }
+
+    /** `[certState, [utxo, deposited, fees, govState, instantStake, donation]]`; Conway's GovState
+      * is `[proposals, committee, constitution, curPParams, prevPParams, futurePParams, pulser]`
+      * (Conway/Governance.hs, `EncCBOR (ConwayGovState era)`). DOM decoding also reaches the
+      * pparams when a proposal contains a Word64 that the typed state cannot represent.
+      */
+    private[conformance] def conwayGovState(ledger: Element): Option[Vector[Element]] = {
+        def array(e: Element): Option[Vector[Element]] = e match
+            case a: ArrayElem => Some(a.elems)
+            case _            => None
+        for
+            state <- array(ledger) if state.size == 2
+            utxos <- array(state(1)) if utxos.size == 6
+            gov <- array(utxos(3)) if gov.size == 7
+        yield gov
     }
 
     /** Create UtxoEnv for conformance testing with small deposit values.
@@ -555,35 +572,73 @@ object ConwayProtocolParamsFixtures:
             Some(ConwayProtocolParams.fromCbor(cbor))
         else None
 
-    /** Extract pparams hash from ledger state CBOR hex string.
+    /** Resolve Conway's current pparams field in `pparams-by-hash`. States without a Conway
+      * GovState retain the version-based search.
       *
-      * The hash appears after "5820" (CBOR prefix for 32-byte bytestring) in the GovState section.
-      * Since multiple pparams hashes may appear in the state (prevPParams and curPParams), we find
-      * all matching hashes and return the one with the highest protocol version, as the current
-      * pparams should have the highest version.
+      * Throws when the fixtures cannot give the current pparams: a Conway state names a hash that
+      * `pparams-by-hash` lacks, or the version-based search finds several hashes at the highest
+      * version. A case must not run with the defaults or the previous pparams instead.
       */
-    def extractPparamsHash(oldLedgerStateHex: String, pparamsDir: Path): Option[String] =
+    def extractPparamsHash(oldLedgerStateHex: String, pparamsDir: Path): Option[String] = {
         import scala.jdk.CollectionConverters.*
         if !Files.exists(pparamsDir) then return None
 
         // closed: a leaked stream per case ran the sbt server out of file descriptors
-        val matchingHashes = Using.resource(Files.list(pparamsDir)) { paths =>
+        val hashes = Using.resource(Files.list(pparamsDir)) { paths =>
             paths
                 .iterator()
                 .asScala
                 .map(_.getFileName.toString)
-                .filter(hash => oldLedgerStateHex.contains(hash))
                 .toList
         }
+        selectPparamsHash(
+          oldLedgerStateHex,
+          hashes,
+          hash => loadFromHash(pparamsDir, hash).map(_.protocolVersion.major)
+        )
+    }
 
+    private[conformance] def selectPparamsHash(
+        oldLedgerStateHex: String,
+        hashes: List[String],
+        majorVersion: String => Option[Int]
+    ): Option[String] = {
+        val ledger = Cbor.decode(Hex.hexToBytes(oldLedgerStateHex)).to[Element].value
+        VectorLedgerState.conwayGovState(ledger) match
+            case Some(gov) =>
+                gov(3) match
+                    case hash: ByteArrayElem =>
+                        val current = Hex.bytesToHex(hash.bytes)
+                        if hashes.contains(current) then Some(current)
+                        else
+                            throw IllegalStateException(
+                              s"the current pparams $current are not in pparams-by-hash"
+                            )
+                    case _ => None
+            case None => legacyPparamsHash(oldLedgerStateHex, hashes, majorVersion)
+    }
+
+    private def legacyPparamsHash(
+        oldLedgerStateHex: String,
+        hashes: List[String],
+        majorVersion: String => Option[Int]
+    ): Option[String] = {
+        val matchingHashes = hashes.filter(oldLedgerStateHex.contains)
         if matchingHashes.isEmpty then return None
         if matchingHashes.size == 1 then return Some(matchingHashes.head)
 
         val hashesWithVersion = matchingHashes.flatMap { hash =>
-            loadFromHash(pparamsDir, hash).map(pp => (hash, pp.protocolVersion.major))
+            majorVersion(hash).map(version => (hash, version))
         }
+        if hashesWithVersion.isEmpty then return None
 
-        hashesWithVersion
-            .sortBy(-_._2)
-            .headOption
-            .map(_._1)
+        // A tie would leave the choice to the order of Files.list, which differs between file
+        // systems: the bug that the Conway path above removes.
+        val highest = hashesWithVersion.map(_._2).max
+        hashesWithVersion.filter(_._2 == highest).map(_._1) match
+            case List(hash) => Some(hash)
+            case tied =>
+                throw IllegalStateException(
+                  s"pparams ${tied.sorted.mkString(", ")} tie at protocol version $highest"
+                )
+    }
