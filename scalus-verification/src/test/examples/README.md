@@ -44,7 +44,7 @@ For an existing environment without Nix, install these tools and put them on `PA
 - JDK 11 or newer and the sbt launcher; `project/build.properties` selects sbt 1.13.0.
 - Elan, the Lean toolchain manager, which provides `lean` and `lake` and installs the
   Lean 4.24.0 version selected by `src/main/lean/lean-toolchain`.
-- The Z3 SMT solver; the pinned Blaster dependency documents Z3 4.15.2 as its tested version.
+- The Z3 SMT solver, 5.4.0 or later, which the pinned Blaster requires (the flake's shells have it).
 
 The first build needs network access to download Scala and Lean dependencies. `lake build`
 fetches and builds Blaster and PlutusCore from the committed Lake manifest; no separate

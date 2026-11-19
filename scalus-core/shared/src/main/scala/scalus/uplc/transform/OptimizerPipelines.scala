@@ -4,11 +4,23 @@ import scalus.*
 import scalus.uplc.Term
 import scalus.uplc.eval.Log
 
+/** The optimization pipeline for Plutus V1 and V2.
+  *
+  * A run keeps no state in the instance: each [[apply]] builds its own log and passes. So one
+  * instance is safe to share between threads, for example between the copies that
+  * [[scalus.uplc.PlutusV2.withErrorTraces]] makes. [[logs]] returns the logs of the most recently
+  * completed run.
+  */
 class V1V2Optimizer extends Optimizer {
-    private val logger = Log()
-    def apply(term: Term): Term = {
-        logger.clear()
+    @volatile private var lastLogs: Seq[String] = Vector.empty
 
+    def apply(term: Term): Term = {
+        val logger = Log()
+        try run(term, logger)
+        finally lastLogs = logger.getLogs.toVector
+    }
+
+    private def run(term: Term, logger: Log): Term = {
         val builtinsExtractor = new ForcedBuiltinsExtractor(logger)
         val inliner = new Inliner(logger)
         val etaReduce = new EtaReduce(logger)
@@ -21,9 +33,17 @@ class V1V2Optimizer extends Optimizer {
             |> strictIf.apply // convert eligible ifs to strict ifs
             |> builtinsExtractor.apply // extract forced builtins
     }
-    def logs: Seq[String] = logger.getLogs.toVector
+
+    def logs: Seq[String] = lastLogs
 }
 
+/** The optimization pipeline for Plutus V3.
+  *
+  * A run keeps no state in the instance: each [[apply]] builds its own log and passes. So one
+  * instance is safe to share between threads, for example between the copies that
+  * [[scalus.uplc.PlutusV3.withErrorTraces]] and [[scalus.uplc.PlutusV3.withOptions]] make. [[logs]]
+  * returns the logs of the most recently completed run.
+  */
 class V3Optimizer(
     cseIterations: Int = 2, // Zero disables every CSE pass, including the post-CCE cleanup.
     cceEnabled: Boolean = false,
@@ -33,10 +53,15 @@ class V3Optimizer(
     /** Kept so the pre-`letChainRegroup` two-argument signature stays binary-compatible. */
     def this(cseIterations: Int, cceEnabled: Boolean) = this(cseIterations, cceEnabled, false)
 
-    private val logger = Log()
-    def apply(term: Term): Term = {
-        logger.clear()
+    @volatile private var lastLogs: Seq[String] = Vector.empty
 
+    def apply(term: Term): Term = {
+        val logger = Log()
+        try run(term, logger)
+        finally lastLogs = logger.getLogs.toVector
+    }
+
+    private def run(term: Term, logger: Log): Term = {
         val caseConstr = new CaseConstrApply(logger)
         val regrouper = new LetChainRegroup(logger)
         val builtinsExtractor = new ForcedBuiltinsExtractor(logger)
@@ -80,5 +105,6 @@ class V3Optimizer(
         // Phase 5: Final passes
         regrouped |> caseConstr.apply // optimize multiple applys to more optimal case/constr nodes
     }
-    def logs: Seq[String] = logger.getLogs.toVector
+
+    def logs: Seq[String] = lastLogs
 }

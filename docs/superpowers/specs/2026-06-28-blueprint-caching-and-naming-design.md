@@ -1,7 +1,8 @@
 # Blueprint generation: cached fresh-in-JAR output + explicit pin (Aiken-informed)
 
 Date: 2026-06-28 (revised 2026-07-16)
-Status: Design – all decisions resolved, pending user review
+Status: implemented on 2026-07-24 (6 commits, d65d8f61f to b7adf143a). Fix a40898f8b (2026-09-10)
+prunes stale manifest entries and outputs.
 Scope: `scalus-sbt-plugin` + small additive `scalus-core` changes
 
 ## Problem

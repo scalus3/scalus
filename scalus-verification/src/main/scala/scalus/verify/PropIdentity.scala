@@ -125,8 +125,11 @@ private[verify] object PropIdentity {
             case Prop.And(a, b)     => node("and") { this.prop(a); this.prop(b) }
             case Prop.Or(a, b)      => node("or") { this.prop(a); this.prop(b) }
             case Prop.Implies(a, b) => node("implies") { this.prop(a); this.prop(b) }
-            case Prop.Iff(a, b)     => node("iff") { this.prop(a); this.prop(b) }
-            case Prop.Not(a)        => node("not")(this.prop(a))
+            case Prop.Rejects(a, b) => node("rejects") { this.prop(a); this.prop(b) }
+            case Prop.Satisfies(predicate, value) =>
+                node("satisfies") { atom(predicate.name); atom(predicate.module); expr(value) }
+            case Prop.Iff(a, b) => node("iff") { this.prop(a); this.prop(b) }
+            case Prop.Not(a)    => node("not")(this.prop(a))
         }
 
         private def expr(expr: PropExpr[?]): Unit = expr match
@@ -226,17 +229,19 @@ private[verify] object PropIdentity {
           * proxy, which is followed once.
           */
         private def tpe(tp: SIRType, seen: Set[SIRType.TypeProxy]): Unit = tp match
-            // A variable over the `Data` encodings of its values is checked as `Data`.
-            // The decoder is code each leaf that reads the variable runs. Its limits, where it
-            // has them, are of the values it stands for.
-            case annotated if DataEncoding.encoded(annotated).isDefined =>
+            // A variable over the `Data` encodings of its values that meet limits is checked as
+            // `Data`. The decoder is code each leaf that reads the variable runs. Its limits are
+            // of the values it stands for. One without limits is a variable of its values, as
+            // the tactic checks it, and is its type's below.
+            case annotated
+                if DataEncoding.encoded(annotated).isDefined &&
+                    DataEncoding.limits(annotated).all.nonEmpty =>
                 node("data") {
                     DataEncoding.encoded(annotated).foreach { (inner, decoder) =>
                         tpe(inner, seen)
                         sirTerm(decoder)
                     }
-                    val limits = DataEncoding.limits(annotated)
-                    if limits.all.nonEmpty then atom(limits.toData.toString)
+                    atom(DataEncoding.limits(annotated).toData.toString)
                 }
             case SIRType.Annotated(inner, _) => tpe(inner, seen)
             case SIRType.Fun(in, out)        => node("fun") { tpe(in, seen); tpe(out, seen) }

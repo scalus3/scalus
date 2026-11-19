@@ -102,7 +102,7 @@ private def convertFlatToTree[T <: AnyRef](
         val codedStr = parts.mkString
         report.echo(s"string.length: ${codedStr.length},  nParts: ${parts.size}")
         val path = ctx.settings.outputDir.value.file.nn.toPath.nn
-            .resolve(s"${ctx.compilationUnit.source.file.name}_${span.start}.sir")
+            .resolve(s"${ctx.compilationUnit.source.name}_${span.start}.sir")
             .nn
         import java.nio.file.Files
         Files.createDirectories(path.getParent)

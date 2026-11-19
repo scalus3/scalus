@@ -76,11 +76,29 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
       */
     protected def keptChecksDirectory: Option[Path] = None
 
+    /** How the suite's [[UplcBlaster]] checks map the variables, where a check's tactic does not
+      * say it itself ([[VariableMapping]]): [[VariableMapping.default]], a script context its
+      * statement assumes valid as CardanoLedgerApi's typed one, unless the suite prefers otherwise,
+      * as `VariableMapping.rules`.
+      */
+    protected def variableMapping: VariableMapping = VariableMapping.default
+
+    /** Whether the suite holds the specifications of the functions of its verifier to being checked
+      * ([[LeanProofs.checkSpecifications]]): after its last test, where every test but those tagged
+      * [[Unfinished]] ran and passed, a clause of a function's code that no proof checks, and that
+      * is not declared open, fails the suite. A suite about the verifier itself, whose functions
+      * state clauses to be read and not to be proved, says no.
+      */
+    protected def checksSpecifications: Boolean = true
+
     /** The test that runs: what it checks is said to be its. The tests run one after another, so
       * one variable says it, also to a check the test makes on another thread, which a thread-local
       * one would not.
       */
     @volatile private var running = ""
+
+    /** The tests that passed, and those that are pending, which check nothing and fail nothing. */
+    private val passed = java.util.concurrent.ConcurrentHashMap.newKeySet[String]()
 
     /** The proofs, once a test has asked for them. A suite whose tests ask for none has no
       * workspace made ready, and nothing to close.
@@ -97,7 +115,8 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
               keptResultsFile,
               reason => cancel(reason),
               () => running,
-              keptChecksDirectory
+              keptChecksDirectory,
+              variableMapping
             )
         made = Some(proofs)
         proofs
@@ -110,7 +129,10 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
             try super.withFixture(test)
             finally running = ""
         // A test that passed states all it states: what it no longer does is not kept.
-        if outcome.isSucceeded then made.foreach(_.finished(test.name))
+        if outcome.isSucceeded then
+            passed.add(test.name)
+            made.foreach(_.finished(test.name))
+        else if outcome.isPending then passed.add(test.name)
         outcome
     }
 
@@ -118,11 +140,42 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
     // where the proofs are made: a suite that states its statements as it is constructed makes
     // them before its tests are registered.
     override protected def afterAll(): Unit = {
-        try super.afterAll()
+        try
+            super.afterAll()
+            made.filter(_ => checksSpecifications).foreach { proofs =>
+                val notRun = testsThatDidNotPass
+                if notRun.isEmpty then
+                    val open = proofs.checkSpecifications()
+                    if open.nonEmpty then
+                        println(
+                          (s"${getClass.getSimpleName}: clauses that are open:" ::
+                              open.map(specification => s"  ${specification.describe}"))
+                              .mkString("\n")
+                        )
+                else if proofs.verifier.statesClauses then
+                    println(
+                      s"${getClass.getSimpleName}: the specifications of its functions are not " +
+                          s"checked, as ${notRun.size} of its tests did not run or pass, as " +
+                          s"${notRun.head}"
+                    )
+            }
         finally
             made.foreach { proofs =>
                 proofs.tests(testNames)
                 proofs.close()
             }
     }
+
+    /** The tests of the suite that did not run and pass, but those tagged [[Unfinished]], which a
+      * test run leaves out, and those that are ignored or pending, which check nothing: a run of
+      * some of them, or one with a test that failed or was canceled, does not hold the
+      * specifications to what it checked. An ignored test's statements are not proved, so the
+      * clauses they would check are unchecked, and say so.
+      */
+    private def testsThatDidNotPass: List[String] =
+        testNames.toList.filterNot { name =>
+            val tagged = tags.getOrElse(name, Set.empty)
+            tagged.contains(Unfinished.name) || tagged.contains("org.scalatest.Ignore") ||
+            passed.contains(name)
+        }
 }

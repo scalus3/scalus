@@ -211,6 +211,23 @@ final class KeptResults private (
         }.flatMap(kept)
     }
 
+    /** What was kept by `tactic` under the name `name`, whatever statement, programs and side of
+      * the backend it was kept for: a result of the file, or a former result. It stands for no
+      * result of the statement as it is now, and no refutation of it is restored. What the tactic
+      * came to there is a start for it still ([[Tactic.run]]): a change that every statement of a
+      * file has, as a line every check of a tactic imports, is then no search of each from the
+      * start.
+      */
+    private[verify] def keptUnderName(name: String, tactic: String): Option[Kept] = {
+        lock.synchronized {
+            val stored = read()
+            stored.results
+                .get(name)
+                .filter(_.tactic == tactic)
+                .orElse(stored.former.get(name).filter(_.tactic == tactic))
+        }.flatMap(kept)
+    }
+
     /** Keeps `kept` for the statement `name`, in place of what was kept for it.
       *
       * A tactic's side is said once for the file. Where it is another than the file has, every
@@ -262,14 +279,14 @@ final class KeptResults private (
             def changedOf(entry: Entry): List[String] = {
                 val programs =
                     if entry.programs.sizeIs != fingerprint.programs.size then
-                        List("the number of its tests")
+                        List("number of its tests")
                     else
                         entry.programs.zip(fingerprint.programs).zipWithIndex.collect {
                             case ((was, is), index) if was != is =>
-                                s"the program of test ${index + 1}"
+                                s"program of test ${index + 1}"
                         }
                 val statement =
-                    if entry.statement != fingerprint.statement then List("the statement") else Nil
+                    if entry.statement != fingerprint.statement then List("statement") else Nil
                 statement ++ programs
             }
             stored.results.get(name).filter(_.tactic == tactic) match

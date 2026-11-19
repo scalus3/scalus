@@ -24,23 +24,31 @@ private[verify] object PropMacro {
         binders(body, List(Type.of[A]), "forAll")((idents, inner) => universal(idents, inner))
 
     def forAll2[A: Type, B: Type](body: Expr[(A, B) => Prop | Boolean])(using Quotes): Expr[Prop] =
-        binders(body, List(Type.of[A], Type.of[B]), "forAll")((idents, inner) =>
-            universal(idents, inner)
-        )
+        forAllOf(body, List(Type.of[A], Type.of[B]))
 
     def forAll3[A: Type, B: Type, C: Type](body: Expr[(A, B, C) => Prop | Boolean])(using
         Quotes
-    ): Expr[Prop] =
-        binders(body, List(Type.of[A], Type.of[B], Type.of[C]), "forAll")((idents, inner) =>
-            universal(idents, inner)
-        )
+    ): Expr[Prop] = forAllOf(body, List(Type.of[A], Type.of[B], Type.of[C]))
 
-    def forAllData[A: Type](body: Expr[A => Prop | Boolean], decode: Expr[FromData[A]])(using
-        Quotes
-    ): Expr[Prop] =
-        binders(body, List(Type.of[A]), "forAllData", Some(decode))((idents, inner) =>
-            universal(idents, inner)
-        )
+    def forAll4[A: Type, B: Type, C: Type, D: Type](
+        body: Expr[(A, B, C, D) => Prop | Boolean]
+    )(using Quotes): Expr[Prop] =
+        forAllOf(body, List(Type.of[A], Type.of[B], Type.of[C], Type.of[D]))
+
+    def forAll5[A: Type, B: Type, C: Type, D: Type, E: Type](
+        body: Expr[(A, B, C, D, E) => Prop | Boolean]
+    )(using Quotes): Expr[Prop] =
+        forAllOf(body, List(Type.of[A], Type.of[B], Type.of[C], Type.of[D], Type.of[E]))
+
+    /** A universal quantifier of the variables `body`, a lambda literal, takes, of `types`. */
+    private def forAllOf(body: Expr[Any], types: List[Type[?]])(using Quotes): Expr[Prop] =
+        binders(body, types, "forAll")((idents, inner) => universal(idents, inner))
+
+    /** [[forAll]], written over the `Data` encodings of `A`'s values, which states the same: its
+      * variable is one of `A`, and the `FromData[A]` it is given is not read.
+      */
+    def forAllData[A: Type](body: Expr[A => Prop | Boolean])(using Quotes): Expr[Prop] =
+        binders(body, List(Type.of[A]), "forAllData")((idents, inner) => universal(idents, inner))
 
     /** [[forAllData]] of the values that meet the limits `limit` says ([[limitsOf]]). */
     def forAllDataLimited[A: Type](
@@ -53,6 +61,32 @@ private[verify] object PropMacro {
             universal(idents, inner)
         )
     }
+
+    /** [[Props.limitedData]]: the type of `A`, its decoder, and the limits `limit` says. */
+    def limitedData[A: Type](limit: Expr[A => Boolean], decode: Expr[FromData[A]])(using
+        Quotes
+    ): Expr[LimitedData] = {
+        val limits = limitsOf(limit)
+        '{
+            LimitedData.of(
+              Props.variableType(scalus.compiler.compile((value: A) => value)),
+              Some(scalus.compiler.compile((data: Data) => data.to[A](using $decode))),
+              $limits
+            )
+        }
+    }
+
+    /** [[Props.unlimitedData]]: the type of `A`, without limits, of which the parameter is a
+      * variable of its values, read by no decoder.
+      */
+    def unlimitedData[A: Type](using Quotes): Expr[LimitedData] =
+        '{
+            LimitedData.of(
+              Props.variableType(scalus.compiler.compile((value: A) => value)),
+              None,
+              Limits.none
+            )
+        }
 
     /** The limits that the lambda literal `limit` says of its parameter
       * ([[Props.forAllDataLimited]]): limits on the length of its collections, joined with `&&`.
@@ -312,10 +346,66 @@ private[verify] object PropMacro {
     def dataEncoding[A: Type](using Quotes): Expr[DataEncoding] =
         '{ DataEncoding.of(Props.variableType(scalus.compiler.compile((value: A) => value))) }
 
+    /** The SIR type of `A`, as the compiler has it: that of the variable of a statement. */
+    def sirType[A: Type](using Quotes): Expr[scalus.compiler.sir.SIRType] =
+        '{ Props.variableType(scalus.compiler.compile((value: A) => value)) }
+
     def denotes[A: Type](e: Expr[A])(using Quotes): Expr[Prop] = '{ Prop.Denotes(${ leaf(e) }) }
 
     def equal[A: Type](a: Expr[A], b: Expr[A])(using Quotes): Expr[Prop] =
         '{ Prop.Equal(${ leaf(a) }, ${ leaf(b) }) }
+
+    /** [[Prop.Satisfies]] of `predicate` and `value`: a statement variable itself, as a leaf over
+      * it, or a value without statement variables, whose `Data` is computed where the statement is
+      * built, as a constant. A Lean predicate is of a `Data` the tactic has as a term: a variable
+      * passed as one, or a constant, and not of an expression over variables, which only a program
+      * computes.
+      */
+    def satisfies[A: Type](value: Expr[A], predicate: Expr[LeanPredicate])(using
+        Quotes
+    ): Expr[Prop] = {
+        import quotes.reflect.*
+        rejectCompiledCode()
+        def bare(term: Term): Term = term match
+            case Inlined(_, Nil, inner) => bare(inner)
+            case Typed(inner, _)        => bare(inner)
+            case Block(Nil, inner)      => bare(inner)
+            case other                  => other
+        binderVariables(value.asTerm) match
+            case Nil =>
+                val encode = Expr
+                    .summon[scalus.uplc.builtin.ToData[A]]
+                    .getOrElse(
+                      report.errorAndAbort(
+                        s"no ToData of ${Type.show[A]}, to give Lean the Data of the value",
+                        value.asTerm.pos
+                      )
+                    )
+                '{
+                    Prop.Satisfies(
+                      $predicate,
+                      PropExpr.SIRExpr(
+                        scalus.compiler.sir.SIR.Const(
+                          scalus.uplc.Constant.Data($encode($value)),
+                          scalus.compiler.sir.SIRType.Data.tp,
+                          scalus.compiler.sir.AnnotationsDecl.empty
+                        )
+                      )
+                    )
+                }
+            case List(variable) if bare(value.asTerm) match
+                    case ident: Ident => ident.symbol == variable
+                    case _            => false
+                =>
+                '{ Prop.Satisfies($predicate, ${ leaf(value) }) }
+            case _ =>
+                report.errorAndAbort(
+                  "a Lean predicate, as isValid, is of a statement variable itself, as `ctx` of " +
+                      "`forAllData[ScriptContext](ctx => ...)`, or of a value without statement " +
+                      "variables: Lean has no term of an expression over them",
+                  value.asTerm.pos
+                )
+    }
 
     /** Passes the binders' identifiers and the statement of the lambda literal `body`
       * ([[statementOf]]) to `build`.
@@ -338,37 +428,34 @@ private[verify] object PropMacro {
         )
         val statement = statementOf(rhs, params.map(_.symbol).toSet, kind)
         val idents = params.zip(types).map { (param, tpe) =>
-            val decoder =
-                if kind == "forAllData" then
-                    refuseDataRepresented(List(param), "the variable of forAllData, one already,")
-                    decode
-                else if quantifying.contains(kind) then
-                    encodedDecoder(param, TypeRepr.of(using tpe))
-                else
-                    refuseDataRepresented(List(param), "a call's result, the function's,")
-                    None
-            ident(param.symbol, param.pos, tpe, decoder, limits)
+            if kind == "forAllData" then
+                refuseDataRepresented(List(param), "the variable of forAllData, one already,")
+            else if quantifying.contains(kind) then
+                checkDataRepresented(param, TypeRepr.of(using tpe))
+            else refuseDataRepresented(List(param), "a call's result, the function's,")
+            ident(param.symbol, param.pos, tpe, decode, limits)
         }
         build(idents, statement)
     }
 
     /** The binders whose variables a statement quantifies over, which range over the `Data`
-      * encodings of their values where their parameters are written `A @UplcRepr(Data)`. Another
-      * binder, as a call's result, is given its value.
+      * encodings of their values where their parameters are written `A @UplcRepr(Data)`, as over
+      * the values. Another binder, as a call's result, is given its value.
       */
     private val quantifying = Set("forAll", "exists", "existsLet")
 
-    /** The decoder of the variable that `param` of a quantifier over `binderType` stands for, where
-      * the parameter is written `A @UplcRepr(UplcRepresentation.Data)`: the `FromData[A]` given
-      * here. A parameter's own type, as written, keeps its annotations: the binder's type argument
-      * has lost them by the time the macro runs. `A` is the binder's type: a function's parameter
-      * may be of a wider type, which the variable would range over instead.
+    /** Refuses `param` of a quantifier over `binderType` written
+      * `A @UplcRepr(UplcRepresentation.Data)` where `A` is not the binder's type. Such a variable
+      * ranges over the `Data` encodings of the values of `A`, which states what a variable of `A`
+      * does, and is one. A parameter's own type, as written, keeps its annotations: the binder's
+      * type argument has lost them by the time the macro runs. A function's parameter may be of a
+      * wider type, which the variable would range over instead.
       */
-    private def encodedDecoder(using
+    private def checkDataRepresented(using
         Quotes
-    )(param: quotes.reflect.ValDef, binderType: quotes.reflect.TypeRepr): Option[Expr[Any]] = {
+    )(param: quotes.reflect.ValDef, binderType: quotes.reflect.TypeRepr): Unit = {
         import quotes.reflect.*
-        dataRepresented(param.tpt.tpe).map { underlying =>
+        dataRepresented(param.tpt.tpe).foreach { underlying =>
             if !(underlying =:= binderType) then
                 report.errorAndAbort(
                   s"the parameter is of ${underlying.show}, and the quantifier of " +
@@ -376,17 +463,6 @@ private[verify] object PropMacro {
                       "quantifier's type, so write the parameter's type as it",
                   param.pos
                 )
-            underlying.asType match
-                case '[u] =>
-                    Expr
-                        .summon[FromData[u]]
-                        .getOrElse(
-                          report.errorAndAbort(
-                            s"a variable of ${Type.show[u]} @UplcRepr(Data) is read from its " +
-                                s"Data, which needs a FromData[${Type.show[u]}]",
-                            param.pos
-                          )
-                        )
         }
     }
 
@@ -418,9 +494,8 @@ private[verify] object PropMacro {
     }
 
     /** The identifier of the statement variable a lambda's parameter stands for: over the `Data`
-      * encodings of its values ([[Props.forAllData]]) where it has a `decode`, the `FromData` that
-      * reads them, of the values that meet `limits` where they are given
-      * ([[Props.forAllDataLimited]]).
+      * encodings of its values that meet `limits` where they are given, with `decode`, the
+      * `FromData` that reads them ([[Props.forAllDataLimited]]); otherwise over its values.
       */
     private def ident(using
         Quotes
@@ -442,11 +517,10 @@ private[verify] object PropMacro {
                       Props.variableType(scalus.compiler.compile((value: t) => value))
                     )
                 }
-                decode match
+                decode.zip(limits) match
                     case None => variable
-                    case Some(reader) =>
+                    case Some((reader, limited)) =>
                         val reads = reader.asExprOf[FromData[t]]
-                        val limited = limits.getOrElse('{ Limits.none })
                         '{
                             DataEncoding.encodedVariable(
                               $variable,
@@ -519,7 +593,7 @@ private[verify] object PropMacro {
             case other => report.errorAndAbort(message, other.pos)
     }
 
-    /** `∀ args. expects(args) ==> whenReturns(fn, args)(r => ensures(args)(r))`, or a total `call`
+    /** `∀ args. expects(args) ==>: whenReturns(fn, args)(r => ensures(args)(r))`, or a total `call`
       * in place of `whenReturns` (design doc §3.7), as a [[FunctionContract]].
       *
       * The arguments are the parameters of `expects`, whose types the overload of `Props.contract`
@@ -594,8 +668,8 @@ private[verify] object PropMacro {
                     .asExprOf[Arg]
     }
 
-    /** `∀ args. when(args) ==> succeeds(fn, args)`, or `==> fails(fn, args)`: the function returns,
-      * or fails, on every argument that satisfies `when`. `succeeds` is the total call
+    /** `∀ args. when(args) ==>: succeeds(fn, args)`, or `==>: fails(fn, args)`: the function
+      * returns, or fails, on every argument that satisfies `when`. `succeeds` is the total call
       * `call(fn, args)(_ => true)`, and `fails` is its negation, so this is only syntax over
       * existing statements.
       */
@@ -608,7 +682,8 @@ private[verify] object PropMacro {
         universal(
           params.map { param =>
               val binderType = codeType(param.tpt.tpe)
-              ident(param.symbol, param.pos, binderType.asType, encodedDecoder(param, binderType))
+              checkDataRepresented(param, binderType)
+              ident(param.symbol, param.pos, binderType.asType, None)
           },
           outcome
         )
@@ -632,8 +707,8 @@ private[verify] object PropMacro {
             }
         }
 
-    /** The parameters of the lambda literal `when`, and `when ==> succeeds(fn, parameters)` or
-      * `when ==> fails(fn, parameters)` over them.
+    /** The parameters of the lambda literal `when`, and `when ==>: succeeds(fn, parameters)` or
+      * `when ==>: fails(fn, parameters)` over them.
       */
     private def outcomeWhen[Arg: Type, R: Type](using
         Quotes
@@ -654,7 +729,8 @@ private[verify] object PropMacro {
 
     private val choiceHint =
         "An if or match that chooses between statements is not supported: state each case with " +
-            "==>, as (c ==> p) && (!c ==> q). An if or match over Boolean tests is itself one test."
+            "==>:, as (c ==>: p) && (!c ==>: q). An if or match over Boolean tests is itself " +
+            "one test."
 
     /** Reports every use of `symbols` left in a statement body, where the leaves have already
       * replaced their own uses. A remaining use computes the statement itself.

@@ -53,6 +53,20 @@ object DeBruijn:
 
         process(term, 0)
 
+    /** Converts a term with De Bruijn indices to a term with named variables. Binders get the names
+      * `i0`, `i1`, ... in the order they occur, and a bound variable gets the name of its binder.
+      *
+      * A variable with no binder stays free and keeps its index, so [[Term.α_==]] still compares
+      * it:
+      *   - one with a negative index, as [[deBruijnTerm]] makes, keeps its name;
+      *   - one with index 0, or an index past the enclosing binders, gets the name `free<k>`, where
+      *     `k` is how far past the binders the index points (0 for index 0). Every occurrence of
+      *     the same free variable gets the same name, and no binder `i<n>` captures it.
+      *
+      * An evaluation result can hold such a variable: like Plutus, the ledger scope check does not
+      * look inside `Constr` or `Case`, and discharging a value leaves a free variable as it is
+      * (https://github.com/scalus3/scalus/issues/474).
+      */
     def fromDeBruijnTerm(term: Term): Term =
         var idx = 0
         // Binder names in scope, innermost on top: De Bruijn index i names binders(i - 1).
@@ -60,8 +74,13 @@ object DeBruijn:
 
         def go(term: Term): Term = term match
             case Var(name, ann) =>
-                if name.index < 0 then term // free variable keeps its name
-                else Var(name.copy(name = binders(name.index - 1)), ann) // 1-based index
+                val index = name.index
+                if index > 0 && index <= binders.size then
+                    Var(name.copy(name = binders(index - 1)), ann) // 1-based index
+                else if index < 0 then term // free variable keeps its name
+                else
+                    val k = if index == 0 then 0 else index - binders.size
+                    Var(name.copy(name = "free" + k), ann)
             case LamAbs(_, term, ann) =>
                 val binderName = "i" + idx
                 idx += 1

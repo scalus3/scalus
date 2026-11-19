@@ -1,5 +1,6 @@
 package scalus.compiler.plugin
 
+import java.io.BufferedOutputStream
 import dotty.tools.dotc.*
 import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.ast.tpd.TreeOps
@@ -180,8 +181,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
             if summon[Context].phase != this then
                 prepareForUnit(tree)(using summon[Context].withPhase(this))
             else
-                if debugLevel > 0 then
-                    report.echo(s"Scalus: ${ctx.compilationUnit.source.file.name}")
+                if debugLevel > 0 then report.echo(s"Scalus: ${ctx.compilationUnit.source.name}")
                 val options = SIRCompilerOptions()
                 // val sirLoader = createSirLoader
                 val compiler = new SIRCompiler(options)
@@ -213,7 +213,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
                 else Nil
             case _ => Nil
 
-        val sourcePath = ctx.compilationUnit.source.file.path
+        val sourcePath = ctx.compilationUnit.source.path
         val modules = collect(tree)
         val newEntries = modules.map { sym =>
             val name = sym.fullName.toString
@@ -243,7 +243,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
             catch case _: Exception => Set.empty[String]
 
         val allEntries = (existing ++ newEntries).toSeq.sorted
-        val out = manifestFile.bufferedOutput
+        val out = BufferedOutputStream(manifestFile.output)
         try
             out.write(allEntries.mkString("\n").getBytes("UTF-8"))
             out.write('\n')

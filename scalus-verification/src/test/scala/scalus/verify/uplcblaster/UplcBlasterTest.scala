@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude
 import scalus.cardano.onchain.plutus.prelude.{require, Math}
-import scalus.cardano.onchain.plutus.v1.Value
+import scalus.cardano.onchain.plutus.v1.{PubKeyHash, Value}
 import scalus.compiler.{Compile, UplcRepr, UplcRepresentation}
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRBuiltins, SIRType, TargetLoweringBackend}
 import scalus.compiler.sir.lowering.{PrimitiveRepresentation, ProductCaseClassRepresentation, SumCaseClassRepresentation}
@@ -53,6 +53,7 @@ object BlasterPairs
 @Compile
 object BlasterPairReader {
     val firstOnly: FromData[BlasterPair] = (d: Data) => BlasterPair(Builtins.unIData(d), BigInt(0))
+    val noneOf: FromData[BlasterPairs] = (d: Data) => BlasterPairs(prelude.List.Nil)
 }
 
 /** A variable over the Data encodings of BlasterPair, as an alias. */
@@ -178,9 +179,9 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         assert(!searches(forAll[BigInt](n => n == n)))
         assert(searches(exists[BigInt](n => n == n)))
         assert(searches(!forAll[BigInt](n => n != BigInt(2))))
-        assert(searches(forAll[BigInt](n => n != BigInt(2)) ==> Prop(false)))
+        assert(searches(forAll[BigInt](n => n != BigInt(2)) ==>: Prop(false)))
         assert(!searches(!exists[BigInt](n => n != n)))
-        assert(!searches(exists[BigInt](n => n != n) ==> Prop(false)))
+        assert(!searches(exists[BigInt](n => n != n) ==>: Prop(false)))
         assert(searches(forAll[BigInt](n => n == n) <=> Prop(true)))
         assert(!searches(!(!forAll[BigInt](n => n == n))))
 
@@ -212,7 +213,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
 
     test("proves connectives over separately compiled tests, with each test read by polarity") {
         val implication =
-            forAll[BigInt, BigInt]((x, y) => (x <= y) ==> (Math.min(x, y) == x))
+            forAll[BigInt, BigInt]((x, y) => (x <= y) ==>: (Math.min(x, y) == x))
         assert(lowered(implication, FunctionTable.empty).leaves.size == 2)
         proven(implication, budget = 60)
         proven(
@@ -220,7 +221,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           budget = 60
         )
         proven(
-          forAll[BigInt, BigInt]((x, y) => !Prop(x <= y) ==> (Math.min(x, y) == y)),
+          forAll[BigInt, BigInt]((x, y) => !Prop(x <= y) ==>: (Math.min(x, y) == y)),
           budget = 60
         )
         proven(
@@ -228,7 +229,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           budget = 60
         )
 
-        val wrong = forAll[BigInt, BigInt]((x, y) => (x <= y) ==> (Math.min(x, y) == y))
+        val wrong = forAll[BigInt, BigInt]((x, y) => (x <= y) ==>: (Math.min(x, y) == y))
         // println(s"wrong: $wrong")
         val (x, y, _) = split2(wrong)
         val counterexample = refuted(wrong, budget = 60)
@@ -300,13 +301,13 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         assert(integer(refuted(checked, budget = 80)(x.name)) < 0)
         proven(
           forAll[BigInt](x =>
-              (x < BigInt(0)) ==> !denotes { require(x >= BigInt(0)); x * BigInt(2) }
+              (x < BigInt(0)) ==>: !denotes { require(x >= BigInt(0)); x * BigInt(2) }
           ),
           budget = 80
         )
         proven(
           forAll[BigInt](x =>
-              (x >= BigInt(0)) ==> denotes { require(x >= BigInt(0)); x * BigInt(2) }
+              (x >= BigInt(0)) ==>: denotes { require(x >= BigInt(0)); x * BigInt(2) }
           ),
           budget = 80
         )
@@ -317,9 +318,9 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("denotes in a premise restricts a statement to the inputs where a program returns") {
-        proven(forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x != BigInt(0))), budget = 40)
+        proven(forAll[BigInt](x => denotes(BigInt(10) / x) ==>: (x != BigInt(0))), budget = 40)
 
-        val positive = forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x > BigInt(0)))
+        val positive = forAll[BigInt](x => denotes(BigInt(10) / x) ==>: (x > BigInt(0)))
         val x = positive match
             case Prop.Forall(x, _) => x
             case other             => fail(s"expected a universal proposition, got $other")
@@ -398,7 +399,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
                     UplcBlaster.LeafFormula.Test(1)
                   )
                 ) =>
-            case other => fail(s"expected denotes(div10(x)) ==> call(div10, x), got $other")
+            case other => fail(s"expected denotes(div10(x)) ==>: call(div10, x), got $other")
         proven(partial, 60, div10)
 
         // The total call also claims that div10 returns, which it does not at 0.
@@ -425,14 +426,14 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         proven(forAll[BigInt](x => equal(Builtins.unIData(Builtins.iData(x)), x)), budget = 40)
         proven(
           forAll[Data](d =>
-              denotes(Builtins.unIData(d)) ==> equal(Builtins.iData(Builtins.unIData(d)), d)
+              denotes(Builtins.unIData(d)) ==>: equal(Builtins.iData(Builtins.unIData(d)), d)
           ),
           budget = 60
         )
 
         // negative control: an I value can hold a negative integer
         val nonNegative =
-            forAll[Data](d => denotes(Builtins.unIData(d)) ==> (Builtins.unIData(d) >= BigInt(0)))
+            forAll[Data](d => denotes(Builtins.unIData(d)) ==>: (Builtins.unIData(d) >= BigInt(0)))
         val d = nonNegative match
             case Prop.Forall(d, _) => d
             case other             => fail(s"expected a universal proposition, got $other")
@@ -442,7 +443,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
 
         // A counterexample that nests: a list with an element.
         val empty = forAll[Data](d =>
-            denotes(Builtins.nullList(Builtins.unListData(d))) ==>
+            denotes(Builtins.nullList(Builtins.unListData(d))) ==>:
                 Builtins.nullList(Builtins.unListData(d))
         )
         val list = empty match
@@ -979,7 +980,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             case Right(_) => fail("expected the statement to be refused")
         refused(exists[prelude.List[String]](names => names.isEmpty))
         refused(!forAll[prelude.List[String]](names => names.isEmpty))
-        refused(forAll[prelude.List[String]](names => names.isEmpty) ==> Prop(true))
+        refused(forAll[prelude.List[String]](names => names.isEmpty) ==>: Prop(true))
         refused(forAll[prelude.List[String]](names => names.isEmpty) <=> Prop(true))
         // Where it stands for every value it is a variable.
         assert(
@@ -1055,70 +1056,131 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         )
     }
 
-    test("forAllData quantifies over the Data encodings of a type's values") {
-        // One Lean variable, a Data, restricted to the encodings of a BlasterPair: the programs
-        // read it as `d.to[BlasterPair]`.
+    test("forAllData states what forAll does, and is checked as forAll is") {
+        // The statement forAll builds, whatever FromData it is given, which is not read: a
+        // BlasterPair is two integers by fields.
         val commutes = forAllData[BlasterPair](p => p.a + p.b == p.b + p.a)
+        val plain = forAll[BlasterPair](p => p.a + p.b == p.b + p.a)
+        assert(PropIdentity.of(commutes) == PropIdentity.of(plain))
+        val firstOnly =
+            forAllData[BlasterPair](p => p.a + p.b == p.b + p.a)(using BlasterPairReader.firstOnly)
+        assert(PropIdentity.of(firstOnly) == PropIdentity.of(plain))
+        // So is a variable marked as over the encodings without limits, as no macro builds one: it
+        // is the statement of its values, as the tactic checks it.
+        plain match
+            case Prop.Forall(variable, body) =>
+                val decoder = SIR.Const(Constant.Unit, SIRType.Unit, AnnotationsDecl.empty)
+                val marked = Prop.Forall(DataEncoding.encodedVariable(variable, decoder), body)
+                assert(PropIdentity.of(marked) == PropIdentity.of(plain))
+            case other => fail(s"expected a forAll, got $other")
         val lowering = lowered(commutes, FunctionTable.empty)
-        assert(lowering.binders.size == 1, lowering.binders)
-        assert(lowering.predicates.head.exists(_.contains("Data.Constr")), lowering.predicates)
+        assert(lowering.binders.size == 2, lowering.binders)
+        assert(lowering.programHashes == lowered(plain, FunctionTable.empty).programHashes)
         proven(commutes, 300)
-        // negative control: a counterexample is the encoding of a BlasterPair
+        // negative control: the counterexample is the pair's fields, by their names
         val values = refuted(forAllData[BlasterPair](p => p.a == p.b), 300)
-        values.values.toList match
+        assert(values.keySet.map(PropIdentity.written) == Set("p.a", "p.b"), values)
+    }
+
+    test("a variable as one Data at its root is decoded in each test, under its premise") {
+        // Under a fixed plan, a BlasterPair is one Lean Data, restricted to the encodings of a
+        // BlasterPair, as a large class is (rule 3): the programs decode it.
+        val commutes = forAll[BlasterPair](p => p.a + p.b == p.b + p.a)
+        val asData = UplcBlaster
+            .lower(commutes, FunctionTable.empty, MappingPlan.Fixed.asData("p"))
+            .fold(reason => fail(reason), identity)
+        assert(asData.binders.size == 1, asData.binders)
+        assert(asData.predicates.head.exists(_.contains("Data.Constr")), asData.predicates)
+        // The decoder is the compiler's own reading of the type's representation, the one the
+        // premise is derived from.
+        assert(
+          DataEncoding
+              .encoded(asData.binders.head.tp)
+              .exists(_._2.pretty.render(100).contains("UniversalDataConversion$.fromData")),
+          asData.binders.head.tp.show
+        )
+        checkedAsData(verifier.statement(commutes), Budget.LeanSteps(300), "p") match
+            case VerificationResult.Proven(_) => ()
+            case other                        => fail(s"expected a proof, got $other")
+        // negative control: a counterexample is the encoding of a BlasterPair
+        refutedWith(
+          checkedAsData(
+            verifier.refute(forAll[BlasterPair](p => p.a == p.b)),
+            Budget.LeanSteps(300),
+            "p"
+          )
+        ) match
             case List(Constant.Data(data)) =>
                 assert(DataEncoding.of[BlasterPair].outside(data).isEmpty, data)
             case other => fail(s"expected one Data value, got $other")
         // A variable the statement does not read: whatever value Lean gives, or leaves out, the
         // counterexample is one of the type.
-        refuted(forAllData[BlasterPair](_ => false), 100).values.toList match
+        refutedWith(
+          checkedAsData(
+            verifier.refute(forAll[BlasterPair](p => false)),
+            Budget.LeanSteps(100),
+            "p"
+          )
+        ) match
             case List(Constant.Data(data)) =>
                 assert(DataEncoding.of[BlasterPair].outside(data).isEmpty, data)
             case other => fail(s"expected one Data value, got $other")
         // A type that contains itself, whose premise is a recursive predicate: exact, so the
         // variable is one also where it asks for a witness.
-        proven(
-          forAllData[BlasterTree](tree =>
-              tree match
-                  case BlasterTree.Leaf       => true
-                  case BlasterTree.Node(_, _) => true
-          ),
-          300
+        val isATree = forAll[BlasterTree](tree =>
+            tree match
+                case BlasterTree.Leaf       => true
+                case BlasterTree.Node(_, _) => true
         )
-        assert(UplcBlaster.lower(!forAllData[BlasterTree](_ => true), FunctionTable.empty).isRight)
-        // The decoder is `d.to[A]`, which the compiler compiles to its own reading of the type's
-        // representation, the one the premise is derived from, whatever FromData is given.
-        val decoder = lowered(
-          forAllData[BlasterPair](p => p.a == p.a)(using BlasterPairReader.firstOnly),
+        checkedAsData(verifier.statement(isATree), Budget.LeanSteps(300), "tree") match
+            case VerificationResult.Proven(_) => ()
+            case other                        => fail(s"expected a proof, got $other")
+        assert(
+          UplcBlaster
+              .lower(
+                !forAll[BlasterTree](tree => true),
+                FunctionTable.empty,
+                MappingPlan.Fixed.asData("tree")
+              )
+              .isRight
+        )
+        // A variable with limits is one Data too, read by `d.to[A]`, which the compiler compiles
+        // to its own reading of the type's representation, the one the premise is derived from,
+        // whatever FromData is given.
+        val limited = lowered(
+          forAllDataLimited[BlasterPairs](ps => ps.entries.length <= 1)(ps =>
+              ps.entries.isEmpty || !ps.entries.isEmpty
+          )(using BlasterPairReader.noneOf),
           FunctionTable.empty
-        ).binders.head.tp
+        )
+        assert(limited.binders.size == 1, limited.binders)
         assert(
           DataEncoding
-              .encoded(decoder)
+              .encoded(limited.binders.head.tp)
               .exists(_._2.pretty.render(100).contains("UniversalDataConversion$.fromData")),
-          decoder.show
+          limited.binders.head.tp.show
         )
     }
 
     test("a parameter of a type annotated @UplcRepr(Data) is a variable of forAllData") {
-        // In a forAll of several variables, the annotated one is the Data, and the other as before.
+        // In a forAll of several variables, the annotated one is mapped as forAll maps it, by
+        // fields here, and the other as before.
         val annotated = forAll((p: BlasterPair @UplcRepr(UplcRepresentation.Data), n: BigInt) =>
             p.a + n == n + p.a
         )
         val lowering = lowered(annotated, FunctionTable.empty)
-        val plain = lowered(forAllData[BlasterPair](p => p.a == p.a), FunctionTable.empty)
-        assert(lowering.binders.size == 2, lowering.binders)
-        assert(lowering.predicates == plain.predicates :+ None, lowering.predicates)
+        val plain = lowered(
+          forAll[BlasterPair, BigInt]((p, n) => p.a + n == n + p.a),
+          FunctionTable.empty
+        )
+        assert(lowering.binders.size == 3, lowering.binders)
+        assert(lowering.predicates == plain.predicates, lowering.predicates)
+        assert(lowering.programHashes == plain.programHashes)
         proven(annotated, 300)
-        // In an exists: the predicate of a BlasterPair is exact, so a value Lean finds is one. Z3
-        // does not find one through the predicate (it answers unknown); existsLet gives it.
-        assert(
-          UplcBlaster
-              .lower(
-                exists((p: BlasterPair @UplcRepr(UplcRepresentation.Data)) => p.a == BigInt(1)),
-                FunctionTable.empty
-              )
-              .isRight
+        // In an exists, by fields too: Lean finds the witness over its integers.
+        proven(
+          exists((p: BlasterPair @UplcRepr(UplcRepresentation.Data)) => p.a == BigInt(1)),
+          300
         )
         proven(
           existsLet(BlasterPair(1, 2))((p: BlasterPair @UplcRepr(UplcRepresentation.Data)) =>
@@ -1126,17 +1188,21 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           ),
           300
         )
-        // A type whose encoding is not exact, as one with a string, is a variable only where it
-        // stands for every value.
-        UplcBlaster.lower(
-          exists((_: PlanNamed @UplcRepr(UplcRepresentation.Data)) => true),
+        // A type whose encoding is not exact, as one with a string, is by fields where they are
+        // exact: so it is a variable also where it asks for a witness, which as Data it could not
+        // be.
+        val named = lowered(
+          exists((n: PlanNamed @UplcRepr(UplcRepresentation.Data)) => true),
           FunctionTable.empty
-        ) match
-            case Left(reason) => assert(reason.contains("forAllData variable"), reason)
-            case Right(_)     => fail("expected the statement to be refused")
+        )
+        assert(named.plan.nodes.map(_.mapping) == List(MappingPlan.Mapping.ByFields))
+        assert(named.binders.map(_.tp) == List(SIRType.String, SIRType.Integer), named.binders)
         // Through an alias, as written.
         val aliased = lowered(forAll((p: BlasterPairData) => p.a == p.a), FunctionTable.empty)
-        assert(aliased.predicates == plain.predicates, aliased.predicates)
+        assert(
+          aliased.programHashes ==
+              lowered(forAll[BlasterPair](p => p.a == p.a), FunctionTable.empty).programHashes
+        )
         // In returnsWhen of several parameters, whose call passes them as a tuple.
         proven(
           returnsWhen(shift)((p: BlasterPair @UplcRepr(UplcRepresentation.Data), n: BigInt) =>
@@ -1257,6 +1323,20 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             case other => fail(s"expected the owner's Data and an integer, got $other")
     }
 
+    test("rule 3: a variable of more Lean variables by fields than the most is one Data") {
+        // A PlanWide is 21 integers by fields, more than the most: the tactic's own plan maps it
+        // as one Data variable, under the premise of its encoding, which the test decodes.
+        val commutes = forAll[PlanWide](w => w.a0 + w.a20 == w.a20 + w.a0)
+        assert(lowered(commutes, FunctionTable.empty).binders.size == 1)
+        provenAt(commutes)
+        // negative control: the counterexample is the encoding of a PlanWide, replayed on the
+        // Scalus CEK.
+        refuted(forAll[PlanWide](w => w.a0 <= w.a20), Budget.Auto).values.toList match
+            case List(Constant.Data(wide)) =>
+                assert(DataEncoding.of[PlanWide].outside(wide).isEmpty, wide)
+            case other => fail(s"expected the Data of a PlanWide, got $other")
+    }
+
     test("a type that contains itself is a forAll variable, Data where it repeats") {
         // The root by fields, an integer for its constructor, and the subtrees of a Node as Data
         // (rule 1). The test decodes the left one and matches on it, which fails on a Data that
@@ -1360,12 +1440,14 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     test("states that an expression fails, whatever its type") {
         // A builtin that fails: unBData of an I value, for every x.
         proven(forAll[BigInt](x => fails(Builtins.unBData(Builtins.iData(x)))), budget = 60)
-        proven(forAll[BigInt](x => (x == BigInt(0)) ==> fails(BigInt(10) / x)), budget = 40)
+        proven(forAll[BigInt](x => (x == BigInt(0)) ==>: fails(BigInt(10) / x)), budget = 40)
         proven(
-          forAll[BigInt](x => (x < BigInt(0)) ==> fails { require(x >= BigInt(0)); x * BigInt(2) }),
+          forAll[BigInt](x =>
+              (x < BigInt(0)) ==>: fails { require(x >= BigInt(0)); x * BigInt(2) }
+          ),
           budget = 80
         )
-        proven(forAll[BigInt](x => (x != BigInt(0)) ==> succeeds(BigInt(10) / x)), budget = 40)
+        proven(forAll[BigInt](x => (x != BigInt(0)) ==>: succeeds(BigInt(10) / x)), budget = 40)
         // A comparison returns a Boolean on every input: it never fails.
         refuted(forAll[BigInt](x => fails(x > BigInt(0))), budget = 40)
     }
@@ -1465,7 +1547,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         )
         proven(
           forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-              (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+              (lo <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
           ),
           120,
           clamp
@@ -1541,15 +1623,16 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("Blaster's error comes back in the failed result") {
-        // For `e >= 0`, `exp2` reaches the bitwise builtins, whose `ByteString` is built on
-        // `BitVec`, which Blaster cannot translate (README, Limitations). When it can, this test
-        // needs another statement Blaster rejects.
+        // For `e >= 0`, `exp2` reaches the bitwise builtins (README, Limitations), and Blaster
+        // stops at the recursor of `Nat.log2` in them: the Lean-blaster pinned before (6c27ff9)
+        // stopped at their `BitVec`. When it translates them, this test needs another statement
+        // Blaster rejects.
         val exp2 = FunctionDef(Math.exp2)
         check(forAll[BigInt](e => callRef(exp2.ref, e)(r => r >= BigInt(0))), 120, Seq(exp2)) match
             case (verifier, _, VerificationResult.Failed(reason)) =>
                 assert(reason.startsWith("Lean reported an error: "), reason)
-                assert(reason.contains("Inductive datatype with instance parameters"), reason)
-                assert(reason.contains("not supported: `BitVec"), reason)
+                assert(reason.contains("translateApp: unexpected application"), reason)
+                assert(reason.contains("Nat.rec"), reason)
                 assert(!reason.contains("Successfully decoded"), reason)
                 assert(verifier.theorems.isEmpty)
             case (_, _, other) => fail(s"expected a failed result, got $other")
@@ -1676,31 +1759,59 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         // Values the premise is false of. It is seen to be false after 300 steps, and that is
         // enough, though the program runs for 12000: its budget is the oversized one.
         val accepted = Vector(Run(300, End.Returned(Some(false))), Run(12000, End.Returned(None)))
-        assert(UplcBlaster.needed(rejects, accepted, above = 100).contains(300))
+        assert(
+          UplcBlaster.needed(rejects, accepted, above = 100, verdicts = Map.empty).contains(300)
+        )
 
         // Values the premise is true of: the statement holds once the program has failed.
         val rejected = Vector(Run(300, End.Returned(Some(true))), Run(1610, End.Failed))
-        assert(UplcBlaster.needed(rejects, rejected, above = 300).contains(1610))
-        assert(!UplcBlaster.holdsWithin(rejects, rejected, 1609, positive = true))
-        assert(UplcBlaster.holdsWithin(rejects, rejected, 1610, positive = true))
+        assert(
+          UplcBlaster.needed(rejects, rejected, above = 300, verdicts = Map.empty).contains(1610)
+        )
+        assert(
+          !UplcBlaster.holdsWithin(rejects, rejected, 1609, positive = true, verdicts = Map.empty)
+        )
+        assert(
+          UplcBlaster.holdsWithin(rejects, rejected, 1610, positive = true, verdicts = Map.empty)
+        )
         // Under a smaller budget the premise, not ended, counts as holding, and the program, not
         // ended, as not having failed.
-        assert(!UplcBlaster.holdsWithin(rejects, rejected, 100, positive = true))
+        assert(
+          !UplcBlaster.holdsWithin(rejects, rejected, 100, positive = true, verdicts = Map.empty)
+        )
 
         // A program that has not ended within what is counted gives no budget.
         val endless = Vector(Run(300, End.Returned(Some(true))), Run(100000, End.Running))
-        assert(UplcBlaster.needed(rejects, endless, above = 300).isEmpty)
+        assert(UplcBlaster.needed(rejects, endless, above = 300, verdicts = Map.empty).isEmpty)
 
         // A test that is claimed has to return `true` within the budget.
         val returns = LeafFormula.Test(0)
         def one(end: End): Vector[Run] = Vector(Run(57, end))
-        assert(UplcBlaster.needed(returns, one(End.Returned(Some(true))), above = 10).contains(57))
-        assert(UplcBlaster.needed(returns, one(End.Returned(Some(false))), above = 10).isEmpty)
-        assert(UplcBlaster.needed(returns, one(End.Returned(Some(true))), above = 57).isEmpty)
+        assert(
+          UplcBlaster
+              .needed(returns, one(End.Returned(Some(true))), above = 10, verdicts = Map.empty)
+              .contains(57)
+        )
+        assert(
+          UplcBlaster
+              .needed(returns, one(End.Returned(Some(false))), above = 10, verdicts = Map.empty)
+              .isEmpty
+        )
+        assert(
+          UplcBlaster
+              .needed(returns, one(End.Returned(Some(true))), above = 57, verdicts = Map.empty)
+              .isEmpty
+        )
         // `denotes` asks only that the program returns.
         val denoted = LeafFormula.Denotes(0)
-        assert(UplcBlaster.needed(denoted, one(End.Returned(None)), above = 10).contains(57))
-        assert(UplcBlaster.needed(denoted, one(End.Failed), above = 10).isEmpty)
+        assert(
+          UplcBlaster
+              .needed(denoted, one(End.Returned(None)), above = 10, verdicts = Map.empty)
+              .contains(57)
+        )
+        assert(
+          UplcBlaster.needed(denoted, one(End.Failed), above = 10, verdicts = Map.empty).isEmpty
+        )
     }
 
     test("a counterexample goes back to Lean as the terms it is made of") {
@@ -1739,6 +1850,19 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
               "Const.Data (Data.Constr 1180591620717411303424 [(Data.I (-2)), " +
               "(Data.B (ByteString.mk \"\")), " +
               "(Data.List [(Data.I 3)]), (Data.Map [((Data.I 1), (Data.I 2))])])"
+        )
+        // Values read with a renaming of the solver's characters are written as Lean's own, each
+        // renamed byte the character again, in a byte string and in a Data's.
+        val renaming = SmtValues.Renaming(Map(0x100 -> 0xfe, 0x10000 -> 0xff), Map.empty)
+        val renamed = ByteString.fromArray(Array[Byte](0x41, -2, -1))
+        val above = Character.toString(0x10000)
+        assert(
+          UplcBlaster.leanValue(Constant.ByteString(renamed), renaming) ==
+              "Const.ByteString (ByteString.mk \"\\x41\\u0100" + above + "\")"
+        )
+        assert(
+          UplcBlaster.leanValue(Constant.Data(Data.B(renamed)), renaming) ==
+              "Const.Data (Data.B (ByteString.mk \"\\x41\\u0100" + above + "\"))"
         )
 
         // The count of a test's program takes the values of the variables in its scope.
@@ -1811,12 +1935,15 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         finally Directories.remove(directory)
     }
 
-    test("a case split that Blaster writes ill-typed is repaired, so the kernel takes it") {
-        // Blaster's optimizer rewrites a branch's binder apart from the condition: `¬ true = b` to
+    test("a case split as Blaster writes it is taken by the kernel, and so is it repaired") {
+        // Blaster's optimizer rewrote a branch's binder apart from the condition: `¬ true = b` to
         // `false = b`, and `¬ (¬ p ∧ ¬ q)` to `p ∨ q`, where `dite'` asks for `¬ c`
-        // (Lean-blaster#154). The kernel rejects such a run, which `#prep_uplc_run` would then
-        // keep as written, for `#blaster` to expand again. The two terms are Blaster's own tests',
-        // as the issue gives them. Where Blaster writes them well typed, the repair is not needed.
+        // (Lean-blaster#154). The kernel rejected such a run, which `#prep_uplc_run` would then
+        // keep as written, for `#blaster` to expand again; `repairedDite` gives it the binders
+        // `dite'` asks for. The two terms are Blaster's own tests', as the issue gives them. The
+        // Lean-blaster pinned before (6c27ff9) wrote both ill-typed. The one pinned now (a069197)
+        // writes them well typed, though the issue is open: the repair changes nothing the kernel
+        // rejects, and is kept for a case split Blaster still writes so.
         val text =
             """import ScalusProofs.Run
               |
@@ -1851,7 +1978,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
                 for name <- List("bool", "deMorgan") do
                     assert(
                       said.contains(
-                        s"$name: written rejected, repaired accepted, mismatched false"
+                        s"$name: written accepted, repaired accepted, mismatched false"
                       ),
                       said
                     )
@@ -1895,16 +2022,42 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         assert(negative.exists((name, value) => name.endsWith(".amount") && integer(value) < 0))
     }
 
+    test("a counterexample outside its variable's type is counted, and can need every budget") {
+        // Lean does not check the order of the keys of a map keyed by a case class, nor does the
+        // tactic, so Lean's variable has maps whose keys are out of order, which no SortedMap is.
+        // `get` stops at a greater key: on such a map it misses the second key, and the statement,
+        // true of every SortedMap, is false there on the Scalus CEK. That refutes it only if the
+        // map is a SortedMap, which the tactic cannot tell, and no budget proves it. The search
+        // counts the counterexamples before it, which may be no SortedMap either, instead of
+        // doubling the budget, and stops there.
+        val secondIsFound = forAll[prelude.SortedMap[PubKeyHash, BigInt]](m =>
+            m.toList match
+                case prelude.List.Cons(_, prelude.List.Cons(second, _)) =>
+                    m.get(second._1).isDefined
+                case _ => true
+        )
+        val searched = inconclusive(secondIsFound, UplcBlaster(Budget.Auto, lean, 3.minutes))
+        assert(searched.contains("no value of its variable's type"), searched)
+        assert(searched.contains("no budget proves it"), searched)
+        assert(searched.contains("only if it is a value of the type"), searched)
+        assert(!searched.contains(UplcBlaster.maxDoubledBudget.toString), searched)
+        // At a given budget, the count says so too.
+        val atGiven = inconclusive(secondIsFound, 400, 2.minutes)
+        assert(atGiven.contains("no budget proves it"), atGiven)
+    }
+
     test("what a result rests on is hashed part by part, without Lean and without the budget") {
         val goal = lowered(forAll[BigInt](x => x + BigInt(0) == x), FunctionTable.empty)
         val fingerprint = UplcBlaster.fingerprint(goal, leanWorkspace)
         assert(fingerprint == UplcBlaster.fingerprint(goal, leanWorkspace))
-        // Lean's side: its toolchain, the packages the workspace clones, and Scalus's library.
+        // Lean's side: its toolchain, the packages the workspace clones, CardanoLedgerApi among
+        // them for the ledger's rules, and Scalus's library.
         assert(
           fingerprint.environment.keySet == Set(
             "toolchain",
             "Blaster",
             "PlutusCore",
+            "CardanoLedgerApi",
             "ScalusProofs"
           )
         )
@@ -2005,7 +2158,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             ) match
                 case VerificationResult.Inconclusive(reason) =>
                     assert(reason.startsWith(KeptResults.stale), reason)
-                    assert(reason.contains("the program of test 1"), reason)
+                    assert(reason.contains("program of test 1"), reason)
                 case other => fail(s"expected a stale statement, got $other")
 
             // A run that recalculates asks Lean, and comes to the same.

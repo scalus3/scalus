@@ -121,6 +121,75 @@ enum DataEncoding {
                 }
                 .nextOption()
 
+    /** `data`, made a `Data` encoded so with as little changed as can be: a `Data` of a type that
+      * has more values in Lean than in Scala, as a script context of CardanoLedgerApi's type, made
+      * one of the Scala type's. What a program that reads a value by position reads is kept: the
+      * fields of a case class whatever its tag, the first ones where it has more and examples where
+      * it has fewer, and those of an enum's constructor by a tag it has. A part of no other shape
+      * is replaced by an [[example]] of it. A map whose keys are not in the order its encoding asks
+      * is replaced whole, by the empty map; one whose order the encoding does not check is left as
+      * it is. None where a part cannot be made so, under an `Unknown` encoding, or where `data` is
+      * deeper than `depth`.
+      */
+    private[verify] def repaired(data: Data, depth: Int = 1000): Option[Data] =
+        repairedIn(data, Map.empty, depth)
+
+    private def repairedIn(
+        data: Data,
+        bound: Map[String, DataEncoding],
+        depth: Int
+    ): Option[Data] = {
+        def all(pairs: List[(DataEncoding, Data)]): Option[List[Data]] =
+            pairs.foldRight[Option[List[Data]]](Some(Nil)) { case ((encoding, value), rest) =>
+                for repaired <- encoding.repairedIn(value, bound, depth - 1); others <- rest
+                yield repaired :: others
+            }
+        if depth <= 0 then None
+        else
+            (this, data) match
+                case (recursive @ Recursive(name, body), _) =>
+                    body.repairedIn(data, bound + (name -> recursive), depth)
+                case (Again(name), _) =>
+                    bound.get(name).flatMap(_.repairedIn(data, bound, depth))
+                case (Unknown(_), _)                                           => None
+                case (AnyData, _)                                              => Some(data)
+                case (Integer, Data.I(_)) | (Bytes, Data.B(_))                 => Some(data)
+                case (Text, Data.B(bytes)) if DataEncoding.isUtf8(bytes.bytes) => Some(data)
+                case (Bool, Data.Constr(tag, fields)) if (tag == 0 || tag == 1) && fields.isEmpty =>
+                    Some(data)
+                case (Constr(constructors), Data.Constr(tag, fields))
+                    if constructors.size == 1 || (tag >= 0 && tag < constructors.size) =>
+                    val index = if constructors.size == 1 then 0 else tag.toInt
+                    val values = fields.toScalaList
+                    val read = constructors(index).zipWithIndex.foldRight[Option[List[Data]]](
+                      Some(Nil)
+                    ) { case ((field, at), rest) =>
+                        val value = values.lift(at) match
+                            case Some(present) => field.repairedIn(present, bound, depth - 1)
+                            case None          => field.exampleIn(bound)
+                        for v <- value; others <- rest yield v :: others
+                    }
+                    read.map(repaired => Data.Constr(index, PList.from(repaired)))
+                case (Bool, Data.Constr(tag, _)) if tag == 0 || tag == 1 =>
+                    Some(Data.Constr(tag, PList.Nil))
+                case (Items(items), Data.List(values)) =>
+                    all(values.toScalaList.map(items -> _)).map(xs => Data.List(PList.from(xs)))
+                case (Entries(keys, values, order), Data.Map(entries)) =>
+                    val pairs = entries.toScalaList
+                    for
+                        repairedKeys <- all(pairs.map((key, _) => keys -> key))
+                        repairedValues <- all(pairs.map((_, value) => values -> value))
+                    yield
+                        // An order the encoding cannot check it leaves as it is.
+                        val ordered = order match
+                            case DataEncoding.KeyOrder.Any | DataEncoding.KeyOrder.Unchecked =>
+                                true
+                            case _ => DataEncoding.orderOutside(order, repairedKeys).isEmpty
+                        if ordered then Data.Map(PList.from(repairedKeys.zip(repairedValues)))
+                        else Data.Map(PList.Nil)
+                case _ => exampleIn(bound)
+    }
+
     /** Why `data` is not encoded so, or `None` where it is. A `Data` this cannot tell, under an
       * `Unknown` encoding, is not encoded so.
       *
@@ -323,17 +392,28 @@ object DataEncoding {
 
     /** The Lean definitions that [[DataEncoding.leanPredicate]] uses, each on one line. They name
       * PlutusCore's `Data` as `Data`.
+      *
+      * That the keys of a map ascend is checked with the previous key as an argument, on the tail
+      * of each entry. Written as recursion on a sublist bound by an as-pattern,
+      * `(Data.B a, _) :: tail@((Data.B b, _) :: _) => … tail`, Lean-blaster does not return on it
+      * from `1fe209e` on (Lean-blaster#463).
       */
     val leanDefinitions: String = List(
       "def scalusIsI : Data → Bool | Data.I _ => true | _ => false",
       "def scalusIsB : Data → Bool | Data.B _ => true | _ => false",
       "def scalusIsBool : Data → Bool | Data.Constr t [] => t == 0 || t == 1 | _ => false",
-      "def scalusAscendingBytes : List (Data × Data) → Bool | [] => true | [(Data.B _, _)] => true " +
-          "| (Data.B a, _) :: tail@((Data.B b, _) :: _) => decide (a < b) && " +
-          "scalusAscendingBytes tail | _ => false",
+      "def scalusAscendingBytesFrom (previous : PlutusCore.ByteString.ByteString) : " +
+          "List (Data × Data) → Bool " +
+          "| [] => true | (Data.B b, _) :: rest => decide (previous < b) && " +
+          "scalusAscendingBytesFrom b rest | _ => false",
+      "def scalusAscendingBytes : List (Data × Data) → Bool | [] => true " +
+          "| (Data.B a, _) :: rest => scalusAscendingBytesFrom a rest | _ => false",
+      "def scalusAscendingIntegersFrom (previous : PlutusCore.Integer.Integer) : " +
+          "List (Data × Data) → Bool " +
+          "| [] => true | (Data.I b, _) :: rest => decide (previous < b) && " +
+          "scalusAscendingIntegersFrom b rest | _ => false",
       "def scalusAscendingIntegers : List (Data × Data) → Bool | [] => true " +
-          "| [(Data.I _, _)] => true | (Data.I a, _) :: tail@((Data.I b, _) :: _) => " +
-          "decide (a < b) && scalusAscendingIntegers tail | _ => false"
+          "| (Data.I a, _) :: rest => scalusAscendingIntegersFrom a rest | _ => false"
     ).mkString("\n\n")
 
     /** The Lean predicate on the entries of a map, a `List (Data × Data)`. */
@@ -408,7 +488,7 @@ object DataEncoding {
 
     /** Why `keys`, the keys of a map in their order, are not in `order`, or `None` where they are.
       */
-    private def orderOutside(order: KeyOrder, keys: List[Data]): Option[String] = {
+    private[verify] def orderOutside(order: KeyOrder, keys: List[Data]): Option[String] = {
         def ascending(less: (Data, Data) => Option[Boolean]) =
             keys.sliding(2).collectFirst {
                 case List(a, b) if !less(a, b).contains(true) =>

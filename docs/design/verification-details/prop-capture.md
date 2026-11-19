@@ -40,7 +40,7 @@ The compiler inlines from the inside out: dotty's `Inlining` phase transforms a 
 before it inlines the call. In
 
 ```scala
-forAll[BigInt](x => Prop(x > 0) ==> call(Math.abs, x)(r => r == x))
+forAll[BigInt](x => Prop(x > 0) ==>: call(Math.abs, x)(r => r == x))
 ```
 
 the macros of `Prop(...)` and `call(...)` expand first, while `x` and `r` are still parameters of
@@ -105,7 +105,7 @@ does three things:
    - **Both**, an `if` or `match` with a statement in one branch and a Boolean in another: a
      compile error.
 
-A Boolean operand of a connective, as in `(lo <= hi) ==> call(...)`, becomes a test through the
+A Boolean operand of a connective, as in `(lo <= hi) ==>: call(...)`, becomes a test through the
 implicit conversion `booleanToProp`. `Prop(b)` is only needed to make a Boolean a separate test
 on purpose: `!Prop(t)` holds when `t` fails, while a Boolean body `!t` is one test that fails with
 it.
@@ -131,8 +131,8 @@ statement moves. Nothing stores them yet; a proof cache keyed on a statement's c
   expanded, a statement body should not use its parameter. A use that remains is at the `Prop`
   level, as in `forAll[Boolean](flag => if flag then p else q)` with statements `p` and `q`. There
   the shape of the statement depends on the variable's value, which is outside the fragment
-  (overview §4.1). The error message suggests stating the cases with `==>`, as
-  `(flag ==> p) && (!flag ==> q)`, and points out that an `if` over Boolean tests is one test.
+  (overview §4.1). The error message suggests stating the cases with `==>:`, as
+  `(flag ==>: p) && (!flag ==>: q)`, and points out that an `if` over Boolean tests is one test.
 - **A body that is a statement in one branch and a Boolean in another.** Its type is
   `Prop | Boolean`, and it is neither one test nor a statement.
 - **A binder's lambda inside an inline expansion with bindings.** When an `inline def` with
@@ -153,7 +153,7 @@ statement moves. Nothing stores them yet; a proof cache keyed on a statement's c
 lambda literals, `expects = (x, lo, hi) => …` and `ensures = (x, lo, hi) => r => …`, and build
 
 ```
-∀ x lo hi. expects ==> whenReturns(f, (x, lo, hi))(r => ensures)
+∀ x lo hi. expects ==>: whenReturns(f, (x, lo, hi))(r => ensures)
 ```
 
 with a total `call` for `totalContract`. The quantified variables are the parameters of
@@ -174,7 +174,7 @@ precondition and the list of guarantees. Its statement, `prop`, is derived from 
 has to take a contract's statement apart again.
 
 `contract.returnsWhen(args => c)` and `contract.failsWhen(args => c)` add a guarantee,
-`c ==> succeeds(f, args)` or `c ==> fails(f, args)`, written over the clause's own variables.
+`c ==>: succeeds(f, args)` or `c ==>: fails(f, args)`, written over the clause's own variables.
 `Contract.withClause` renames them after the contract's, at runtime, for the same reason as
 above. The two are extensions in `FunctionContract`'s companion, so they need no import.
 

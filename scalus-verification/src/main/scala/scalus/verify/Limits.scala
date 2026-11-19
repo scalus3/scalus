@@ -6,6 +6,42 @@ import scalus.uplc.builtin.{ByteString, Data}
 
 import java.nio.charset.StandardCharsets
 
+/** A function's parameter in the statements a verifier makes of the function
+  * ([[Verifier.guarantees]], [[Verifier.obligations]]), over the `Data` encodings of the values of
+  * its type that meet `limits`, as a [[Props.forAllDataLimited]] variable: made with
+  * [[Props.limitedData]]. Without limits, made with [[Props.unlimitedData]], it is a
+  * [[Props.forAllData]] variable, which a tactic checks as a [[Props.forAll]] one.
+  *
+  * @param tp
+  *   the type of the values, which is the parameter's
+  * @param decoder
+  *   the compiled `(d: Data) => d.to[A]` that reads the values, where there are limits: none
+  *   without them, where the parameter is a variable of its values
+  * @param limits
+  *   the limits the values meet, none for every value
+  */
+final class LimitedData private[verify] (
+    private[verify] val tp: SIRType,
+    private[verify] val decoder: Option[scalus.compiler.sir.SIR],
+    private[verify] val limits: Limits
+) {
+    require(
+      decoder.isDefined == limits.all.nonEmpty,
+      "a parameter has a decoder where it has limits, and none where it has none"
+    )
+}
+
+object LimitedData {
+
+    /** [[Props.limitedData]]'s value: an inline method cannot call the private constructor. */
+    private[verify] def of(
+        tp: SIRType,
+        decoder: Option[scalus.compiler.sir.SIR],
+        limits: Limits
+    ): LimitedData =
+        new LimitedData(tp, decoder, limits)
+}
+
 /** A step from a value to a part of it, in the path of a [[Limit]]. */
 enum Step {
 
@@ -50,6 +86,18 @@ enum Limit {
   * }}}
   */
 final case class Limits(all: List[Limit]) {
+
+    /** The limits as they read, as `txInfo.inputs has at most 2 elements`, joined with `and`. */
+    def describe: String =
+        all.map {
+            case Limit.MaxCollectionLength(max) => s"every collection has at most $max elements"
+            case Limit.Length(path, min, None) =>
+                s"${Limits.show(path)} has at least $min elements"
+            case Limit.Length(path, 0, Some(max)) =>
+                s"${Limits.show(path)} has at most $max elements"
+            case Limit.Length(path, min, Some(max)) =>
+                s"${Limits.show(path)} has from $min to $max elements"
+        }.mkString(" and ")
 
     /** These limits and `other`'s. */
     def and(other: Limits): Limits = Limits(all ++ other.all)

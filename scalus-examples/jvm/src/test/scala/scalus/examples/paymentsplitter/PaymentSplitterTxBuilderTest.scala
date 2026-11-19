@@ -12,6 +12,8 @@ import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.testing.kit.{Party, ScalusTest, TestUtil}
 import scalus.utils.await
 
+import scala.util.control.NonFatal
+
 class PaymentSplitterTxBuilderTest
     extends AnyFunSuite
     with ScalusTest
@@ -142,7 +144,7 @@ class PaymentSplitterTxBuilderTest
                   s"Script logs: ${e.scriptLogs.getOrElse(Seq.empty).mkString("\n")}"
                 )
                 throw e
-            case e: Throwable =>
+            case NonFatal(e) =>
                 System.err.println(s"=== OTHER ERROR: ${e.getClass.getName} ===")
                 System.err.println(s"Message: ${e.getMessage}")
                 throw e

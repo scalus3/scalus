@@ -20,7 +20,7 @@ class LeanExporterTest extends AnyFunSuite {
     }
 
     test("exports logical proposition nodes") {
-        val prop = Prop(true) ==> (!Prop(false) || Prop(true))
+        val prop = Prop(true) ==>: (!Prop(false) || Prop(true))
         assert(
           LeanExporter(prop) ==
               "((true = true) → ((¬ (false = true)) ∨ (true = true)))"

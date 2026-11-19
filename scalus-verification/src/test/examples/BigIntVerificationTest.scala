@@ -39,7 +39,7 @@ class BigIntVerificationTest extends AnyFunSuite with LeanProofsSuite {
     /** A negative control, declared with `refute`: it must be refuted. */
     private val doublingRecoversANonnegativeInput = verifier.refute(
       "half.doubling_recovers_a_nonnegative_input",
-      forAll[BigInt](x => (x >= 0) ==> (half(x) * 2 == x))
+      forAll[BigInt](x => (x >= 0) ==>: (half(x) * 2 == x))
     )
 
     private val neverNegative =

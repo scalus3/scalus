@@ -1,5 +1,6 @@
 package scalus.compiler.plugin
 
+import java.io.BufferedOutputStream
 import dotty.tools.dotc.*
 import dotty.tools.dotc.ast.Trees.*
 import dotty.tools.dotc.ast.tpd
@@ -768,7 +769,7 @@ final class SIRCompiler(
         verifyModuleRoundtrip(module, enc.buffer, className)
         // open the file only after encoding and the self-check succeeded, so a failure
         // cannot leak the stream or leave a truncated .sir for downstream units to link
-        val output = dir.fileNamed(filename + suffix).bufferedOutput
+        val output = BufferedOutputStream(dir.fileNamed(filename + suffix).output)
         try output.write(enc.buffer)
         finally output.close()
     }
@@ -1853,7 +1854,7 @@ final class SIRCompiler(
                 val body = compileExpr(env, x)
                 CompileMemberDefResult.Compiled(
                   LocalBinding(
-                    s"__${stmt.source.file.name.takeWhile(_.isLetterOrDigit)}_line_${stmt.srcPos.line}",
+                    s"__${stmt.source.name.takeWhile(_.isLetterOrDigit)}_line_${stmt.srcPos.line}",
                     body.tp,
                     NoSymbol,
                     isModuleDef,
