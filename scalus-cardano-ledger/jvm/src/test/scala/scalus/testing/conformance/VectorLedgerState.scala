@@ -574,6 +574,10 @@ object ConwayProtocolParamsFixtures:
 
     /** Resolve Conway's current pparams field in `pparams-by-hash`. States without a Conway
       * GovState retain the version-based search.
+      *
+      * Throws when the fixtures cannot give the current pparams: a Conway state names a hash that
+      * `pparams-by-hash` lacks, or the version-based search finds several hashes at the highest
+      * version. A case must not run with the defaults or the previous pparams instead.
       */
     def extractPparamsHash(oldLedgerStateHex: String, pparamsDir: Path): Option[String] = {
         import scala.jdk.CollectionConverters.*
@@ -604,7 +608,12 @@ object ConwayProtocolParamsFixtures:
             case Some(gov) =>
                 gov(3) match
                     case hash: ByteArrayElem =>
-                        Some(Hex.bytesToHex(hash.bytes)).filter(hashes.contains)
+                        val current = Hex.bytesToHex(hash.bytes)
+                        if hashes.contains(current) then Some(current)
+                        else
+                            throw IllegalStateException(
+                              s"the current pparams $current are not in pparams-by-hash"
+                            )
                     case _ => None
             case None => legacyPparamsHash(oldLedgerStateHex, hashes, majorVersion)
     }
@@ -621,9 +630,15 @@ object ConwayProtocolParamsFixtures:
         val hashesWithVersion = matchingHashes.flatMap { hash =>
             majorVersion(hash).map(version => (hash, version))
         }
+        if hashesWithVersion.isEmpty then return None
 
-        hashesWithVersion
-            .sortBy(-_._2)
-            .headOption
-            .map(_._1)
+        // A tie would leave the choice to the order of Files.list, which differs between file
+        // systems: the bug that the Conway path above removes.
+        val highest = hashesWithVersion.map(_._2).max
+        hashesWithVersion.filter(_._2 == highest).map(_._1) match
+            case List(hash) => Some(hash)
+            case tied =>
+                throw IllegalStateException(
+                  s"pparams ${tied.sorted.mkString(", ")} tie at protocol version $highest"
+                )
     }

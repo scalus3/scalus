@@ -48,12 +48,11 @@ class ConwayProtocolParamsFixturesTest extends AnyFunSuite {
         )
     }
 
-    test("a missing current hash does not select the previous pparams") {
-        assert(
-          ConwayProtocolParamsFixtures
-              .selectPparamsHash(conway, List(previous), _ => Some(10))
-              .isEmpty
+    test("a missing current hash fails instead of selecting the previous pparams") {
+        val error = intercept[IllegalStateException](
+          ConwayProtocolParamsFixtures.selectPparamsHash(conway, List(previous), _ => Some(10))
         )
+        assert(error.getMessage.contains(current))
     }
 
     test("states without a Conway GovState retain the highest-version search") {
@@ -66,6 +65,19 @@ class ConwayProtocolParamsFixturesTest extends AnyFunSuite {
           ) == Some(current)
         )
     }
+
+    for (hashes, order) <- List(
+          (List(previous, current), "previous first"),
+          (List(current, previous), "current first")
+        )
+    do
+        test(s"states without a Conway GovState fail on a version tie, $order") {
+            val older = ledger(array("5820" + current, "5820" + previous))
+            val error = intercept[IllegalStateException](
+              ConwayProtocolParamsFixtures.selectPparamsHash(older, hashes, _ => Some(10))
+            )
+            assert(error.getMessage.contains("tie at protocol version 10"))
+        }
 
     test("the current hash of the SPO security-parameter vector resolves in the fixtures") {
         val name = "Conway.Imp.ConwayImpSpec - Version 10.RATIFY.Voting." +
