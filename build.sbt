@@ -231,6 +231,57 @@ def excludeFromTest(tag: String): Seq[Def.Setting[?]] = Seq(
   Test / testQuick / testOptions += Tests.Argument("-l", tag)
 )
 
+/** The JVM jsoniter-scala-core for a Scala Native project's compiler.
+  *
+  * A macro runs inside the compiler, on the JVM, against the jars of the platform being compiled.
+  * jsoniter's Scala Native jar reads its buffer through Native pointer intrinsics, which throw
+  * `UndefinedBehaviorError` on a JVM, so a macro that parses JSON (the CardanoInfo macro) cannot
+  * run it. The JVM jar sits in a hidden configuration, which is not published, and comes first on
+  * the compile and test classpaths: the compiler and the macros load its classes, and the Native
+  * linker, which reads only `.nir` files, still links the Native jar. The Native code type-checks
+  * against the JVM jar, so the two must have the same version; the build fails when they differ.
+  *
+  * Scala.js needs no such jar today: the Scala.js jsoniter jar's read path uses no Scala.js
+  * runtime, so its classes run on the compiler's JVM. A jsoniter release that changes that would
+  * need the same treatment for `scalusJS`.
+  */
+lazy val MacroJvm = config("macro-jvm").hide
+
+def jvmJsoniterForMacros: Seq[Def.Setting[?]] = {
+    val organization = "com.github.plokhotnyuk.jsoniter-scala"
+    def jvmFirst(configuration: Configuration): Def.Setting[?] =
+        configuration / dependencyClasspath := {
+            val rest = (configuration / dependencyClasspath).value
+            val report = update.value
+            val jvmJars = Classpaths.managedJars(MacroJvm, classpathTypes.value, report)
+            def revision(conf: Configuration, name: String => Boolean): Option[String] =
+                report
+                    .configuration(conf)
+                    .toSeq
+                    .flatMap(_.modules)
+                    .map(_.module)
+                    .find(m => m.organization == organization && name(m.name))
+                    .map(_.revision)
+            val jvm = revision(MacroJvm, _ == "jsoniter-scala-core_3")
+            val native = revision(configuration, _.startsWith("jsoniter-scala-core_native"))
+            if (jvmJars.isEmpty || jvm.isEmpty)
+                sys.error("the JVM jsoniter-scala-core for the macros is not resolved")
+            if (jvm != native)
+                sys.error(
+                  s"jsoniter-scala-core differs: JVM ${jvm.getOrElse("-")} for the macros, " +
+                      s"Native ${native.getOrElse("-")} for the code"
+                )
+            jvmJars ++ rest
+        }
+    Seq(
+      ivyConfigurations += MacroJvm,
+      libraryDependencies += (organization %% "jsoniter-scala-core" % jsoniterScalaVersion % MacroJvm)
+          .intransitive(),
+      jvmFirst(Compile),
+      jvmFirst(Test)
+    )
+}
+
 lazy val jsModuleSettings: Seq[Def.Setting[?]] = Seq(
   scalaJSUseMainModuleInitializer := false,
   // withMinify is the Scala.js-native replacement for the now-deprecated Closure
@@ -562,6 +613,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Compile / doc / sources := Seq.empty,
       Test / doc / sources := Seq.empty,
     )
+    .nativeSettings(jvmJsoniterForMacros *)
     .nativeSettings(
       // Native tracks the same versions as JVM/JS. A new Scala version needs Scala Native's
       // `nscplugin_<version>` and `scala3lib_native0.5_3:<version>+<native version>` on Maven
