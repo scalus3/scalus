@@ -32,6 +32,22 @@ class CapeMetadataTest extends AnyFunSuite {
         assert(!json("compilation_config").obj.contains("min_plutus_version"))
     }
 
+    test("flags name the options the contracts compile with") {
+        assert(
+          json("compilation_config")("flags").arr.map(_.str).toList == scala.List(
+            "Options.releaseUntagged"
+          )
+        )
+    }
+
+    test("compiler commit is the version tag only when the build runs at that tag") {
+        val tag = "a" * 40
+        val later = "b" * 40
+        assert(CapeMetadata.compilerCommit(head = tag, versionTag = Some(tag)) == tag)
+        assert(CapeMetadata.compilerCommit(head = later, versionTag = Some(tag)) == later)
+        assert(CapeMetadata.compilerCommit(head = later, versionTag = None) == later)
+    }
+
     test("registry covers all 8 scenarios with unique names") {
         val names = CapeScenarios.all.map(_.name)
         assert(

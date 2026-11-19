@@ -25,11 +25,11 @@ import scala.util.Try
     val version = args.lift(1).getOrElse(BuildInfo.version)
     val commit = "git rev-parse HEAD".!!.trim
     require(commit.matches("^[a-f0-9]{40}$"), s"bad git commit: $commit")
-    // The compiler is the release tagged `v<version>` when that tag exists; the scenario sources
-    // may live in a later commit.
-    val compilerCommit = Try(
-      Seq("git", "rev-list", "-n", "1", s"v$version").!!(ProcessLogger(_ => ())).trim
-    ).getOrElse(commit)
+    val versionTag =
+        Try(
+          Seq("git", "rev-list", "-n", "1", s"v$version").!!(ProcessLogger(_ => ())).trim
+        ).toOption
+    val compilerCommit = CapeMetadata.compilerCommit(commit, versionTag)
     val date = Instant.now().toString
 
     for s <- CapeScenarios.all do {
@@ -80,7 +80,7 @@ private def readme(s: CapeScenario, version: String, commit: String): String = {
        |
        |- **Compiler**: Scalus $version
        |- **Implementation Approach**: ${s.readmeApproach}
-       |- **Compilation Flags**: `Options.release`
+       |- **Compilation Flags**: `${CapeMetadata.CompilationFlags}`
        |
        |## Performance Results
        |
@@ -117,7 +117,7 @@ private def readme(s: CapeScenario, version: String, commit: String): String = {
        |### Compilation Configuration
        |
        |- **Optimization Level**: release
-       |- **Compilation Flags**: `Options.release`
+       |- **Compilation Flags**: `${CapeMetadata.CompilationFlags}`
        |- **Notable Configuration**: Targets Plutus V3, protocol version 11 (vanRossem), plutus-core 1.1.0. No traces.
        |
        |## Notes

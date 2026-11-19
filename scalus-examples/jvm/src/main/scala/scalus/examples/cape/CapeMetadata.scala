@@ -8,6 +8,16 @@ package scalus.examples.cape
 object CapeMetadata {
     val SourceRepository = "https://github.com/scalus3/scalus"
 
+    /** The `Options` every CAPE contract compiles with: release, without the Scalus tag. */
+    val CompilationFlags = "Options.releaseUntagged"
+
+    /** The commit of the compiler that compiled the submission. The `v<version>` tag names it only
+      * when the build runs at that tag; a later checkout compiles with its own plugin and
+      * optimizer, so the checkout's own commit is recorded.
+      */
+    def compilerCommit(head: String, versionTag: Option[String]): String =
+        versionTag.filter(_ == head).getOrElse(head)
+
     def render(
         version: String,
         compilerCommit: String,
@@ -18,8 +28,8 @@ object CapeMetadata {
         val compilationConfig = ujson.Obj(
           "optimization_level" -> "release",
           "target" -> "uplc",
-          "flags" -> ujson.Arr("Options.release"),
-          // Options.release targets van Rossem: every scenario uses builtin casing or batch-6
+          "flags" -> ujson.Arr(CompilationFlags),
+          // The release options target van Rossem: every scenario uses builtin casing or batch-6
           // builtins, which need protocol version 11.
           "min_protocol_version" -> 11
         )

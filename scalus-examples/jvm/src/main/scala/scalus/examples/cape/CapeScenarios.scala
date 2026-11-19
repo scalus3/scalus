@@ -27,7 +27,7 @@ case class CapeScenario(
 /** Registry of all Scalus CAPE benchmark submissions. */
 object CapeScenarios {
     private val compiledNote =
-        "Compiled from Scala 3 with the Scalus compiler plugin, Options.release " +
+        "Compiled from Scala 3 with the Scalus compiler plugin, Options.releaseUntagged " +
             "(PV11/vanRossem target: flexible case, batch-6 builtins), no traces."
 
     val all: List[CapeScenario] = List(
