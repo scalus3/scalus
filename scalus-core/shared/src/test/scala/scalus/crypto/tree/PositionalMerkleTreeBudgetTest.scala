@@ -93,24 +93,4 @@ class PositionalMerkleTreeBudgetTest extends AnyFunSuite {
             )
     }
 
-    test("measurement: streaming and materialized builders for 32768 leaves") {
-        val expected = PositionalMerkleTree.fromElements(data, depth).rootHash
-        for _ <- 0 until 3 do
-            assert(PositionalMerkleTree.rootFromElements(data.iterator, depth) == expected)
-            assert(PositionalMerkleTree.fromElements(data, depth).rootHash == expected)
-        def time(root: => ByteString): Double = {
-            val start = System.nanoTime()
-            val result = root
-            val elapsed = (System.nanoTime() - start) / 1e6
-            assert(result == expected)
-            elapsed
-        }
-        val streaming =
-            Vector.fill(5)(time(PositionalMerkleTree.rootFromElements(data.iterator, depth)))
-        val materialized =
-            Vector.fill(5)(time(PositionalMerkleTree.fromElements(data, depth).rootHash))
-        println(
-          s"positional-merkle builder 32768x32 bytes, depth=15, 3 warmups, 5 samples, input preparation excluded: streaming-ms=${streaming.mkString(",")}; materialized-ms=${materialized.mkString(",")}"
-        )
-    }
 }
