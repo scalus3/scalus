@@ -45,64 +45,6 @@ class PositionalMerkleTreeRegressionTest extends AnyFunSuite {
     private def single(t: PositionalMerkleTree, element: ByteString, position: Int): Single =
         Single(t.rootHash, BigInt(t.depth), BigInt(position), element, t.proveMembership(position))
 
-    private def accepts(input: Single, expected: ByteString): Unit = {
-        assert(
-          OnChain.delete(
-            input.root,
-            input.depth,
-            input.position,
-            input.element,
-            input.proof
-          ) == expected
-        )
-        assert(returned(singleResult(input)) == expected)
-        OnChain.verifyMembership(
-          input.root,
-          input.depth,
-          input.position,
-          input.element,
-          input.proof
-        )
-        returnedUnit(membershipResult(input))
-    }
-
-    private def accepts(input: Multi, expected: ByteString): Unit = {
-        assert(
-          OnChain.deleteMany(input.root, input.depth, input.leaves, input.proof) == expected
-        )
-        assert(returned(multiResult(input)) == expected)
-    }
-
-    private def rejects(input: Single): Unit = {
-        intercept[RequirementError](
-          OnChain.delete(
-            input.root,
-            input.depth,
-            input.position,
-            input.element,
-            input.proof
-          )
-        )
-        intercept[RequirementError](
-          OnChain.verifyMembership(
-            input.root,
-            input.depth,
-            input.position,
-            input.element,
-            input.proof
-          )
-        )
-        assert(singleResult(input).isFailure)
-        assert(membershipResult(input).isFailure)
-    }
-
-    private def rejects(input: Multi): Unit = {
-        intercept[RequirementError](
-          OnChain.deleteMany(input.root, input.depth, input.leaves, input.proof)
-        )
-        assert(multiResult(input).isFailure)
-    }
-
     private def zeros(
         depth: Int,
         hash: ByteString => ByteString = blake2b_256

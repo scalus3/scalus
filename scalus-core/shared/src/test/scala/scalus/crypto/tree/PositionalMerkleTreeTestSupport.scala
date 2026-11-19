@@ -2,6 +2,8 @@ package scalus.crypto.tree
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, JsonValueCodec}
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+import org.scalatest.Assertions
+import scalus.cardano.onchain.RequirementError
 import scalus.cardano.onchain.plutus.crypto.tree.PositionalMerkleTree as OnChain
 import scalus.cardano.onchain.plutus.prelude.List as SList
 import scalus.compiler.Options
@@ -191,6 +193,47 @@ object PositionalMerkleTreeTestSupport {
 
     def evaluate(program: Program, input: Data): Result =
         (program.term $ input.asTerm).evaluateDebug
+
+    def scalaSingle(input: Single): ByteString =
+        OnChain.delete(input.root, input.depth, input.position, input.element, input.proof)
+    def scalaMembership(input: Single): Unit =
+        OnChain.verifyMembership(
+          input.root,
+          input.depth,
+          input.position,
+          input.element,
+          input.proof
+        )
+    def scalaMulti(input: Multi): ByteString =
+        OnChain.deleteMany(input.root, input.depth, input.leaves, input.proof)
+
+    /** `delete` returns `expected` and `verifyMembership` accepts, in Scala and compiled UPLC. */
+    def accepts(input: Single, expected: ByteString): Unit = {
+        Assertions.assert(scalaSingle(input) == expected)
+        Assertions.assert(returned(singleResult(input)) == expected)
+        scalaMembership(input)
+        returnedUnit(membershipResult(input))
+    }
+
+    /** `deleteMany` returns `expected`, in Scala and compiled UPLC. */
+    def accepts(input: Multi, expected: ByteString): Unit = {
+        Assertions.assert(scalaMulti(input) == expected)
+        Assertions.assert(returned(multiResult(input)) == expected)
+    }
+
+    /** `delete` and `verifyMembership` both fail, in Scala and compiled UPLC. */
+    def rejects(input: Single): Unit = {
+        Assertions.intercept[RequirementError](scalaSingle(input))
+        Assertions.intercept[RequirementError](scalaMembership(input))
+        Assertions.assert(singleResult(input).isFailure)
+        Assertions.assert(membershipResult(input).isFailure)
+    }
+
+    /** `deleteMany` fails, in Scala and compiled UPLC. */
+    def rejects(input: Multi): Unit = {
+        Assertions.intercept[RequirementError](scalaMulti(input))
+        Assertions.assert(multiResult(input).isFailure)
+    }
 
     def singleResult(input: Single): Result = evaluate(singleProgram, input.toData)
     def membershipResult(input: Single): Result = evaluate(membershipProgram, input.toData)

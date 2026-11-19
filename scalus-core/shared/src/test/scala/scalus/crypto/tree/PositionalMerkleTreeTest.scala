@@ -99,12 +99,18 @@ class PositionalMerkleTreeTest extends AnyFunSuite with ScalaCheckPropertyChecks
             val capacity = 1 << depth
             forAll(Gen.choose(1, capacity), Gen.listOfN(capacity, Gen.choose(0, 4))) {
                 (count, values) =>
-                    val data =
-                        values.take(count).map(i => ByteString.fromString(s"duplicate-$i")).toVector
-                    val positions = data.indices.filter(i => values(i) % 2 == 0).toVector match
-                        case empty if empty.isEmpty => Vector(0)
-                        case selected               => selected
-                    compare(data, depth, positions)
+                    // Shrink[Int] and Shrink[List] ignore the generators' bounds; keep shrunk
+                    // inputs in the generated domain so a failure is reported as itself.
+                    whenever(count >= 1 && count <= capacity && values.size == capacity) {
+                        val data = values
+                            .take(count)
+                            .map(i => ByteString.fromString(s"duplicate-$i"))
+                            .toVector
+                        val positions = data.indices.filter(i => values(i) % 2 == 0).toVector match
+                            case empty if empty.isEmpty => Vector(0)
+                            case selected               => selected
+                        compare(data, depth, positions)
+                    }
             }
         }
 

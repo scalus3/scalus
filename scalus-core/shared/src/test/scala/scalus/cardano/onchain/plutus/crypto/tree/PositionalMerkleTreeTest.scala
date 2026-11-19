@@ -14,24 +14,6 @@ import scalus.uplc.builtin.Data.toData
 class PositionalMerkleTreeTest extends AnyFunSuite {
     import PositionalMerkleTree.*
 
-    private def scalaSingle(input: Single): ByteString =
-        delete(input.root, input.depth, input.position, input.element, input.proof)
-    private def scalaMembership(input: Single): Unit =
-        verifyMembership(input.root, input.depth, input.position, input.element, input.proof)
-    private def scalaMulti(input: Multi): ByteString =
-        deleteMany(input.root, input.depth, input.leaves, input.proof)
-
-    private def rejects(input: Single): Unit = {
-        intercept[RequirementError](scalaSingle(input))
-        intercept[RequirementError](scalaMembership(input))
-        assert(singleResult(input).isFailure)
-        assert(membershipResult(input).isFailure)
-    }
-    private def rejects(input: Multi): Unit = {
-        intercept[RequirementError](scalaMulti(input))
-        assert(multiResult(input).isFailure)
-    }
-
     private val data = Vector.tabulate(16)(uniqueElement)
     private lazy val tree = OffChain.fromElements(data, 4)
     private def single(position: Int): Single =
