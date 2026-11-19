@@ -479,6 +479,11 @@ object Macros {
       * constructs the ProtocolParams directly. This avoids embedding the JSON string in the
       * compiled artifacts, significantly reducing bundle size for JS targets.
       *
+      * It parses with jsoniter inside the compiler. When the caller compiles for Scala Native, its
+      * compile classpath must carry the JVM jsoniter-scala-core before the Native one, as
+      * `jvmJsoniterForMacros` in this repository's `build.sbt` arranges; jsoniter's Native jar
+      * throws `UndefinedBehaviorError` on the compiler's JVM.
+      *
       * @param name
       *   quoted resource filename (e.g., "blockfrost-params-epoch-544.json")
       * @return

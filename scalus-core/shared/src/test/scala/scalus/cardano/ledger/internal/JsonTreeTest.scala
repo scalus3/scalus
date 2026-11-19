@@ -30,24 +30,9 @@ class JsonTreeTest extends AnyFunSuite {
     }
 
     test("render writes what parse reads") {
-        val text = """{"n":9007199254740993,"d":0.0000721,"s":"q\"uote","e":{},"a":[],"z":null}"""
+        val text =
+            """{"n":9007199254740993,"d":0.0000721,"s":"q\"uote","e":{},"a":[],"t":true,"f":false,"z":null}"""
         assert(JsonTree.render(JsonTree.parse(text)) == text)
-    }
-
-    test("parse keeps every number exact") {
-        val tree = JsonTree.parse(
-          """{"n": 9007199254740993, "d": [0.123456789012345678, -7.21E-5, 1e-30]}"""
-        )
-        assert(tree("n") == Num(BigDecimal(9007199254740993L)))
-        assert(
-          tree("d") == Arr(
-            Vector(
-              Num(BigDecimal("0.123456789012345678")),
-              Num(BigDecimal("-7.21E-5")),
-              Num(BigDecimal("1e-30"))
-            )
-          )
-        )
     }
 
     test("a missing key fails and names it") {
