@@ -1,0 +1,205 @@
+---
+title: Positional Merkle Tree — Commit to a List, Settle Each Entry Once
+sidebarTitle: Positional Merkle Tree
+description: Positional Merkle Tree in Scalus for Cardano smart contracts. A fixed-depth binary tree addressed by position, with single proofs, SSZ multiproofs and on-chain deletion — for payout lists where each entry is settled once.
+---
+
+# Positional Merkle Tree
+
+A fixed-depth binary tree whose leaves are addressed by position. A proof shows that an element sits at a given position. `delete` checks that proof and returns the root with the slot set to 32 zero bytes, so the same slot cannot be proved again.
+
+**Best for:** A list fixed when the tree is built, whose entries are each settled once — treasury payouts, vesting tranches, claims by index. A treasury commits to its payout outputs, pays them in any order, and keeps only the root and the depth in its datum.
+
+Unlike the [Merkle Tree](/docs/advanced-data-structures/merkle-tree), the position is part of what is proved: equal elements at different positions are separate leaves, and each is settled on its own.
+
+## How It Works
+
+The tree has `2^D` slots for a depth `D` chosen when it is built. The elements fill the slots from position 0; the rest of the slots are unused.
+
+```
+Depth 3: positions 0–5 hold elements, 6–7 are unused.
+lᵢ = H(elementᵢ),  Z = NullHash (32 zero bytes),  parent = H(left|right)
+
+                     root
+              ┌───────┴───────┐
+              A               B
+          ┌───┴───┐       ┌───┴───┐
+          C       D       E       F
+        ┌─┴─┐   ┌─┴─┐   ┌─┴─┐   ┌─┴─┐
+        l₀  l₁  l₂  l₃  l₄  l₅  Z   Z
+ pos:   0   1   2   3   4   5   6   7
+
+Proof for position 2:  l₃, C, B      (sibling hashes, bottom-up)
+Bits of 2, lowest first:  0, 1, 0  →  current hash is left, right, left
+
+verifyMembership:  D  = H(l₂|l₃),  A  = H(C|D),   H(A|B)  must equal root
+delete:            D' = H(Z|l₃),   A' = H(C|D'),  root' = H(A'|B) is returned
+```
+
+- **Leaf:** `blake2b_256(element)`. The application chooses how to serialize an element; the library adds no framing.
+- **Unused or deleted slot:** `NullHash`, 32 zero bytes. An element whose hash equals `NullHash` is refused.
+- **Parent:** `blake2b_256(left ++ right)`, with no domain tags and no length mixed into the root.
+- **Proof:** exactly `32 × D` bytes, the sibling at the leaf level first. There are no direction bytes: bit `i` of the position says whether the current hash is the left (0) or the right (1) child at level `i`.
+
+`delete` walks the path once and carries two hashes: one starts at the element's leaf, the other at `NullHash`. It checks the first against the root it was given and returns the second.
+
+### Multiproofs
+
+A multiproof proves several positions with one set of helper hashes, sharing the parts of their paths that overlap. Nodes are numbered by generalized index: the root is 1, node `g` has children `2g` and `2g + 1`, and position `p` is `2^D + p`. The helpers are the siblings of all the paths that are not on a path themselves, sorted by descending generalized index; the proof is their 32-byte hashes concatenated.
+
+```
+Positions 0, 1, 5 in the tree above (generalized indices 8, 9, 13):
+
+  C = H(l₀|l₁)     both children are selected: no helper
+  A = H(C|D)       helper D  (index 5)
+  E = H(l₄|l₅)     helper l₄ (index 12)
+  B = H(E|F)       helper F  (index 7)
+  root = H(A|B)
+
+Proof = l₄ ++ F ++ D    (indices 12, 7, 5)
+```
+
+A one-position multiproof is byte for byte the single proof, and selecting every slot needs no helpers. `deleteMany` takes the positions with their elements as a list of `PositionalMerkleTree.Leaf` and returns the root with all of them deleted.
+
+Parsing is strict: the positions must be nonempty and strictly ascending, every helper must be consumed, and missing, extra or trailing bytes fail.
+
+### Wire format
+
+For clients that build proofs and redeemers outside Scala:
+
+- **Element:** the bytes are hashed as given, with no framing. Serialize each element the same way when building the tree and when checking it on chain; two encodings of one output are two different leaves.
+- **Single proof:** `32 × D` bytes, sibling hashes from the leaf level up.
+- **Multiproof:** helper hashes concatenated in descending generalized index, read at fixed 32-byte offsets. There are no length fields, flags or indices in the proof.
+- **`deleteMany` query:** a Scalus prelude `List[PositionalMerkleTree.Leaf]`, sent as Plutus Data: a list of `Constr(0, [I(position), B(element)])`, positions strictly ascending.
+
+## Cost
+
+- **Membership:** D + 1 blake2b calls
+- **Delete:** 2D + 1 blake2b calls — the old and the new root in one walk
+- **Proof size:** 32 × D bytes; a multiproof needs fewer helpers when positions are close together
+
+At depth 15 (32,768 slots) with 32-byte elements, one `delete` costs **37,310,510 CPU steps and 126,062 memory units**, with a 480-byte proof. `PositionalMerkleTreeBudgetTest` measures this with `Options.release`, the mainnet Plutus V3 cost model and Scala 3.3.9. It pins the single `delete` and the two `k = 32` multiproof budgets, and prints the rest of the table below.
+
+For a batch of `k` payouts, the table compares `k` single `delete` calls, each against the previous call's root, with one `deleteMany` against the original root. Contiguous positions are `0..k-1`; scattered positions are `(i × 7919) mod 32768` for `0 ≤ i < k`, sorted. Proof bytes exclude the positions, the elements and the `Data` framing.
+
+| Positions | k | Single proofs (bytes) | Sequential CPU | Sequential memory | Multiproof (bytes) | Multiproof CPU | Multiproof memory |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Contiguous | 2 | 960 | 75,317,650 | 256,468 | 448 | 103,768,002 | 404,287 |
+| Contiguous | 4 | 1,920 | 149,063,620 | 505,940 | 416 | 116,679,790 | 445,823 |
+| Contiguous | 8 | 3,840 | 296,587,560 | 1,005,084 | 384 | 147,525,940 | 547,183 |
+| Contiguous | 16 | 7,680 | 591,699,440 | 2,003,772 | 352 | 214,240,806 | 768,191 |
+| Contiguous | 32 | 15,360 | 1,182,051,200 | 4,001,948 | 320 | 352,693,096 | 1,228,495 |
+| Scattered | 2 | 960 | 75,477,650 | 257,468 | 832 | 173,375,398 | 647,693 |
+| Scattered | 4 | 1,920 | 149,495,620 | 508,640 | 1,632 | 333,683,666 | 1,207,827 |
+| Scattered | 8 | 3,840 | 297,419,560 | 1,010,284 | 2,880 | 584,122,192 | 2,088,607 |
+| Scattered | 16 | 7,680 | 593,059,440 | 2,012,272 | 5,312 | 1,064,718,582 | 3,787,246 |
+| Scattered | 32 | 15,360 | 1,184,451,200 | 4,016,948 | 10,144 | 2,036,896,154 | 7,206,951 |
+
+A multiproof is smaller in every batch. It also costs less CPU and memory for contiguous positions from `k = 4`, but more for scattered ones, so choose by whichever limit is tighter: transaction size or execution budget. Each figure includes decoding the measured program's input from Plutus `Data`, but not the rest of a transaction's budget.
+
+Off-chain, computing the root of a 32,768-slot tree with `rootFromElements` took 32–37 ms on one shared Ryzen 9 7950X3D limited to eight logical CPUs (Java 25, after JIT warm-up). Materializing the tree does the same hashing and also keeps the nodes. These times are illustrative.
+
+## Limitations
+
+- **Delete only** — the slots are filled when the tree is built off-chain; there is no on-chain insert or update
+- **Membership only** — no non-membership proofs; an unused or deleted slot cannot be proved
+- **Fixed depth** — capacity is 2^D, chosen at construction. The materialized off-chain tree stores only the nodes over its occupied slots, about 2n hashes for n elements, and supports depths up to 29; `rootFromElements` computes only the root, in O(D) memory, up to depth 256, the same limit as the on-chain verifier
+- **The root does not bind the depth** — store the depth next to the root and take both from authenticated state
+- **Every delete makes all outstanding proofs stale** — a proof verifies against the root it was built for, and every other slot's path has a sibling that covers the deleted slot. After a delete, rebuild proofs from the updated tree
+
+## Background
+
+The tree is the chunk tree of Ethereum's SSZ (Simple Serialize): `merkleize(chunks, limit = 2^D)` with zero-chunk padding, with BLAKE2b-256 in place of SHA-256 and no length mixed into the root. Positions use SSZ generalized indices, and multiproofs use its `get_helper_indices` order. The reference is [ethereum/ssz-specs v0.1.0](https://github.com/ethereum/ssz-specs/tree/7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70) at commit `7bce07f`: [`trees.py`](https://github.com/ethereum/ssz-specs/blob/7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70/src/ssz/trees.py) and [`gindex.py`](https://github.com/ethereum/ssz-specs/blob/7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70/src/ssz/gindex.py).
+
+The tests pin 86 vectors computed by that spec's own code, 43 with its SHA-256 and 43 with BLAKE2b-256 as the node hash, and cross-check 42 cases from consensus-specs v1.5.0. The off-chain builder takes the node hash as a parameter so that the SHA-256 instance can be checked against the unmodified spec; the on-chain API always hashes with BLAKE2b-256. The [fixture README](https://github.com/scalus3/scalus/tree/master/scalus-core/shared/src/test/resources/positional-merkle-tree/README.md) records how the vectors were generated.
+
+The empty slot is where this tree differs from the [Incremental Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree): both name 32 zero bytes `NullHash`, but an Incremental Merkle Tree stores `blake2b_256(NullHash)` in an empty slot, and this tree stores `NullHash` itself, as SSZ does. Their roots and proofs are not interchangeable.
+
+## Example: Treasury Payouts
+
+A treasury keeps `root` and `depth` in its datum. Each payout transaction proves the outputs it pays and stores the returned root in the continuing datum.
+
+**On-chain** — pay one output:
+
+```scala
+import scalus.cardano.onchain.plutus.crypto.tree.PositionalMerkleTree
+
+val newRoot = PositionalMerkleTree.delete(
+  state.root,   // current root, from the treasury's own datum
+  state.depth,  // fixed depth, stored with the root
+  position,     // slot being paid
+  element,      // canonical bytes of the output this transaction pays
+  proof         // 32 × depth bytes: sibling hashes, bottom-up
+)
+// The continuing datum must hold newRoot.
+```
+
+**On-chain** — pay several outputs with one multiproof:
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.List
+
+val newRoot = PositionalMerkleTree.deleteMany(
+  state.root,
+  state.depth,
+  List(
+    PositionalMerkleTree.Leaf(0, element0),  // positions strictly ascending
+    PositionalMerkleTree.Leaf(2, element2)
+  ),
+  proof         // helper hashes, descending generalized index
+)
+```
+
+**On-chain** — check membership without changing the root:
+
+```scala
+// Fails if the proof is invalid; returns Unit
+PositionalMerkleTree.verifyMembership(state.root, state.depth, position, element, proof)
+```
+
+**Off-chain** — build the tree and generate proofs:
+
+```scala
+import scalus.crypto.tree.PositionalMerkleTree
+import scalus.uplc.builtin.ByteString
+
+val payouts: Vector[ByteString] = ???  // canonical bytes of each payout, in order
+val tree = PositionalMerkleTree.fromElements(payouts, depth = 15)
+val root = tree.rootHash               // store in the datum together with depth 15
+
+val proof = tree.proveMembership(2)        // for delete or verifyMembership at position 2
+val batch = tree.proveMulti(Vector(0, 2))  // for deleteMany at positions 0 and 2
+val next = tree.deleteMany(Vector(0, 2))   // the tree after paying slots 0 and 2
+// Build later proofs from `next`, not from `tree`.
+
+// Only the root, in one pass with O(depth) memory:
+val sameRoot = PositionalMerkleTree.rootFromElements(payouts.iterator, 15)
+```
+
+## Using It Safely
+
+`delete` checks a proof against the root it is given. It does not know whether that root is current, or which outputs the transaction pays. The validator must:
+
+1. Take the root and the depth from its own authenticated state — its datum or a script parameter — never from the redeemer. An old proof still verifies against an old root.
+2. Check that each deleted position and element is an output the transaction actually pays. Proving slot 0 does not authorize paying slot 1.
+3. Store the returned root in the continuing datum, and check its outputs, state token and value as usual. The library verifies a root transition; it does not authorize a transaction.
+
+Steps 1 and 3 are what make each slot pay at most once: against an old root, an old proof still verifies.
+
+The verifier itself enforces:
+
+- **A deleted slot cannot be proved against the new root.** An element whose hash is `NullHash` is refused, and `NullHash` has no known preimage, so an unused or deleted slot cannot be proved, and a deletion cannot be replayed against the root it returned.
+- **No internal node as a leaf.** The proof length is fixed by the depth and positions must be below 2^D, so a shorter or longer path is refused.
+- **No position twice in a batch.** `deleteMany` requires strictly ascending positions.
+- **Exact helper accounting.** Every helper must be consumed, with no missing, extra or trailing bytes.
+- **No duplicated-leaf padding.** Unused slots are zero rather than a copy of the last leaf, so a short list cannot share its root with a longer list that repeats its tail.
+
+The commitment relies on the collision and preimage resistance of BLAKE2b-256, and on every party serializing elements the same way.
+
+The regression tests are named after the Merkle bugs they guard against: CVE-2012-2459 (duplicated last leaf), CVE-2017-12842 and tBTC GHSA-wg2x-rv86-mmpx (internal node as leaf), CVE-2023-34459 (multiproof helper accounting) and CVE-2018-17144 (the same item twice). These are analogies, not claims that those exploits applied to this encoding.
+
+## Related
+
+- [Merkle Tree](/docs/advanced-data-structures/merkle-tree) — static membership by element, no deletion
+- [Incremental Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree) — append-only commitments
+- [Merkle Patricia Forestry](/docs/advanced-data-structures/merkle-patricia-forestry) — keyed insert, update and delete, with non-membership proofs
