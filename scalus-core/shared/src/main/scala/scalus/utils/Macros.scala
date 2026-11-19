@@ -487,8 +487,7 @@ object Macros {
     def inlineProtocolParams(using Quotes)(name: Expr[String]): Expr[ProtocolParams] = {
         import ProtocolParamsToExpr.given
         val json = readResource(name.value.get)
-        // Not `fromBlockfrostJson`: its jsoniter parser cannot run in the compiler for Native.
-        val params = ProtocolParams.fromBlockfrostJsonInMacro(json)
+        val params = ProtocolParams.fromBlockfrostJson(json)
         Expr(params)
     }
 

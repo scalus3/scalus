@@ -2,8 +2,6 @@ package scalus.cardano.ledger.internal
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromStream, readFromString, writeToString, JsonReader, JsonValueCodec, JsonWriter, ReaderConfig}
 
-import upickle.core.{ArrVisitor, ObjVisitor, StringVisitor, Visitor}
-
 import java.io.InputStream
 import java.math.MathContext
 import scala.collection.immutable.VectorMap
@@ -68,55 +66,6 @@ private[ledger] object JsonTree {
     def parse(json: InputStream): JsonTree = readFromStream(json, readerConfig)(using codec)
 
     def render(tree: JsonTree): String = writeToString(tree)(using codec)
-
-    /** Builds the tree [[parse]] builds for the same valid JSON, through ujson's parser, which
-      * hands over each number's text. For macros only, which read the repository's own resources:
-      * it has none of [[parse]]'s bounds on nesting or on a number's digits and scale, and
-      * `JsonTreeTest` checks that the two agree.
-      *
-      * A macro runs this module's code inside the compiler, on the JVM, against the dependencies of
-      * the platform being compiled. jsoniter's Scala Native artifact reads its buffer through
-      * Native pointer intrinsics (`ByteArrayAccess`), which throw `UndefinedBehaviorError` on a
-      * JVM, so [[parse]] cannot run while `scalus-core` compiles for Native. ujson is plain Scala
-      * on every platform. D129
-      */
-    def parseInMacro(json: String): JsonTree = {
-        ujson.CharSequenceParser.transform(json, TextKeepingBuilder)
-    }
-
-    /** Builds a [[JsonTree]] from ujson's parse events, a number from its text. */
-    private object TextKeepingBuilder extends ujson.JsVisitor[JsonTree, JsonTree] {
-        override def visitArray(length: Int, index: Int): ArrVisitor[JsonTree, JsonTree] =
-            new ArrVisitor[JsonTree, JsonTree] {
-                private val items = Vector.newBuilder[JsonTree]
-                override def subVisitor: Visitor[?, ?] = TextKeepingBuilder
-                override def visitValue(v: JsonTree, index: Int): Unit = items += v
-                override def visitEnd(index: Int): JsonTree = Arr(items.result())
-            }
-
-        override def visitJsonableObject(length: Int, index: Int): ObjVisitor[JsonTree, JsonTree] =
-            new ObjVisitor[JsonTree, JsonTree] {
-                private val fields = VectorMap.newBuilder[String, JsonTree]
-                private var key = ""
-                override def subVisitor: Visitor[?, ?] = TextKeepingBuilder
-                override def visitKey(index: Int): Visitor[?, ?] = StringVisitor
-                override def visitKeyValue(v: Any): Unit = key = v.toString
-                override def visitValue(v: JsonTree, index: Int): Unit = fields += key -> v
-                override def visitEnd(index: Int): JsonTree = Obj(fields.result())
-            }
-
-        override def visitNull(index: Int): JsonTree = Null
-        override def visitFalse(index: Int): JsonTree = Bool(false)
-        override def visitTrue(index: Int): JsonTree = Bool(true)
-        override def visitString(s: CharSequence, index: Int): JsonTree = Str(s.toString)
-
-        override def visitFloat64StringParts(
-            s: CharSequence,
-            decIndex: Int,
-            expIndex: Int,
-            index: Int
-        ): JsonTree = Num(BigDecimal(new java.math.BigDecimal(s.toString)))
-    }
 
     /** Without the hex dump, a parse error is a message and an offset, which is what a caller of
       * `fromBlockfrostJson` can act on.

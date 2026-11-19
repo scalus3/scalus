@@ -399,15 +399,6 @@ object ProtocolParams {
         }
     }
 
-    /** [[fromBlockfrostJson]] for a macro, which runs inside the compiler: the same reader, on a
-      * parser that also runs there when compiling for Scala Native ([[JsonTree.parseInMacro]]).
-      */
-    private[scalus] def fromBlockfrostJsonInMacro(json: String): ProtocolParams = {
-        explainParseFailure(blockfrostShape) {
-            ProtocolParamsJson.readBlockfrost(JsonTree.parseInMacro(json))
-        }
-    }
-
     /** Render as `cardano-cli query protocol-parameters` JSON, the inverse of
       * [[fromCardanoCliJson]].
       *

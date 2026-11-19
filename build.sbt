@@ -572,6 +572,16 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // OOM-killer took down the job (SIGKILL/137). Serialize so only one native test
       // process is live at a time.
       Test / parallelExecution := false,
+      // The CardanoInfo macro parses JSON with jsoniter while the compiler runs, on the JVM. The
+      // Native jsoniter jar reads through Scala Native pointer intrinsics, which throw on a JVM, so
+      // the compile classpath carries the JVM jar first: the compiler and the macros load its
+      // classes, and the Native linker, which reads only .nir files, still links the Native jar.
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterScalaVersion % Provided,
+      Compile / managedClasspath ~= { classpath =>
+          val (jvmJsoniter, rest) =
+              classpath.partition(_.data.getName.startsWith("jsoniter-scala-core_3-"))
+          jvmJsoniter ++ rest
+      },
       // Disable doc due to scaladoc NPE bug on Native platform
       Compile / doc / sources := Seq.empty,
       Test / doc / sources := Seq.empty,
