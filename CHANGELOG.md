@@ -4,6 +4,8 @@
 
 ### Upgrading
 
+- `scalus-plugin` is no longer published for Scala 3.3.8 and 3.8.4. Use Scala 3.3.9, 3.9.0 or
+  3.10.1.
 - CSE now shares several candidates per pass, so its output can differ from 1.5.0: two `let`
   bindings can nest in the other order, and a tie between candidates can keep another set of
   bindings. A compiled script can get new bytes, so a new script hash and address. Of the 89 Plutus

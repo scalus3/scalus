@@ -20,10 +20,6 @@ jobs:
           # the `_3` library artifacts are published from, so it also carries the format + MiMa
           # checks.
           - { name: "3.3.9", task: ci-jvm-3_3_9 }
-          # Previous LTS patches are supported for the compiler plugin only, so their jobs are the
-          # cheaper canary: plugin compile plus the scalus.compiler.* compile-and-evaluate suite.
-          - { name: "3.3.8", task: ci-jvm-3_3_8 }
-          - { name: "3.8.4", task: ci-jvm-3_8_4 }
           - { name: "3.9.0", task: ci-jvm-3_9_0 }
           - { name: "3.10.1", task: ci-jvm-3_10_1 }
     permissions:

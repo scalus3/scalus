@@ -544,22 +544,23 @@ object Example {
 
 ## Supported Scala versions
 
-The versions live in `build.sbt` as `supportedScalaVersions` (cross-built and tested everywhere)
-and `pluginScalaVersions` (the versions a `scalus-plugin_<version>` is published for):
+The versions live in `build.sbt` as `supportedScalaVersions`. The build cross-builds and tests each
+of them:
 
 | Version | Role |
 |---------|------|
 | 3.3.9   | Default. The only build that publishes the `_3` library artifacts. |
-| 3.8.4   | Cross-built and tested. |
 | 3.9.0   | Cross-built and tested. The next LTS line. |
 | 3.10.1  | Cross-built and tested. The latest line. 3.10.0 is not supported: its compiler crashes on `scalus-verification` ([scala/scala3#27039](https://github.com/scala/scala3/pull/27039)). |
-| 3.3.8   | Compiler plugin only. Downstream projects may still be pinned to it. |
 
 Each of those gets its own `scalus-plugin_<version>` artifact, because a Scala 3 compiler plugin has
-to match the compiler exactly (`CrossVersion.full`). 3.3.8 is the plugin-only case: `scalus-core`
-cross-builds there too, but only so the 3.3.8 plugin has something to be tested against, and its CI
-job is the cheaper `scalus.compiler.*` canary rather than a full run. Scalus 1.4.1 is the last
-release with `scalus-plugin_3.3.7`.
+to match the compiler exactly (`CrossVersion.full`). Scalus 1.4.1 is the last release with
+`scalus-plugin_3.3.7`, and 1.5.0 is the last release with `scalus-plugin_3.3.8` and
+`scalus-plugin_3.8.4`.
+
+`scalus-sbt-plugin` is not on this list. Its sbt 2 artifact is built against sbt 2.0.0 with sbt's
+own Scala version, 3.8.4, and no Scalus module is on its classpath. sbt 2.0 and 2.1 load the same
+`scalus-sbt-plugin_sbt2_3` artifact: sbt 2.1 runs on Scala 3.9, which reads 3.8 TASTy.
 
 The `_3` library artifacts share a single coordinate across all of Scala 3, so exactly one build may
 publish them, and it has to be the **oldest** supported compiler: a 3.3.x compiler refuses TASTy
@@ -567,14 +568,13 @@ emitted by 3.8.x and later, while newer compilers read 3.3.x TASTy without troub
 enforces that. A Scala 3.9.0 project therefore consumes the 3.3.9-built artifact, and does not need
 one built by its own compiler.
 
-Build and test one version locally with `sbt ci-jvm-3_3_9`, `sbt ci-jvm-3_8_4`,
-`sbt ci-jvm-3_9_0`, `sbt ci-jvm-3_10_1` or `sbt ci-jvm-3_3_8`. The CI-JVM workflow runs one job per version, named
-after it.
+Build and test one version locally with `sbt ci-jvm-3_3_9`, `sbt ci-jvm-3_9_0` or
+`sbt ci-jvm-3_10_1`. The CI-JVM workflow runs one job per version, named after it.
 
 ### Adding or bumping a version
 
 1. Edit the `scala3*Version` val in `build.sbt`. The build refuses to load if the `ci-jvm-*` aliases
-   no longer spell out `pluginScalaVersions`, so this step cannot be half-done.
+   no longer spell out `supportedScalaVersions`, so this step cannot be half-done.
 2. Rename the matching `ci-jvm-<version>` alias and update its `++` argument.
 3. Rename the matrix entry in `.github/workflows/ci-jvm.yml`. The job name is the status-check name,
    so the repository's required checks have to be updated to match.
