@@ -4,9 +4,10 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.prelude.Math
 import scalus.verify.{FunctionDef, FunctionTable, ProofKind}
 import scalus.verify.Props.*
-import scalus.verify.lean.LeanServer.{Message, Severity}
+import scalus.verify.lean.LeanServer.{Message, Progress, Reached, Severity, Started}
 
 import java.nio.file.Files
+import scala.concurrent.duration.*
 
 /** What the tactic `lean-manual` reads of Lean's answer, and what it writes, without Lean. Its
   * checks with Lean are those of the examples' proofs by hand (`AmmVerificationTest`).
@@ -76,6 +77,38 @@ class LeanManualTest extends AnyFunSuite {
         )
         assert(text.contains(s"example : $statementModule.statement := Vault.Proofs.p"))
         assert(text.contains("#print axioms Vault.Proofs.p"))
+    }
+
+    test("a check given up at its time limit says how far it had come, and what its worker did") {
+        // As on CI on 2026-11-20: a check that takes seconds, given up after 30 minutes.
+        val stalled = LeanManual.unfinished(
+          "Vault.Proofs.p",
+          30.minutes,
+          3.seconds,
+          Progress(
+            Reached.Command(s"example : $statementModule.statement := Vault.Proofs.p"),
+            1797.seconds,
+            List(Started("lean", 1797.seconds, Some(4.seconds)))
+          )
+        )
+        assert(stalled.startsWith("Lean did not check Vault.Proofs.p within 30 minutes"), stalled)
+        assert(stalled.contains("3 s of it went to Lake's builds"), stalled)
+        assert(
+          stalled.contains(
+            s"at `example : $statementModule.statement := Vault.Proofs.p` for 1797 s"
+          ),
+          stalled
+        )
+        assert(stalled.contains("lean had run for 1797 s and worked for 4 s"), stalled)
+        // Where the system does not say how long a process worked, as macOS does not.
+        val waited = LeanManual.unfinished(
+          "Vault.Proofs.p",
+          30.minutes,
+          0.seconds,
+          Progress(Reached.NotStarted, 0.seconds, List(Started("lean", 10.seconds, None)))
+        )
+        assert(waited.contains("its server was at another check"), waited)
+        assert(waited.endsWith("lean had run for 10 s"), waited)
     }
 
     test("each result a proof cites is checked to be the axiom of its statement's module") {
