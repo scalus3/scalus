@@ -38,13 +38,18 @@ SBT_CMDS=(
 )
 # llms-api.txt [VB-5]. The task exists since v1.1.0; it writes scalus-site/public/llms-api.txt,
 # which git ignores.
-if grep -q '^generateLlmsApi :=' "$SRC/build.sbt"; then
+# Tags built with sbt 2 scope it to the root project: `LocalRootProject / generateLlmsApi :=`.
+if grep -Eq '^(LocalRootProject / )?generateLlmsApi :=' "$SRC/build.sbt"; then
     SBT_CMDS+=("generateLlmsApi")
 else
     warn "$TAG has no generateLlmsApi task, skipping llms-api.txt" # [VB-12]
 fi
+# `--server` runs sbt once, in this process. Without it, sbt 2 starts a background server (up to
+# 8 GB) in the temporary worktree, which outlives the script. For sbt 1 tags it is the default.
+# One `;`-joined argument works with both sbt 1 and sbt 2.
+SBT_LINE=$(printf '%s; ' "${SBT_CMDS[@]}")
 # A failed unidoc fails the script through set -e [VB-13].
-(cd "$SRC" && sbt --batch -Dsbt.supershell=false "${SBT_CMDS[@]}")
+(cd "$SRC" && sbt --server --batch -Dsbt.supershell=false "${SBT_LINE%; }")
 [ -f "$WORK/api/index.html" ] || { echo "build-version: unidoc wrote no index.html" >&2; exit 1; }
 
 # Fix the side-menu links [VB-15]. Scaladoc's renderDynamicSideMenu (unfixed up to 3.10.0) builds

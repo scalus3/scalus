@@ -29,7 +29,8 @@ class CseDeterminismCrossJvmTest extends AnyFunSuite {
               s"-XX:hashCode=$mode",
               "-Xss16m",
               "-cp",
-              System.getProperty("java.class.path"),
+              // sbt 2 starts forked tests through a worker, so `java.class.path` lacks the test classes.
+              sys.props.getOrElse("scalus.test.classpath", System.getProperty("java.class.path")),
               classOf[CseDeterminismChild.type].getName.stripSuffix("$")
             )
             val process = new ProcessBuilder(cmd).start()

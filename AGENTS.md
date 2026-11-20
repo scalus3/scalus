@@ -18,35 +18,51 @@ start the plugin injects its routing table (`scalus:using-scalus`); follow it.
 
 ## Commands
 
-Prefer `sbtn` over `sbt`, when `sbtn` is available and not hangs.
-This also applies in a git worktree. See
+Run sbt inside the nix shell. The build uses sbt 2.1. In a git worktree, also read
 [Working in a git worktree with sbt](#working-in-a-git-worktree-with-sbt).
 
 | Command          | Purpose                                              |
 |------------------|------------------------------------------------------|
-| `sbtn quick`     | Format, compile, jvm/testQuick (fast iteration)      |
-| `sbtn testQuick` | Run only tests affected by recent changes            |
-| `sbtn ci`        | Full CI (`ci-jvm;ci-js;ci-native`): format, mima, all platforms |
-| `sbtn it`        | Integration tests (requires Docker)                  |
+| `sbt quick`      | Format, compile, jvm/testQuick (fast iteration)      |
+| `sbt testQuick`  | Run only tests affected by recent changes            |
+| `sbt ci`         | Full CI (`ci-jvm`, `ci-js`, `ci-native`): format, mima, all platforms |
+| `sbt it`         | Integration tests (requires Docker)                  |
 
 **Compilation:**
 
-- `sbtn jvm/Test/compile` - all JVM projects with tests
-- `sbtn scalusJVM/Test/compile` - scalus-core JVM with tests
-- `sbtn scalusCardanoLedgerJVM/compile` - cardano-ledger JVM without tests
-- `sbtn "clean; Test/compile"` - full clean compilation, useful for checking for warnings. Otherwise
+- `sbt jvm/Test/compile` - all JVM projects with tests
+- `sbt scalusJVM/Test/compile` - scalus-core JVM with tests
+- `sbt scalusCardanoLedgerJVM/compile` - cardano-ledger JVM without tests
+- `sbt "clean; Test/compile"` - full clean compilation, useful for checking for warnings. Otherwise
   incremental compilation could not show warnings in already compiled files
 
 **Testing:**
 
-- `sbtn jvm/test` - all JVM tests
-- `sbtn jvm/testQuick` - run only tests affected by recent changes (incremental)
-- `sbtn scalusJVM/test` - core tests
-- `sbtn scalusExamplesJVM/test` - example tests
-- `sbtn scalusCardanoLedgerIt/test` - integration tests
+- `sbt jvm/testFull` - all JVM tests
+- `sbt jvm/test` - only the JVM tests affected by changes since the last run
+- `sbt scalusJVM/test` - core tests
+- `sbt scalusExamplesJVM/test` - example tests
+- `sbt scalusCardanoLedgerIt/test` - integration tests
 
-**Note:** sbt uses incremental compilation - only changed files and their dependents are recompiled.
-Use `sbtn clean` to force full recompilation if you encounter stale class issues.
+**sbt 2 rules:**
+
+- `sbt <command>` is a client. It sends the command to the sbt server of this checkout, and starts
+  the server when none runs. `sbtn` is the same client.
+- `sbt --server <command>` is a one-shot run with no server, like `sbt` in sbt 1.
+- The client takes one command string: `sbt "scalafmtAll; jvm/Test/compile"`, never
+  `sbt scalafmtAll jvm/Test/compile`.
+- The server reads env variables and `-D` properties only when it starts. To change one, for
+  example `SCALUS_TEST_ENV`, run `sbt shutdown` first, or use `sbt --server`.
+- `test` runs only the suites whose inputs changed, and reports "No tests to run" when nothing
+  changed. `testFull` runs all suites. `testOnly` always runs the suites it names.
+- sbt does not see the `plutus-conformance` corpus and `SCALUS_TEST_ENV` as test inputs. Run
+  `testFull` after you change one of them.
+- `clean` deletes the outputs of a project, and the next command that builds the project ignores
+  the cache. Test results from before the `clean` come back after that, so use `testFull`.
+- Build outputs are in `target/out/<platform>/scala-<version>/<project>/`, for example
+  `target/out/jvm/scala-3.3.9/scalus/`.
+- The disk cache is `~/Library/Caches/sbt/v2` (macOS) or `~/.cache/sbt` (Linux), shared by all
+  checkouts. It grows to many GB. Delete it when disk space is low.
 
 ### Working in a git worktree with sbt
 
@@ -64,16 +80,15 @@ these rules apply inside the worktree:
 
    It is git-ignored, so it won't show up in `git status`.
 
-2. **Use `sbtn` in the worktree. It starts a separate server for that worktree.** sbt names the
-   server socket from a hash of the build directory (see `project/target/active.json`). So the
-   worktree server never connects to the primary checkout's server, and it has its own `target/`.
+2. **`sbt` starts a separate server for the worktree.** sbt names the server socket from a hash of
+   the build directory (see `project/target/active.json`). The worktree has its own `target/`.
 
-3. **Shut the server down when the task ends: `sbtn shutdown`.** Each server can grow to `-Xmx8g`
+3. **Shut the server down when the task ends: `sbt shutdown`.** Each server can grow to `-Xmx8g`
    (from `.jvmopts`). Divide the machine's RAM by 8 GB, leave a few GB for the OS, and keep at most
-   that many servers alive. List them with `pgrep -fl xsbt.boot.Boot`.
+   that many servers alive. List them with `pgrep -fl sbt-launch`.
 
-4. **Never run a one-shot `sbt` in a checkout that has a live `sbtn` server.** The two processes
-   share `project/target` and corrupt each other's build classes.
+4. **Run `sbt shutdown` before `sbt --server` in the same checkout.** In sbt 1 a one-shot run
+   beside a live server corrupted `project/target`.
 
 ## Architecture
 
@@ -118,8 +133,8 @@ Scala Source → SIR (via compiler plugin) → UPLC (via SIR compiler) → Plutu
 
 ### Before Completing Tasks
 
-Run `sbtn quick` to ensure formatting, compilation, and tests pass.
-If issues occur, try `sbtn clean` first.
+Run `sbt quick` to ensure formatting, compilation, and tests pass.
+If issues occur, try `sbt clean` first.
 
 ### Compiler warnings
 
@@ -129,7 +144,7 @@ Keep the build at 0 warnings. Warnings do not fail the build, but a release need
 - If a warning is intentional, for example in a test of deprecated API, suppress it at the use
   site with `@nowarn("msg=...")` and a comment that explains why.
 - Incremental compilation shows warnings only for recompiled files. To see all warnings, run
-  `sbtn "clean; Test/compile"`.
+  `sbt "clean; Test/compile"`.
 
 ### Version control
 
@@ -231,7 +246,7 @@ is out of scope for interop style rules and stays fully idiomatic Scala.
 - Keep messages short: 1-2 paragraphs
 - Mention key changes
 - Never add "Co-authored by Claude Code" or similar
-- Run `sbtn scalafmtAll` before every commit: `ci-jvm` fails on a single unformatted file
+- Run `sbt scalafmtAll` before every commit: `ci-jvm` fails on a single unformatted file
 
 ## Changelog
 
@@ -268,7 +283,7 @@ These can be obtained in sibling directories (`../`) or directly on GitHub.
 ## Backwards Compatibility
 
 - Maintain backwards compatibility for public APIs
-- Use `sbtn mima` to verify compatibility
+- Use `sbt mima` to verify compatibility
 - Use `@deprecated("use XYZ instead", "$version")` on deprecated APIs
 - Use latest git tag for deprecated $version (e.g., if tag is "v0.14.2", write `@deprecated("use XYZ instead", "0.14.2")`)
 

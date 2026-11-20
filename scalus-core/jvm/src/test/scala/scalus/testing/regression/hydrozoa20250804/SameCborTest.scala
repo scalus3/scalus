@@ -36,7 +36,9 @@ class SameCborTest extends AnyFunSuite {
     }
 
     test("create two JVM-s and compile same script each in own JVM") {
-        val classpath = System.getProperty("java.class.path")
+        // sbt 2 starts forked tests through a worker, so `java.class.path` lacks the test classes.
+        val classpath =
+            sys.props.getOrElse("scalus.test.classpath", System.getProperty("java.class.path"))
         val pb1 = new ProcessBuilder(
           "java",
           "-cp",

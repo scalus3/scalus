@@ -8,8 +8,16 @@ import scala.scalanative.build.*
 // GLOBAL SETTINGS
 // =============================================================================
 
-Global / onChangedBuildSource := ReloadOnSourceChanges
-autoCompilerPlugins := true
+// sbt 2 defaults exportJars to true, so dependencies reach the classpath as jars. Tests that turn a
+// resource URL into a directory Path (BlocksLedgerRulesValidator, CardanoLedgerVectorsTest) then fail
+// with FileSystemNotFoundException. A bare setting applies to every subproject in sbt 2.
+exportJars := false
+// Scala Native publishes test-interface as "strict" (a patch release may break it). The Native
+// projects get 0.5.12 from the plugin while scalatest and scalacheck ask for 0.5.8 and 0.5.10.
+// sbt 1 resolved the same versions without an error; sbt 2.1 fails `update` on them. Only the
+// test configuration uses this module. The full artifact name is needed: with `%%`, sbt 2.1 stores
+// the scheme as plain `test-interface` and it does not match `test-interface_native0.5_3`.
+libraryDependencySchemes += "org.scala-native" % "test-interface_native0.5_3" % VersionScheme.Always
 
 val scalusStableVersion = "1.5.0"
 // The MiMa-checked stable surface is scalus-core, scalus-cardano-ledger and
@@ -52,23 +60,20 @@ val supportedScalaVersions = Seq(scala3LtsVersion, scala3NextLtsVersion, scala3L
 ThisBuild / scalaVersion := scala3LtsVersion
 ThisBuild / organization := "org.scalus"
 ThisBuild / organizationName := "Scalus"
-ThisBuild / organizationHomepage := Some(url("https://scalus.org/"))
+ThisBuild / organizationHomepage := Some(uri("https://scalus.org/"))
 ThisBuild / developers := List(
   Developer(
     id = "atlanter",
     name = "Alexander Nemish",
     email = "anemish@gmail.com",
-    url = url("https://github.com/nau")
+    url = uri("https://github.com/nau")
   )
 )
 
 ThisBuild / description := "Scalus - DApps Development Platform for Cardano"
-ThisBuild / licenses := List(
-  "Apache 2" -> new URI("http://www.apache.org/licenses/LICENSE-2.0.txt").toURL
-)
-ThisBuild / homepage := Some(url("https://github.com/scalus3/scalus"))
+ThisBuild / licenses := List(License.Apache2)
+ThisBuild / homepage := Some(uri("https://github.com/scalus3/scalus"))
 ThisBuild / versionScheme := Some("early-semver")
-Test / publishArtifact := false
 
 // BSP and semantic features
 ThisBuild / semanticdbEnabled := true
@@ -96,31 +101,19 @@ ThisBuild / run / javaOptions ++= (if (javaVersion >= 23)
 // already defaults to -Xtarget:8. Without it, building on JDK 21 emitted v65 Java classes.
 ThisBuild / javacOptions ++= Seq("--release", "11")
 
-// Improve incremental compilation
-ThisBuild / incOptions := {
-    incOptions.value
-        .withLogRecompileOnMacro(false)
-        .withUseOptimizedSealed(true)
-}
+// Incremental compilation: no log line per macro-triggered recompile, and invalidate only the
+// affected children of a changed sealed type. Zinc notes the second can undercompile code whose
+// macros list the children of a sealed type.
+ThisBuild / incOptions ~= (_.withLogRecompileOnMacro(false).withUseOptimizedSealed(true))
 
 // BSP development workflow optimizations
 ThisBuild / watchBeforeCommand := Watch.clearScreen
 ThisBuild / watchTriggeredMessage := Watch.clearScreenOnTrigger
 ThisBuild / watchForceTriggerOnAnyChange := true
 
-// Enable parallel execution
-ThisBuild / parallelExecution := true
-// No `Global / concurrentRestrictions` override: sbt's default is already
-// `Tags.limitAll(SystemProcessors) :: Nil` when parallelExecution is true
-// (EvaluateTask.defaultRestrictions), so restating it here bought nothing.
-
-// Projects with `Test / fork := true` run their suites in one forked JVM, and without this flag
-// sbt runs those suites one after another. With it, the forked JVM runs them in parallel:
-// `jvm/test` took 220-230 s instead of 299 s locally (3 green runs, 2026-10-21), and
-// scalusJVM/test alone 59 s instead of 108 s. Finding F-4 in docs/internal/test-refactor.
-ThisBuild / Test / testForkedParallel := true
-
-Compile / doc / scalacOptions ++= Seq(
+// Root only, as in sbt 1. sbt 2 applies a bare setting to every subproject, and Scala 2.12 scaladoc
+// (the sbt 1 axis of scalusSbtPlugin) does not know these options.
+LocalRootProject / Compile / doc / scalacOptions ++= Seq(
   "-groups",
   "-project-version",
   scalusStableVersion,
@@ -189,7 +182,7 @@ lazy val installNpmTestDeps =
 // install` processes concurrently in the same directory, which corrupts the esbuild binary
 // install (ETXTBSY) – the marker check below is not enough because all of them race past it
 // before any writes the marker.
-ThisBuild / installNpmTestDeps := {
+ThisBuild / installNpmTestDeps := Def.uncached {
     val base = (LocalRootProject / baseDirectory).value
     val log = streams.value.log
     val nodeModules = base / "node_modules"
@@ -243,7 +236,8 @@ def jvmJsoniterForMacros: Seq[Def.Setting[?]] = {
         configuration / dependencyClasspath := {
             val rest = (configuration / dependencyClasspath).value
             val report = update.value
-            val jvmJars = Classpaths.managedJars(MacroJvm, classpathTypes.value, report)
+            val jvmJars =
+                Classpaths.managedJars(MacroJvm, classpathTypes.value, report, fileConverter.value)
             def revision(conf: Configuration, name: String => Boolean): Option[String] =
                 report
                     .configuration(conf)
@@ -265,7 +259,9 @@ def jvmJsoniterForMacros: Seq[Def.Setting[?]] = {
         }
     Seq(
       ivyConfigurations += MacroJvm,
+      // `%%` follows the project's platform in sbt 2, so it would pick the Native jar here.
       libraryDependencies += (organization %% "jsoniter-scala-core" % jsoniterScalaVersion % MacroJvm)
+          .platform(Platform.jvm)
           .intransitive(),
       jvmFirst(Compile),
       jvmFirst(Test)
@@ -285,13 +281,16 @@ lazy val jsModuleSettings: Seq[Def.Setting[?]] = Seq(
   // artifact is the only way out. No JS-compiled code calls `ZoneId`/`ZoneRules`; plain
   // `Instant` arithmetic (`ofEpochMilli`/`toEpochMilli`) still works without a zone db.
   excludeDependencies += ExclusionRule("io.github.cquiroz", "scala-java-time-tzdb_sjs1_3"),
-  Test / executeTests := (Test / executeTests).dependsOn(ThisBuild / installNpmTestDeps).value,
-  Test / testOnly := (Test / testOnly).dependsOn(ThisBuild / installNpmTestDeps).evaluated
+  // Every test task (test, testQuick, testOnly, testFull) loads the test frameworks, so this one
+  // hook installs the npm test dependencies before any of them. In sbt 2, `test` does not call
+  // `executeTests`, so a hook there missed it.
+  Test / loadedTestFrameworks :=
+      (Test / loadedTestFrameworks).dependsOn(ThisBuild / installNpmTestDeps).value
 )
 
 // Scalus Compiler Plugin Dependency
 lazy val PluginDependency: List[Def.Setting[?]] = List(scalacOptions ++= {
-    val jar = (scalusPlugin / Compile / packageBin).value
+    val jar = fileConverter.value.toPath((scalusPlugin / Compile / packageBin).value).toFile
     // add plugin timestamp to compiler options to trigger recompile of
     // main after editing the plugin. (Otherwise a 'clean' is needed.)
 
@@ -335,7 +334,7 @@ lazy val root: Project = project
       docs
     )
     .settings(
-      name := "scalus",
+      name := "scalus-root",
       publish / skip := true,
     )
 
@@ -421,8 +420,8 @@ lazy val scalusPlugin = project
       // COMMENT THIS LINE when doing plugin development
       // UPDATE VERSION after changes to the plugin
       // version := "0.13.0+597-4eafe96f+20251217-1256-SNAPSHOT",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value // % "provided"
     )
     .settings(
@@ -436,7 +435,7 @@ lazy val scalusPlugin = project
        This breaks navigation and refactoring in the main project.
        By copying the shared files to the plugin project, IntelliJ IDEA sees them as used in the plugin project
        */
-      copySharedFiles := {
+      copySharedFiles := Def.uncached {
           val sharedFiles = Seq(
             "scalus/uplc/builtin/BuiltinList.scala",
             "scalus/uplc/builtin/BuiltinValue.scala",
@@ -472,7 +471,7 @@ lazy val scalusPlugin = project
           copyFiles(sharedFiles, baseDir, targetDir, log)
           // Delete copies of files that left the list, so a stale copy is not compiled.
           val expected = sharedFiles.map(targetDir / _).toSet
-          val stale = (targetDir ** "*.scala").get.filterNot(expected)
+          val stale = (targetDir ** "*.scala").get().filterNot(expected)
           stale.foreach(f => log.info(s"Deleting stale shared file $f"))
           IO.delete(stale)
           log.info(s"Copied shared files to target $targetDir")
@@ -515,15 +514,10 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
       // scalacOptions += "-P:scalus:debugLevel=1",
 
-      // Improve incremental compilation for cross-platform builds
-      Compile / incOptions := {
-          incOptions.value
-              .withApiDebug(false)
-              .withRelationsDebug(false)
-              .withRecompileOnMacroDef(false)
-      },
+      // Do not recompile every caller when a macro definition changes.
+      Compile / incOptions ~= (_.withRecompileOnMacroDef(false)),
       // scalacOptions += "-Yretain-trees",
-      mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
+      mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq(
         // Compiler-internal packages: no supported external implementors or instantiators;
         // excluded from the binary-compat promise (README: "compiler internals carry no
@@ -548,22 +542,22 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // enable when debug compilation of tests
       Test / scalacOptions += "-color:never",
       PluginDependency,
-      libraryDependencies += "org.typelevel" %%% "cats-core" % "2.13.0",
-      libraryDependencies += "org.typelevel" %%% "cats-parse" % "1.1.0",
-      libraryDependencies += "org.typelevel" %%% "paiges-core" % "0.4.4",
-      libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterScalaVersion,
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterScalaVersion % "compile",
+      libraryDependencies += "org.typelevel" %% "cats-core" % "2.13.0",
+      libraryDependencies += "org.typelevel" %% "cats-parse" % "1.1.0",
+      libraryDependencies += "org.typelevel" %% "paiges-core" % "0.4.4",
+      libraryDependencies += "com.lihaoyi" %% "upickle" % "4.4.3",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterScalaVersion,
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterScalaVersion % "compile",
       libraryDependencies ++= Seq(
-        "io.bullet" %%% "borer-core" % borerVersion,
-        "io.bullet" %%% "borer-derivation" % borerVersion
+        "io.bullet" %% "borer-core" % borerVersion,
+        "io.bullet" %% "borer-derivation" % borerVersion
       ),
-      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion % "test",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "com.softwaremill.magnolia1_3" %% "magnolia" % magnoliaVersion % "test",
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies ++= Seq(
-        "dev.optics" %%% "monocle-core" % monocleVersion,
-        "dev.optics" %%% "monocle-macro" % monocleVersion,
+        "dev.optics" %% "monocle-core" % monocleVersion,
+        "dev.optics" %% "monocle-macro" % monocleVersion,
       ),
       buildInfoKeys ++= Seq[BuildInfoKey](
         "scalusVersion" -> scalusStableVersion
@@ -587,8 +581,8 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // test JVM as system properties.
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value % Test,
       Test / javaOptions ++= Seq(
-        s"-Dscalus.plugin.jar=${(scalusPlugin / Compile / packageBin).value.getAbsolutePath}",
-        s"-Dscalus.test.classpath=${(Test / fullClasspath).value.files.map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}"
+        s"-Dscalus.plugin.jar=${fileConverter.value.toPath((scalusPlugin / Compile / packageBin).value)}",
+        s"-Dscalus.test.classpath=${classpathFiles((Test / fullClasspath).value, fileConverter.value).map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}"
       ),
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.86",
       libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0",
@@ -692,16 +686,16 @@ lazy val scalusTsExporter = project
       Test / fork := true,
       Test / javaOptions ++= Seq(
         s"-Dtsexport.fixtures.classes=${(scalusTsExporterFixtures / Compile / classDirectory).value.getAbsolutePath}",
-        s"-Dtsexport.fixtures.classpath=${(scalusTsExporterFixtures / Compile / fullClasspath).value.map(_.data.getAbsolutePath).mkString(java.io.File.pathSeparator)}",
+        s"-Dtsexport.fixtures.classpath=${classpathFiles((scalusTsExporterFixtures / Compile / fullClasspath).value, fileConverter.value).map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}",
         s"-Dtsexport.sourceroot=${(ThisBuild / baseDirectory).value.getAbsolutePath}"
       ),
       // GoldenTest type-checks the generated fixtures with `node_modules/.bin/tsc` and
       // `assume`s the check away when tsc is missing, which scalatest reports as a canceled
       // test inside a green suite. ci-jvm runs these tests through the `jvm` aggregate, which
       // otherwise never installs the root node_modules, so the tsc check silently never ran.
-      // Depend on the install task explicitly (same idiom as jsModuleSettings).
-      Test / executeTests := (Test / executeTests).dependsOn(ThisBuild / installNpmTestDeps).value,
-      Test / testOnly := (Test / testOnly).dependsOn(ThisBuild / installNpmTestDeps).evaluated,
+      // Depend on the install task explicitly (same hook as jsModuleSettings).
+      Test / loadedTestFrameworks :=
+          (Test / loadedTestFrameworks).dependsOn(ThisBuild / installNpmTestDeps).value,
       publish / skip := true
     )
 
@@ -733,13 +727,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       // -Wconf does not reach Scaladoc link warnings, so this also hides testkit's own.
       Compile / doc / scalacOptions += "-no-link-warnings",
 
-      // Improve incremental compilation for cross-platform builds
-      Compile / incOptions := {
-          incOptions.value
-              .withApiDebug(false)
-              .withRelationsDebug(false)
-              .withRecompileOnMacroDef(false)
-      },
+      // Do not recompile every caller when a macro definition changes.
+      Compile / incOptions ~= (_.withRecompileOnMacroDef(false)),
       Test / scalacOptions += "-color:never",
       // Copy shared test files from scalus-core to managed sources
       Compile / sourceGenerators += Def.task {
@@ -760,11 +749,11 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
           files.map(targetDir / _)
       }.taskValue,
       PluginDependency,
-      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion,
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion,
-      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion,
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.4",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.4",
+      libraryDependencies += "com.softwaremill.magnolia1_3" %% "magnolia" % magnoliaVersion,
+      libraryDependencies += "org.scalatestplus" %% "scalacheck-1-19" % scalatestPlusScalacheckVersion,
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion,
+      libraryDependencies += "io.github.dotty-cps-async" %% "dotty-cps-async" % "1.3.4",
+      libraryDependencies += "io.github.dotty-cps-async" %% "dotty-cps-async-logic" % "1.3.4",
       // Copy Party.scala and TestUtil.scala from cardano-ledger test sources
       Compile / sourceGenerators += Def.task {
           val baseDir =
@@ -821,8 +810,8 @@ lazy val scalusStreamingFs2 = crossProject(JSPlatform, JVMPlatform)
       publishOnlyLts,
       crossScalaVersions := supportedScalaVersions,
       scalacOptions ++= commonScalacOptions,
-      libraryDependencies += "co.fs2" %%% "fs2-core" % fs2Version,
-      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "co.fs2" %% "fs2-core" % fs2Version,
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
     )
     .jvmSettings(jvmReleaseTarget)
     .jsSettings(jsModuleSettings *)
@@ -839,11 +828,11 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       PluginDependency,
       scalacOptions ++= commonScalacOptions,
       publish / skip := true,
-      libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion,
-      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion % "test",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
-      libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
+      libraryDependencies += "io.bullet" %% "borer-derivation" % borerVersion,
+      libraryDependencies += "com.softwaremill.magnolia1_3" %% "magnolia" % magnoliaVersion % "test",
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "com.lihaoyi" %% "pprint" % pprintVersion % "test",
       // Exclude integration tests and benchmarks from default test runs
       excludeFromTest("scalus.testing.IntegrationTest"),
       excludeFromTest("scalus.testing.Benchmark"),
@@ -863,6 +852,9 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       // Expose the compiler version to tests so they can pick version-specific baselines
       // (budgets / script sizes drift between the 3.3.x LTS and 3.8.x). See ScalaCompilerVersion.
       Test / javaOptions += s"-Dscalus.test.scalaVersion=${scalaVersion.value}",
+      // Tests that start a child JVM need the test classpath: sbt 2 starts forked tests through a
+      // worker, so the child cannot use the forked JVM's `java.class.path`.
+      Test / javaOptions += s"-Dscalus.test.classpath=${classpathFiles((Test / fullClasspath).value, fileConverter.value).map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}",
       // `verify` runs `leanBuild` before the suites of proofs. The plugin's `leanBuild` builds
       // the project's own workspace, and these examples have none: their suites run in the
       // workspace of Scalus's Lean library (LeanProofs.libraryWorkspace), and
@@ -872,7 +864,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       // which is then not in the time limit of the check of a proof by hand. A new pin of Blaster
       // or PlutusCore is then built before a check asks for it. UsdcxMintingPolicyVerificationTest is not a suite of
       // proofs and needs the Z3 of its own nix shell, so its workspace is not built here.
-      leanBuild := {
+      leanBuild := Def.uncached {
           val log = streams.value.log
           val sources = (scalusVerification / baseDirectory).value / "src" / "main" / "lean"
           // Where LeanProofs.libraryWorkspace looks: SCALUS_LEAN_WORKSPACE, else the sources.
@@ -922,9 +914,9 @@ lazy val scalusUtxoCell = crossProject(JSPlatform, JVMPlatform)
       name := "scalus-utxo-cell",
       scalacOptions ++= commonScalacOptions,
       PluginDependency,
-      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.4",
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "com.lihaoyi" %% "pprint" % pprintVersion % "test",
+      libraryDependencies += "io.github.dotty-cps-async" %% "dotty-cps-async" % "1.3.4",
       publish / skip := true
     )
     .jvmSettings(Test / fork := true)
@@ -942,8 +934,8 @@ lazy val scalusDesignPatterns = project
       scalacOptions ++= commonScalacOptions,
       jvmReleaseTarget,
       publishOnlyLts,
-      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
       Test / fork := true
       //// enable if need speedup
       // trackInternalDependencies := TrackLevel.TrackIfMissing,
@@ -962,12 +954,12 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "org.slf4j" % "slf4j-api" % slf4jVersion,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci" % yaciVersion % "test",
-      libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion,
+      libraryDependencies += "io.bullet" %% "borer-derivation" % borerVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion % "test",
-      libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
+      libraryDependencies += "com.lihaoyi" %% "pprint" % pprintVersion % "test",
       Test / fork := true, // needed for BlocksValidation to run in sbt
       inConfig(Test)(PluginDependency)
     )
@@ -1016,13 +1008,13 @@ lazy val bench = project
         "-Xmx4g" // Increase heap to 4GB for large compilations
       ),
       // Fix JMH compilation issues - disable incremental compilation
-      Jmh / incOptions := (Jmh / incOptions).value.withEnabled(false),
+      Jmh / incOptions ~= (_.withEnabled(false)),
       run / fork := true,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.22.4",
-      libraryDependencies += "io.bullet" %%% "borer-core" % borerVersion,
-      libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion
+      libraryDependencies += "io.bullet" %% "borer-core" % borerVersion,
+      libraryDependencies += "io.bullet" %% "borer-derivation" % borerVersion
     )
 
 // Generates scalus-site/public/llms-api.txt - the LLM-facing public API cheatsheet
@@ -1038,7 +1030,9 @@ lazy val llmApiGen = project
     )
 
 lazy val generateLlmsApi = taskKey[Unit]("Generate scalus-site/public/llms-api.txt")
-generateLlmsApi := Def.taskDyn {
+// Root only: sbt 2 applies a bare setting to every subproject, so `sbt generateLlmsApi` would run the
+// generator once per aggregated project.
+LocalRootProject / generateLlmsApi := Def.uncached(Def.taskDyn {
     val dirs = Seq(
       (scalus.jvm / Compile / classDirectory).value,
       (scalusCardanoLedger.jvm / Compile / classDirectory).value,
@@ -1048,7 +1042,7 @@ generateLlmsApi := Def.taskDyn {
         ((ThisBuild / baseDirectory).value / "scalus-site" / "public" / "llms-api.txt").getAbsolutePath
     val argLine = (Seq(outFile, version.value) ++ dirs).mkString(" ")
     (llmApiGen / Compile / runMain).toTask(s" scalus.llmapi.LlmApiGen $argLine")
-}.value
+}.value)
 
 // Formal verification of Scalus code; see docs/design/verification-overview.md and
 // scalus-verification/README.md. The UplcBlaster tactic runs Lean in the workspace at
@@ -1078,8 +1072,9 @@ lazy val scalusVerification = project
       // compiled with these tests.
       Test / unmanagedSourceDirectories +=
           (LocalRootProject / baseDirectory).value / "scalus-verification-scalatest" / "src" / "main" / "scala",
-      prepareVerificationExamples := {
-          val classpath = (Test / dependencyClasspath).value.map(_.data).distinct
+      prepareVerificationExamples := Def.uncached {
+          val classpath =
+              classpathFiles((Test / dependencyClasspath).value, fileConverter.value).distinct
           val options = (Test / scalacOptions).value
           val destination = baseDirectory.value / "target" / "verification-examples"
           IO.writeLines(destination / "classpath", classpath.map(_.getAbsolutePath))
@@ -1099,7 +1094,7 @@ lazy val scalusVerification = project
           val top =
               Seq("lakefile.lean", "lean-toolchain", "lake-manifest.json", "ScalusProofs.lean")
                   .map(source / _)
-          val modules = ((source / "ScalusProofs") ** "*.lean").get
+          val modules = ((source / "ScalusProofs") ** "*.lean").get()
           val copied = (top ++ modules).sortBy(_.getPath).map { file =>
               val relative = IO.relativize(source, file).get.replace('\\', '/')
               IO.copyFile(file, target / relative)
@@ -1136,7 +1131,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     .dependsOn(scalus % "compile->compile;test->test")
     .settings(
       name := "scalus-cardano-ledger",
-      mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
+      mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq(
         // The streaming hub's internals churn while the provider implementations are built –
         // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: AGENTS.md
@@ -1156,21 +1151,21 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
       libraryDependencies ++= Seq(
-        "io.bullet" %%% "borer-core" % borerVersion,
-        "io.bullet" %%% "borer-derivation" % borerVersion
+        "io.bullet" %% "borer-core" % borerVersion,
+        "io.bullet" %% "borer-derivation" % borerVersion
       ),
       // For tx builder
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "com.outr" %%% "scribe" % "3.19.0", // logging
+      libraryDependencies += "com.outr" %% "scribe" % "3.19.0", // logging
       libraryDependencies ++= Seq(
-        "dev.optics" %%% "monocle-core" % monocleVersion,
-        "dev.optics" %%% "monocle-macro" % monocleVersion,
+        "dev.optics" %% "monocle-core" % monocleVersion,
+        "dev.optics" %% "monocle-macro" % monocleVersion,
       ),
-      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion % "test",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
-      libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.27",
+      libraryDependencies += "com.softwaremill.magnolia1_3" %% "magnolia" % magnoliaVersion % "test",
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "com.lihaoyi" %% "pprint" % pprintVersion % "test",
+      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.27",
       inConfig(Test)(PluginDependency),
       publishOnlyLts
     )
@@ -1189,7 +1184,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       // output to collapse any internal chunks into one file and minify. @noble/* are
       // inlined into the bundle so scalus.js is fully self-contained – it can be loaded
       // directly in a browser `<script type="module">` with no import map or npm install.
-      prepareNpmPackage := {
+      prepareNpmPackage := Def.uncached {
           (Compile / fullLinkJS).value
           val linkerOutputDir = (Compile / fullLinkJS / scalaJSLinkerOutputDirectory).value
           val nodeModules = (ThisBuild / installNpmTestDeps).value
@@ -1215,7 +1210,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
           if (code != 0) sys.error("esbuild bundling of scalus.js failed")
           log.info(s"Wrote ESM bundle to $outFile (${outFile.length} bytes)")
       },
-      runNpmTests := {
+      runNpmTests := Def.uncached {
           import scala.sys.process.*
           val npmDir = (Compile / sourceDirectory).value / "npm"
           val log = streams.value.log
@@ -1245,12 +1240,12 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       // this task needs. Arguments are passed to the runner as a real Seq[String]: the
       // `runMain` command line splits on whitespace, which breaks on any checkout path (or
       // classpath jar) containing a space.
-      generateDts := {
+      generateDts := Def.uncached {
           val _ = (scalus.js / Compile / compile).value
           val coreClasses = (scalus.js / Compile / classDirectory).value.getAbsolutePath
           val ledgerClasses = (Compile / classDirectory).value.getAbsolutePath
-          val cp = (Compile / fullClasspath).value
-              .map(_.data.getAbsolutePath)
+          val cp = classpathFiles((Compile / fullClasspath).value, fileConverter.value)
+              .map(_.getAbsolutePath)
               .mkString(java.io.File.pathSeparator)
           val out = ((Compile / sourceDirectory).value / "npm" / "scalus.d.ts").getAbsolutePath
           val args = List(
@@ -1265,7 +1260,10 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
           )
           // `run / runner` (not the config-scoped `runner`) is the forked one, see the
           // `Compile / run / fork` setting on scalusTsExporter.
-          val exporterCp = (scalusTsExporter / Runtime / fullClasspath).value.map(_.data)
+          val exporterCp = classpathFiles(
+            (scalusTsExporter / Runtime / fullClasspath).value,
+            fileConverter.value
+          ).map(_.toPath)
           (scalusTsExporter / Compile / run / runner).value
               .run("scalus.tsexport.Main", exporterCp, args, streams.value.log)
               .failed
@@ -1276,7 +1274,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       // an untracked file, so an unreviewed (or never committed) scalus.d.ts passed it. Being
       // unable to run the check at all (no git, no repository) is a different failure from a
       // stale file and says so, instead of blaming the file.
-      checkDtsUpToDate := {
+      checkDtsUpToDate := Def.uncached {
           generateDts.value
           val out = (Compile / sourceDirectory).value / "npm" / "scalus.d.ts"
           val root = (ThisBuild / baseDirectory).value
@@ -1325,9 +1323,9 @@ lazy val scalusSbtPlugin = project
       name := "scalus-sbt-plugin",
       sbtPlugin := true,
       scalaVersion := "2.12.21",
-      // Cross-build for sbt 1 (Scala 2.12) and sbt 2 (Scala 3). A single sbt 1.x launcher
-      // builds and publishes both axes via pluginCrossBuild. The sbt 1.x baseline is the
-      // minimum version consumers may use; sbt2-compat 0.2.0 requires sbt >= 1.9.
+      // Cross-build for sbt 1 (Scala 2.12) and sbt 2 (Scala 3). The sbt 2 host builds and publishes
+      // both axes via pluginCrossBuild. The sbt 1.x baseline is the minimum version consumers may use;
+      // sbt2-compat 0.2.0 requires sbt >= 1.9.
       // The sbt 2 axis is built against sbt 2.0.0 with its own Scala version, 3.8.4. That is not a
       // supported Scalus version: no Scalus module is on this classpath. All sbt 2.x share the
       // `_sbt2_3` artifact, so this one build serves sbt 2.0.x and 2.1.x: sbt 2.1 runs on Scala
@@ -1341,6 +1339,14 @@ lazy val scalusSbtPlugin = project
       },
       // shared-source shim so one source set compiles against both sbt 1 and sbt 2 APIs
       addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.2.0"),
+      // The sbt 2 metabuild supplies the Scala 3 library, so the sbt 2 axis declares it `provided`,
+      // as sbt 2 plugins do. An sbt 2.1 host would otherwise put it in the POM with compile scope.
+      autoScalaLibrary := scalaBinaryVersion.value == "2.12",
+      libraryDependencies ++= {
+          if (scalaBinaryVersion.value == "3")
+              Seq("org.scala-lang" % "scala3-library_3" % scalaVersion.value % Provided)
+          else Nil
+      },
       scalacOptions ++= Seq("-deprecation", "-feature"),
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % Test,
     )
@@ -1380,13 +1386,13 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci" % yaciVersion % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion % "test",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
-      libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3" % "test",
+      libraryDependencies += "com.lihaoyi" %% "upickle" % "4.4.3" % "test",
       libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.3" % "test",
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.86" % "test",
       libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0",
-      libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
+      libraryDependencies += "com.lihaoyi" %% "pprint" % pprintVersion % "test",
       // Testcontainers for Yaci DevKit integration tests
       libraryDependencies += "com.dimafeng" %% "testcontainers-scala-core" % "0.44.1" % "test",
       libraryDependencies += "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.44.1" % "test",
@@ -1396,6 +1402,10 @@ lazy val scalusCardanoLedgerIt = project
 // =============================================================================
 // UTILS
 // =============================================================================
+
+/** sbt 2 classpath entries are `HashedVirtualFileRef`s; this resolves them to files. */
+def classpathFiles(cp: Classpath, converter: xsbti.FileConverter): Seq[File] =
+    cp.map(entry => converter.toPath(entry.data).toFile)
 
 def copyFiles(files: Seq[String], baseDir: File, targetDir: File, log: ManagedLogger): Unit = {
     files.foreach { file =>
@@ -1431,7 +1441,7 @@ def commandSequence(name: String, steps: String*): Def.Setting[?] =
 
 // ABI compatibility gate for the stable surface: scalus-core, scalus-cardano-ledger and
 // scalus-bloxbean-cardano-client-lib, checked against scalusCompatibleVersion.
-// Both cross-projects declare mimaPreviousArtifacts with %%%, so their Scala.js artifacts are
+// Both cross-projects declare mimaPreviousArtifacts with the platform-aware %%, so their Scala.js artifacts are
 // part of that stable surface as well, and JS-only code (scalus.cardano.node.JEmulator) can
 // break on its own. The JS variants are therefore checked too: `mima` runs both halves.
 // CI splits them: ci-jvm runs mima-jvm, and ci-js runs mima-js, because ci-js compiles the
@@ -1464,7 +1474,7 @@ commandSequence(
   "scalafmtSbt",
   "jvm/Test/compile",
   "scalusCardanoLedgerIt/Test/compile",
-  "jvm/test"
+  "jvm/testFull"
 )
 // Task list shared by every cross-version CI job. We must NOT use the `jvm` aggregate here:
 // modules that don't list the cross version (scalusUplcJitCompiler, scalusUtxoCell, bench) fall
@@ -1493,8 +1503,8 @@ val crossVersionCiTasks = {
       "scalusDesignPatterns/Test/compile",
       "scalus-bloxbean-cardano-client-lib/Test/compile",
       "scalusEthereumKzgCeremony/Test/compile",
-      "scalusJVM/test",
-      "scalusExamplesJVM/test"
+      "scalusJVM/testFull",
+      "scalusExamplesJVM/testFull"
     )
 }
 
@@ -1515,7 +1525,7 @@ commandSequence(
   "scalafmtSbtCheck",
   "jvm/Test/compile",
   "scalusCardanoLedgerIt/Test/compile",
-  "jvm/test",
+  "jvm/testFull",
   "mima-jvm",
   "jvm/doc",
   "docs/unidoc"
@@ -1528,14 +1538,14 @@ commandSequence(
   "ci-js",
   "clean",
   "js/Test/compile",
-  "js/test",
+  "js/testFull",
   "js/doc",
   "mima-js",
-  "scalusTsExporter/test",
+  "scalusTsExporter/testFull",
   "scalusCardanoLedgerJS/checkDtsUpToDate",
   "scalusCardanoLedgerJS/runNpmTests"
 )
-commandSequence("ci-native", "clean", "native/Test/compile", "native/test")
+commandSequence("ci-native", "clean", "native/Test/compile", "native/testFull")
 // The CI jobs for the default Scala version in one command. Do not build it on the root aggregate:
 // that links the deliberately bad scalusTsExporterFixtures and always fails.
 commandSequence("ci", "ci-jvm", "ci-js", "ci-native")
@@ -1553,7 +1563,7 @@ commandSequence(
   "clean",
   "scalusCardanoLedgerIt/clean",
   "scalusCardanoLedgerIt/Test/compile",
-  "scalusCardanoLedgerIt/test"
+  "scalusCardanoLedgerIt/testFull"
 )
 // The two halves of `it`, which the two jobs of .github/workflows/it.yml run apart, so a flaky
 // devnet does not hide a ledger divergence. it-conformance needs no network: the ledger vectors,

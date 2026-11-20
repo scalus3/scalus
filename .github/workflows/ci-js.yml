@@ -33,12 +33,14 @@ jobs:
       # has received a shutdown signal", on ubuntu-24.04 and ubuntu-26.04 alike. Two links
       # and two test runs at a time keep the peak inside the machine. The sampler prints
       # used memory every 20 s, so a run that still dies shows how close it came.
+      # sbt 2.1's default workerMaxInstances (2) caps only forked JVM test groups; Scala.js tests
+      # run Node, not a forked JVM, so this Tags.Test limit is still the only cap on them.
       - name: Build and test in Nix devshell
         run: |
           (while sleep 20; do free -m | awk '/^Mem:/ {m=$3} /^Swap:/ {s=$3} END {print "[mem] used " m " MB, swap " s " MB"}'; done) &
           sampler=$!
           nix develop .#ci --accept-flake-config --command bash -c '
-            sbt "set Global / concurrentRestrictions ++= Seq(Tags.limit(Tags.Test, 2), Tags.limit(ScalaJSTags.Link, 2))" ci-js &&
+            sbt "set Global / concurrentRestrictions ++= Seq(Tags.limit(Tags.Test, 2), Tags.limit(ScalaJSTags.Link, 2)); ci-js" &&
             npm --prefix scalus-cardano-ledger/js/src/main/npm run test:browser
           '
           kill $sampler
