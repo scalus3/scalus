@@ -77,6 +77,17 @@ object BlueprintLayout {
         md.digest().map(b => "%02x".format(b)).mkString
     }
 
+    /** One line per classpath file, in classpath order: absolute path, size and last-modified
+      * time. A directory entry contributes every file under it. A version bump moves a jar to a
+      * new path; a rebuild changes a file's size or modification time. No file is read, so the
+      * stamp stays cheap for a classpath of large jars. A missing entry stamps as size 0, time 0.
+      */
+    def classpathStamp(classpath: Seq[File]): String =
+        classpath
+            .flatMap(entry => if (entry.isDirectory) listFilesRecursively(entry) else Seq(entry))
+            .map(f => s"${f.getAbsolutePath}\t${f.length}\t${f.lastModified}")
+            .mkString("\n")
+
     /** Deletes every `.json` file under `root` that is not in `keep` (compared canonically), then
       * removes directories left empty. Never touches non-json files. Returns the deleted files.
       * No-op when `root` does not exist.

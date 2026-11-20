@@ -9,8 +9,12 @@ import sbt.*
 private[sbt] object BlueprintGenerator {
 
     /** Generate per-contract blueprints (package-nested) plus an aggregate `plutus.json`
-      * under `resourceRoot`, skipping all work when the content fingerprint of `classesDir`
-      * matches the previous run.
+      * under `resourceRoot`, skipping all work when the fingerprint matches the previous run.
+      * The fingerprint covers the content of `classesDir` and a stamp of `dependencyClasspath`
+      * (path, size and modification time of each file). The dependency part matters because the
+      * script comes from the Scalus lowering and optimizer in a dependency: a Scalus bump changes
+      * the script while the project's class files can stay byte-identical. The class files are
+      * hashed by content, so a recompile that rewrites them unchanged keeps the cache.
       *
       * Layout:
       *   - `resourceRoot/META-INF/scalus/blueprints/<package>/<Contract>.json` per contract
@@ -34,7 +38,8 @@ private[sbt] object BlueprintGenerator {
         val outDir = resourceRoot / "META-INF" / "scalus" / "blueprints"
         val aggregateFile = resourceRoot / "plutus.json"
         val header =
-            s"scheme=${BlueprintLayout.Scheme};scala=$scalaVer;version=$projectVersion;name=$projectName"
+            s"scheme=${BlueprintLayout.Scheme};scala=$scalaVer;version=$projectVersion;name=$projectName\n" +
+                BlueprintLayout.classpathStamp(dependencyClasspath)
         // Prune before fingerprinting, so the cache describes the manifest we actually use.
         val classNames = BlueprintLayout.readManifestClassNames(classesDir).sorted
         val classFiles = BlueprintLayout.listFilesRecursively(classesDir)

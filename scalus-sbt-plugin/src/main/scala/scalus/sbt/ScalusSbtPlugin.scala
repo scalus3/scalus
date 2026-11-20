@@ -16,8 +16,9 @@ import sbtcompat.PluginCompat.*
   *     `resourceManaged/main/META-INF/scalus/blueprints/<package>/<Contract>.json` plus an
   *     aggregate document at `resourceManaged/main/plutus.json`. Registered as a resource
   *     generator, so `package`/`publish` embed both in the JAR (aggregate at `/plutus.json`);
-  *     every JAR describes exactly its own code. Generation is skipped when a content
-  *     fingerprint of `classDirectory` is unchanged. Git is never touched. Opt out with
+  *     every JAR describes exactly its own code. Generation is skipped when neither the content
+  *     of `classDirectory` nor the dependency classpath (path, size and modification time of
+  *     each file) changed. Git is never touched. Opt out with
   *     `blueprint / skip := true` or the `SCALUS_SKIP_BLUEPRINT` env var.
   *   - `blueprintPin` (deliberate): copies the current set to committed locations –
   *     `<base>/plutus.json` (the path Aiken tooling expects) and
@@ -746,8 +747,8 @@ object ScalusSbtPlugin extends AutoPlugin {
     override lazy val projectSettings: Seq[Setting[?]] = Seq(
       // Def.uncached opts these out of sbt 2's task cache: they return Seq[File] (not a
       // cacheable output type) and write files, and `deploy` performs network I/O. No-op on
-      // sbt 1 (via sbt2-compat). Work-skipping for `blueprint` comes from its own content
-      // fingerprint of classDirectory, not from sbt's task cache.
+      // sbt 1 (via sbt2-compat). Work-skipping for `blueprint` comes from its own fingerprint
+      // of classDirectory and the dependency classpath, not from sbt's task cache.
       blueprint := Def.uncached(blueprintTask.value),
       // Default-on; opt out per project with `blueprint / skip := true`. Defined at project (Zero)
       // config so the generator's Compile-scoped read delegates to it AND a user's Zero-scoped
