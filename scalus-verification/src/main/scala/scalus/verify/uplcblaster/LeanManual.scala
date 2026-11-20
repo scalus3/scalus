@@ -170,7 +170,7 @@ final class LeanManual private (
     ): Either[ExecutionResult, ExecutionResult] = {
         val text = LeanManual.checkText(module, statementModule, theorem)
         for {
-            messages <- LeanManual.finished(server.check(text, LeanManual.left(deadline)), theorem)
+            messages <- elaborated(server, text, deadline)
             read <- LeanManual.read(
               messages,
               LeanWorkspace.packageName(workspace),
@@ -198,6 +198,19 @@ final class LeanManual private (
             lemmas
           )
         )
+    }
+
+    /** What Lean reported of `text`, checked in `server` with what is left of the time until
+      * `deadline`. A check given up at the deadline says how far it had come.
+      */
+    private def elaborated(
+        server: LeanServer,
+        text: String,
+        deadline: Deadline
+    ): Either[ExecutionResult, List[Message]] = {
+        // The time that went before this check: to Lake's builds, and to the checks before it.
+        val before = (timeout - deadline.timeLeft).max(Duration.Zero).min(timeout)
+        LeanManual.finished(server.check(text, LeanManual.left(deadline)), theorem, timeout, before)
     }
 
     /** Nothing where each axiom `proved` the proof cites, of the statements whose modules are
@@ -230,10 +243,7 @@ final class LeanManual private (
                 .orElse(LeanManual.built(workspace, modules.map(_._1), deadline))
                 .orElse {
                     val text = LeanManual.citationText(module, modules.map(_._1))
-                    LeanManual.finished(
-                      server.check(text, LeanManual.left(deadline)),
-                      theorem
-                    ) match {
+                    elaborated(server, text, deadline) match {
                         case Left(result) => Some(result)
                         case Right(messages) =>
                             val errors = messages.filter(_.severity == Severity.Error)
@@ -494,17 +504,54 @@ object LeanManual {
                 .map(cited => s"example : $cited.statement := $cited.proved")
                 .mkString("\n") + "\n"
 
-    /** Lean's messages, where it finished a check; else the result of a check it did not finish. */
+    /** Lean's messages, where it finished a check; else the result of a check it did not finish:
+      * one of `theorem` with the time limit `limit`, of which `before` had gone before it.
+      */
     private def finished(
         result: LeanServer.Result,
-        theorem: String
+        theorem: String,
+        limit: FiniteDuration,
+        before: FiniteDuration
     ): Either[ExecutionResult, List[Message]] =
         result match {
             case LeanServer.Result.Finished(messages) => Right(messages)
-            case LeanServer.Result.TimedOut(_) =>
-                Left(LeanManual.undecided(s"Lean did not check $theorem in time"))
+            case LeanServer.Result.TimedOut(progress) =>
+                Left(LeanManual.undecided(unfinished(theorem, limit, before, progress)))
             case LeanServer.Result.Failed(reason) => Left(LeanManual.failure(reason))
         }
+
+    /** Why a check of `theorem` given up at its time limit, `limit`, is no result, and how far it
+      * had come: `before` had gone to Lake's builds and to the checks before it, and `progress` is
+      * where Lean was. A check of a proof takes seconds where its modules are built, so one that
+      * reaches the limit is told by what its processes did: a worker that worked the whole time, or
+      * one that waited.
+      */
+    private[uplcblaster] def unfinished(
+        theorem: String,
+        limit: FiniteDuration,
+        before: FiniteDuration,
+        progress: LeanServer.Progress
+    ): String = {
+        import LeanServer.Reached
+        def seconds(time: FiniteDuration): String = s"${time.toSeconds} s"
+        val where = progress.reached match
+            case Reached.NotStarted => "the check had not started: its server was at another check"
+            case Reached.Unreported => "Lean had not said how far the check had come"
+            case Reached.End =>
+                "Lean had run every command of the check, and had not finished checking what " +
+                    "they define"
+            case Reached.Command(line) =>
+                s"Lean had been at `${line.trim}` for ${seconds(progress.spent)}"
+        val processes = progress.started.map { started =>
+            s"${started.name} had run for ${seconds(started.running)}" +
+                started.working.fold("")(working => s" and worked for ${seconds(working)}")
+        }
+        val running =
+            if processes.isEmpty then ""
+            else processes.mkString("; of the processes the check started, ", ", ", "")
+        s"Lean did not check $theorem within $limit: ${seconds(before)} of it went to Lake's " +
+            s"builds and the checks before this one, and $where$running"
+    }
 
     /** Lean's errors, by their lines. */
     private def described(errors: List[Message]): String =
