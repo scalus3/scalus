@@ -7,8 +7,12 @@
 - CSE now shares several candidates per pass, so its output can differ from 1.5.0: two `let`
   bindings can nest in the other order, and a tie between candidates can keep another set of
   bindings. A compiled script can get new bytes, so a new script hash and address. Of the 89 Plutus
-  use-case scripts, 57 get new bytes, with the same size and execution budget. Update any script
-  hash or address that a test pins.
+  use-case scripts, 57 get new bytes, and so do 2 of the 23 example contracts (crowdfunding and
+  the price bet oracle), all with the same size and execution budget. Update any script hash or
+  address that a test pins.
+- `scalus-verification` (experimental): `p ==> q` is now `p ==>: q`, and `p implies q` is now
+  `p implies_: q`. Both new operators are right-associative, and `implies_:` binds loosest, so
+  `p && q implies_: r` needs no parentheses.
 
 ### Added
 
@@ -16,6 +20,13 @@
   crashes on some Scalus code (scala/scala3#27039).
 - `PositionalMerkleTree`: fixed-depth commitments by position with SSZ multiproofs, and on-chain
   `verifyMembership`, `delete` and `deleteMany`.
+- sbt plugin: `verify` builds the Lean workspace, runs the suites of proofs with Lean required, and
+  checks the proofs written by hand. `leanExport` writes the proved statements as Lean modules, and
+  `ualExport` as Universal Annotation Language documents.
+- `scalus-verification` (experimental): `Props.isValid(ctx)` limits a statement to script contexts
+  the ledger can give a script. `premise ==>?: claim` checks the rejecting form.
+  `Verifier.specifications` lists every `Spec.ensures`, `ensuring` and `Spec.expects` with its
+  status. The AMM example has proofs written by hand, checked by the `lean-manual` tactic.
 
 ### Changed
 
@@ -29,6 +40,8 @@
   free variable inside `constr` or `case`. Like Plutus, PlutusV1 and PlutusV2 accept the result and
   PlutusV3 fails with `InvalidReturnValue`. `DeBruijn.fromDeBruijnTerm` now names such a variable
   `free<k>` instead of throwing (#474).
+- sbt plugin: `blueprint` now regenerates when only a dependency changes. Before, a Scalus upgrade
+  that left the contract classes unchanged kept the old `plutus.json`, with the old script hash.
 
 ## 1.5.0 (2026-11-04)
 
