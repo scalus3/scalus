@@ -260,13 +260,14 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
       * For example, sharing f(e) leaves one copy of e. Such a candidate waits for the next pass,
       * which counts it again. So do all candidates ranked below it that nest with it, even when it
       * was not taken: with its new count it can still outrank them. Every other candidate keeps its
-      * occurrences and saving until the one-at-a-time greedy loop would reach it, so taking them
-      * all now gives the bindings that loop gives.
+      * occurrences and saving, so none is extracted with a stale count.
       *
-      * Two things can differ from that loop. Ties can break the other way. And when a held-back
-      * candidate binds at the same node as a taken one, it goes inside the taken one's let, even if
-      * the loop would have extracted it first. Both lets run before the body, so only the order of
-      * their two right-hand sides changes; the size and the budget do not.
+      * The output can differ from the one-candidate-per-pass loop of Scalus 1.5.0 (see
+      * CseOutputHashTest). That loop ranked again after each extraction. An extraction moves a
+      * right-hand side behind its let body, which changes the traversal order that breaks ties. So
+      * two lets can nest in the other order, or a tie can keep a different set of bindings. A
+      * held-back candidate can also bind inside the let of a candidate taken before it, where that
+      * loop extracted it first. Safety does not depend on the order: it comes from the grouping.
       *
       * In Constr(0, [f(e), f(e), e, g, g]), ranked f(e), e, g: take f(e), hold back e (inside
       * f(e)), take g.

@@ -4,9 +4,11 @@
 
 ### Upgrading
 
-- CSE can now nest two of its `let` bindings in the other order. Some compiled scripts get new
-  bytes, so a new script hash and address, with the same size and execution budget. Update any
-  script hash or address that a test pins.
+- CSE now shares several candidates per pass, so its output can differ from 1.5.0: two `let`
+  bindings can nest in the other order, and a tie between candidates can keep another set of
+  bindings. A compiled script can get new bytes, so a new script hash and address. Of the 89 Plutus
+  use-case scripts, 57 get new bytes, with the same size and execution budget. Update any script
+  hash or address that a test pins.
 
 ### Added
 

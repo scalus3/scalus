@@ -64,12 +64,9 @@ establishes safety.
 
 Each round extracts the greatest eligible estimate and, with it, every candidate whose occurrences
 neither contain nor lie inside an occurrence of a better-ranked candidate; then it recollects.
-Extraction changes only the candidates that nest with it, so each batched candidate keeps its
-occurrences and estimate until one-at-a-time extraction would reach it, and the bindings are the
-same. Two things can differ: ties, and the nesting order of two lets at one node. Both lets run
-before the body, so only the order of their right-hand sides changes, not the size or the budget.
-A batch of 70 candidates replaces 70 collections of the whole term. Termination
-uses the lexicographic pair (non-let structural nodes, estimated bits). The first component counts
+Extraction changes only the candidates that nest with it, so no batched candidate is extracted
+with a stale count or estimate. A batch of 70 candidates replaces 70 collections of the whole term.
+Termination uses the lexicographic pair (non-let structural nodes, estimated bits). The first component counts
 nodes other than leaves and administrative Apply/LamAbs pairs. Runtime sharing removes at least
 one counted node; its new binding contributes none. Fee-only leaf sharing decreases bits instead.
 Collection skips the lambda in an immediate application, so lambda extraction cannot turn an
@@ -77,6 +74,15 @@ ignored let into a counted call. Alpha-equivalent copies have identical node str
 The bit estimate assumes minimum-width variable indices and worst-case byte-array padding.
 Marginal extractions can therefore increase actual serialized size. This affects profitability,
 not semantic safety. A regression test covers this at an index-width boundary.
+
+Batching does not reproduce the one-candidate-per-round loop of Scalus 1.5.0, which ranked again
+after each extraction. An extraction moves a right-hand side behind its let body, which changes the
+traversal order that breaks ties. So two lets can nest in the other order, or a tie can keep a
+different set of bindings. A held-back candidate can also bind inside the let of a candidate taken
+before it, where that loop extracted it first. Matching that loop exactly would give up most of
+the batching. Of the 89 Plutus use-case scripts, 57 get new bytes, with the same size, budget and
+bindings as in 1.5.0. `CseOutputHashTest` pins the output of all 89, and three small terms where
+the result differs from 1.5.0.
 
 The inliner shares the same cost calculation. It keeps exact occurrence counts, including guarded
 uses and excluding shadowed uses. For multiple uses, only variables, constants and builtins are
