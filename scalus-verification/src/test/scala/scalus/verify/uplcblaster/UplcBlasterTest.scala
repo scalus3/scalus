@@ -10,7 +10,7 @@ import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRBuiltins, SIRType, TargetLo
 import scalus.compiler.sir.lowering.{PrimitiveRepresentation, ProductCaseClassRepresentation, SumCaseClassRepresentation}
 import scalus.uplc.{Constant, DefaultUni, PlutusV3, Term}
 import scalus.uplc.Term.asTerm
-import scalus.uplc.builtin.{Builtins, ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.{BuiltinPair, Builtins, ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.verify.*
@@ -656,6 +656,45 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         proven(forAll[String](s => equal(Builtins.appendString("", s), s)), budget = 40)
         // negative control: two strings need not be equal
         refuted(forAll[String, String]((a, b) => equal(a, b)), budget = 40)
+    }
+
+    test("quantifies over pairs, and reads a pair counterexample back") {
+        // A pair, a Scala tuple or the builtin pair of UPLC, is a case class of two fields: one
+        // Lean variable for each component, of the component's type.
+        def binders(prop: Prop) = lowered(prop, FunctionTable.empty).binders
+        val tuple = forAll[(BigInt, ByteString)](p =>
+            Builtins.lengthOfByteString(Builtins.appendByteString(p._2, p._2)) ==
+                Builtins.lengthOfByteString(p._2) * BigInt(2)
+        )
+        assert(binders(tuple).map(_.tp) == List(SIRType.Integer, SIRType.ByteString))
+        // Building the tuple from its components and taking them apart costs steps: this one
+        // needs 106.
+        proven(tuple, budget = 160)
+        proven(
+          forAll[(BigInt, BigInt)](p => Math.min(p._1, p._2) <= Math.max(p._1, p._2)),
+          budget = 240
+        )
+        // negative control: the first component need not be the smaller
+        val ordered = forAll[(BigInt, BigInt)](p => p._1 <= p._2)
+        val counterexample = refuted(ordered, budget = 160)
+        binders(ordered).map(b => counterexample.get(b.name)) match
+            case List(Some(first), Some(second)) =>
+                assert(integer(first) > integer(second), counterexample)
+            case _ => fail(s"expected the two components, got $counterexample")
+
+        // The builtin pair of two Data, which a Data.Map's entries are.
+        val builtin = forAll[BuiltinPair[Data, Data]](p =>
+            equal(Builtins.fstPair(Builtins.mkPairData(p.fst, p.snd)), p.fst)
+        )
+        assert(binders(builtin).size == 2, binders(builtin))
+        proven(builtin, budget = 200)
+        // negative control: the two components need not be equal
+        val same = forAll[BuiltinPair[Data, Data]](p => equal(p.fst, p.snd))
+        val pair = refuted(same, budget = 200)
+        binders(same).map(b => pair.get(b.name)) match
+            case List(Some(Constant.Data(first)), Some(Constant.Data(second))) =>
+                assert(first != second, pair)
+            case _ => fail(s"expected two Data components, got $pair")
     }
 
     test("Blaster's valid verdict in a document with an error is no proof") {
