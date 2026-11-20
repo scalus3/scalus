@@ -5,8 +5,9 @@ import scalus.cardano.ledger.Word64
 import scalus.uplc.{Constant, NamedDeBruijn, Program, Term}
 import scalus.uplc.Term.*
 
-/** CSE must stay fast on large terms. Each threshold is far from both the slow and the fast time,
-  * so a slow CI machine does not make a test flaky.
+/** CSE must stay fast on large terms. Each threshold is far from both the slow and the fast time.
+  * CI runners take up to 16 times as long as an M-series laptop, so each threshold is at least 5
+  * times the slowest CI time measured.
   */
 class CsePerformanceTest extends AnyFunSuite {
 
@@ -41,8 +42,9 @@ class CsePerformanceTest extends AnyFunSuite {
     test("CSE extracts independent candidates without a collect pass for each") {
         // lam f. Constr(0, [f 0, f 0, ..., f 999, f 999, Constr(1, [0, 1, ..., 19999])])
         // 1,000 independent calls, each used twice, and 20,000 unique constants. One pass over
-        // the 26,000 nodes per extraction took about 7 s on an M-series laptop; now about 35 ms.
-        val thresholdMs = 500
+        // the 26,000 nodes per extraction took about 7 s on an M-series laptop; now about 35 ms,
+        // and up to 554 ms on CI.
+        val thresholdMs = 3000
         val f = Var(NamedDeBruijn("f"))
         def int(i: Int): Term = Const(Constant.Integer(i))
         val calls = (0 until 1000).toList.flatMap(i => List.fill(2)(Apply(f, int(i))))
@@ -59,11 +61,12 @@ class CsePerformanceTest extends AnyFunSuite {
     }
 
     test("CSE keys do not collide on terms that differ only in variable names") {
-        // Constr(0, [v0, v0, v1, v1, ..., v9999, v9999]): nothing to share, one pass. When every
+        // Constr(0, [v0, v0, v1, v1, ..., v19999, v19999]): nothing to share, one pass. When every
         // variable had the same key hash, each lookup compared it with the variables seen so far:
-        // Scalus 1.5.0 took about 1.7 s on an M-series laptop; now about 5 ms.
-        val thresholdMs = 400
-        val uses = (0 until 10000).toList.flatMap(i => List.fill(2)(Var(NamedDeBruijn(s"v$i"))))
+        // that took about 7 s on an M-series laptop; now about 12 ms. With 10,000 variables, CI
+        // took up to 71 ms.
+        val thresholdMs = 1500
+        val uses = (0 until 20000).toList.flatMap(i => List.fill(2)(Var(NamedDeBruijn(s"v$i"))))
         val term = Constr(Word64.Zero, uses)
 
         val ms = bestMs(() => CommonSubexpressionElimination(term))
