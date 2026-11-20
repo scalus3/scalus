@@ -22,10 +22,10 @@ TESTS_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/test/scala/scalus/examples"
 SCALUS_VERSION="$(sed -n 's/^val scalusStableVersion = "\(.*\)"$/\1/p' "$SCRIPT_DIR/build.sbt" 2>/dev/null)"
 SCALUS_VERSION="${SCALUS_VERSION:-1.5.0}"
 
-# Ejected projects target sbt 2.0.0 (where `test` is cached and `testFull` runs
+# Ejected projects target sbt 2.1.0 (where `test` is cached and `testFull` runs
 # uncached, like sbt 1.x `test`). Pinned independently of the monorepo, which
 # still builds on sbt 1.x — so we must NOT read it from project/build.properties.
-SBT_VERSION="2.0.0"
+SBT_VERSION="2.1.0"
 SCALA_VERSION="3.3.9"
 
 EXCLUDED_EXAMPLES="cape setbench buidlerfest linkedlist bilinearAccumulator platform"
