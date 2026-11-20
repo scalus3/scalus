@@ -146,18 +146,21 @@ theorem Swap.product_never_falls : Reachable s → s'.r0 * s'.r1 ≥ s.r0 * s.r1
   that no sequence of swaps lowers the product, is the induction a model is for.
 
 **The types are those of the Scala code.** [`LeanTypes`](lean-types.md) writes a `structure` for
-each case class, with its `Data` encoding. Its module imports PlutusCore for `Data`, and a model
-that other tools read, or that Mathlib proofs use without the Blaster stack, should not need it.
-So `LeanTypes` writes two modules:
+each case class, with its `Data` encoding, in one module. A model that uses them requires the
+workspace's package, and so Scalus's Lean library and its packages: PlutusCore, Blaster and
+CardanoLedgerApi. That is no conflict with Mathlib: none of the three requires Mathlib or a package
+of it, so a model's proofs with Mathlib and the library build in one workspace. What it costs is
+the first build of those packages, and the Lean version that Blaster and PlutusCore pin.
 
-- **[ST-8]** the structures, over `Int`, `Bool` and `String`, in a module that imports nothing. A
-  byte string is a `String`, which is what PlutusCore's `ByteString` holds (`data : String`);
-- **[ST-9]** their encodings (`toData`, `fromData`, `isEncoding`) in a module that imports the first
-  and PlutusCore, and wraps each byte string into a `ByteString`.
+- **[ST-8]** The model uses the types that `LeanTypes` writes, with the names of their fields.
+- **[ST-9]** The module of the types imports what its declarations use: PlutusCore's data types
+  (`PlutusCore.Data`, which brings its `ByteString` and `Integer`), and a library's module where a
+  type is bound to that library's. Today it imports `ScalusProofs.Run`, which brings the runner,
+  Blaster and the ledger's rules, so a model that imports only the types builds all of them. That
+  the declarations need nothing else is to be checked.
 
-The model imports the first, and the workspace of the proofs imports both. A mapping's `g` then
-takes the generated types, as [function mappings](function-mappings.md#the-claim) asks, and the
-model has one text of its types, the Scala one.
+A mapping's `g` then takes the generated types, as [function mappings](function-mappings.md#the-claim)
+asks, and the model has one text of its types, the Scala one.
 
 ## The ties
 
@@ -233,7 +236,7 @@ script.
 
 ## Steps
 
-1. **`LeanTypes` in two modules** ([ST-8], [ST-9]).
+1. **The module of the types imports PlutusCore's data types only** ([ST-9]).
 2. **The AMM's Swap as the first step.** `SwapClaim` and `SwapRules` in Scala, and what the
    extraction does to the script's bytes; `Swap.guard` and `Swap.claim` in Lean; the mapping of the
    guard (the first use of `leanMapping`); the first decomposition statement;
@@ -252,3 +255,8 @@ script.
 3. **The size of the decomposition statements**, over contexts of a real transaction, and the
    limits they need.
 4. **The model of several steps in one transaction.**
+5. **A model without Scalus's library.** Where a model must build without it, as on a newer Lean
+   than Blaster and PlutusCore pin, `LeanTypes` could write the structures in a module that imports
+   nothing, over `Int`, `Bool` and `String` (what PlutusCore's `ByteString` holds), and their
+   encodings in a second module. A type with a `Data` part, or one bound to a library's type,
+   would stay whole in the second. Not needed so far.
