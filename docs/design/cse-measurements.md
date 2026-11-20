@@ -428,12 +428,12 @@ restored to 3.3.8. A fresh blueprint snapshot exactly matches the table above.
 
 ## Reproduce
 
+These measurements used `scripts/cse-corpus.py`, since replaced by `ExampleScriptHashTest`. The
+test pins the script hash and size of every example contract on the Scala 3.3 LTS. After an
+optimizer change, its failure lists each contract with a new hash, and its old and new size:
+
 ```sh
-sbtn scalusExamplesJVM/blueprint
-python3 scripts/cse-corpus.py snapshot target/cse-review/before.json
-# Apply the CSE change, then rebuild.
-sbtn scalusExamplesJVM/blueprint
-python3 scripts/cse-corpus.py snapshot target/cse-review/after.json
-python3 scripts/cse-corpus.py compare target/cse-review/before.json target/cse-review/after.json
-sbtn quick
+sbtn "scalusExamplesJVM/testOnly scalus.examples.ExampleScriptHashTest"
 ```
+
+If the change is deliberate, paste the table from the failure message into the test.

@@ -125,8 +125,9 @@ oracle tests reject speculation and capture. Seeded coverage checks require actu
 successful evaluations and failures. Budget exhaustion is detected separately; it is not accepted
 as evidence that two terms are equivalent.
 
-The existing cross-JVM tests check deterministic output. `scripts/cse-corpus.py` snapshots and
-compares all generated blueprint hashes and compiled sizes after `scalusExamplesJVM/blueprint`.
+The existing cross-JVM tests check deterministic output. `ExampleScriptHashTest` pins the script
+hash and size of every example contract, so a change in any optimizer pass that alters a script
+fails it and names the contract.
 
 CCE has its own bit-based profitability model. For `n` occurrences it credits the duplicated
 skeleton, subtracts the application/variable framing, and charges `3n + 3` additional CEK steps
