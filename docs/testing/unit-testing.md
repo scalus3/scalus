@@ -1,0 +1,350 @@
+Source: https://scalus.org/docs/testing/unit-testing
+
+# Unit Testing
+
+## Setup
+
+Mix `ScalusTest` into your ScalaTest suite:
+
+```scala
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.testing.kit.ScalusTest
+import scalus.testing.kit.Party.{Alice, Bob}
+
+class MyValidatorTest extends AnyFunSuite, ScalusTest {
+
+  test("validator accepts valid input") {
+    // ...
+  }
+}
+```
+
+`ScalusTest` provides:
+- A default PlutusV3 VM (overridable via `plutusVM`)
+- Script context builders
+- Result checking helpers (`checkResult`, `assertScriptFail`)
+- `random[A]` for generating test data via ScalaCheck
+- `Arbitrary` instances for all Cardano types
+- SIR and Program evaluation extensions
+
+## Parties
+
+Scalus provides a `Party` enum with pre-derived HD wallets for test participants:
+
+```scala
+import scalus.testing.kit.Party
+import scalus.testing.kit.Party.{Alice, Bob, Charles, Eve}
+import scalus.cardano.address.Network
+
+val aliceAddr = Alice.address(Network.Mainnet)
+val alicePkh  = Alice.addrKeyHash
+val signer    = Alice.signer
+```
+
+Available parties: Alice, Bob, Charles, Dave, Eve, Faith, Grace, Hal, Ivan, Judy, Kevin, Laura, Mallory, Nick, Oracle, Peggy, Sybil, Trent, Victor, Wendy.
+
+Each party has:
+- `address(network)` — Shelley address for a given network
+- `addrKeyHash` — payment key hash
+- `signer` — `TransactionSigner` for signing transactions
+- `account` — full `HdAccount` (CIP-1852 HD wallet)
+
+## Creating an Emulator
+
+The `Emulator` is an in-memory Cardano node for fast, deterministic testing. Fund participants with initial UTxOs:
+
+```scala
+import scalus.cardano.node.Emulator
+import scalus.cardano.ledger.*
+import scalus.cardano.ledger.rules.PlutusScriptsTransactionMutator
+import scalus.testing.kit.TestUtil.genesisHash
+
+val emulator = Emulator(
+  initialUtxos = Map(
+    Input(genesisHash, 0) -> TransactionOutput.Babbage(
+      address = Alice.address(Network.Mainnet),
+      value = Value.lovelace(100_000_000L)
+    ),
+    Input(genesisHash, 1) -> TransactionOutput.Babbage(
+      address = Bob.address(Network.Mainnet),
+      value = Value.lovelace(100_000_000L)
+    )
+  ),
+  initialContext = Context.testMainnet(),
+  mutators = Set(PlutusScriptsTransactionMutator)
+)
+```
+
+Or use the convenience factory:
+
+```scala
+val emulator = Emulator.withAddresses(
+  Seq(Alice.address(Network.Mainnet), Bob.address(Network.Mainnet)),
+  Value.lovelace(100_000_000L)
+)
+```
+
+See [Emulator](/docs/testing/emulator) for the full guide.
+
+## Testing with Transactions
+
+The most common pattern: build a transaction, submit it to the emulator, and verify the result.
+
+### Happy Path
+
+```scala
+test("receiver reveals preimage before timeout") {
+  // Build and submit the lock transaction first
+  val lockTx = txCreator.lock(/* ... */)
+  emulator.submit(lockTx).await()
+
+  // Build the reveal transaction
+  val revealTx = txCreator.reveal(
+    utxos = utxos,
+    lockedUtxo = lockedUtxo,
+    payeeAddress = Bob.address,
+    sponsor = Bob.address,
+    preimage = validPreimage,
+    receiverPkh = Bob.addrKeyHash,
+    validTo = timeout,
+    signer = Bob.signer
+  )
+
+  val result = emulator.submit(revealTx).await()
+  assert(result.isRight)
+}
+```
+
+### Testing Failures with assertScriptFail
+
+`assertScriptFail` verifies that a transaction fails with a specific error message from the validator's trace logs:
+
+```scala
+test("reject reveal with wrong preimage") {
+  assertScriptFail("Invalid receiver preimage") {
+    txCreator.reveal(
+      utxos = utxos,
+      lockedUtxo = lockedUtxo,
+      payeeAddress = Bob.address,
+      sponsor = Bob.address,
+      preimage = wrongPreimage,
+      receiverPkh = Bob.addrKeyHash,
+      validTo = timeout,
+      signer = Bob.signer
+    )
+  }
+}
+
+test("reject timeout before deadline") {
+  assertScriptFail("Timeout not reached") {
+    txCreator.timeout(
+      utxos = utxos,
+      lockedUtxo = lockedUtxo,
+      payeeAddress = Alice.address,
+      sponsor = Alice.address,
+      signer = Alice.signer,
+      validFrom = beforeTimeout  // too early
+    )
+  }
+}
+```
+
+`assertScriptFail` catches `TxBuilderException.BalancingException` (thrown during transaction building when script evaluation fails) and checks that the script logs contain the expected error substring.
+
+For `assertScriptFail` to show meaningful error messages, compile your validator with error traces enabled. Most validators do this via a `withErrorTraces` variant.
+
+## Script Context Testing
+
+For lower-level testing, construct a `ScriptContext` directly and evaluate the validator program against it.
+
+### Using TxBuilder.draft
+
+Build a transaction without submitting, extract the script context, and evaluate:
+
+```scala
+import scalus.testing.kit.TestUtil.getScriptContextV3
+import scalus.cardano.txbuilder.RedeemerPurpose.ForSpend
+
+test("validator budget for reveal") {
+  val scriptCtx = TxBuilder(emulator.cardanoInfo)
+    .spend(lockedUtxo, redeemer = Action.Reveal(validPreimage), script = contract.script)
+    .requireSignature(Bob.addrKeyHash)
+    .payTo(Bob.address, Value.ada(10))
+    .validTo(timeout)
+    .draft                                           // build without submitting
+    .getScriptContextV3(utxos, ForSpend(lockedUtxo.input))  // extract context
+
+  val result = contract(scriptCtx.toData).program.evaluateDebug
+  assert(result.isSuccess)
+  assert(result.budget == ExUnits(memory = 42970, steps = 16_307848))
+}
+```
+
+### Using makeSpendingScriptContext
+
+For quick tests that don't need a full transaction, build a minimal script context:
+
+```scala
+test("donate fails after deadline") {
+  val datum = CampaignDatum(
+    totalSum = BigInt(0),
+    goal = BigInt(10_000_000),
+    recipient = recipientPkh,
+    deadline = BigInt(1000),
+    withdrawn = BigInt(0),
+    donationPolicyId = donationPolicyId
+  )
+
+  val context = ScriptContext(
+    txInfo = TxInfo(
+      inputs = List(TxInInfo(outRef = txOutRef, resolved = /* ... */)),
+      outputs = List.Nil,
+      mint = Value.zero,
+      signatories = List.Nil,
+      validRange = Interval.after(deadline + 1000),  // after deadline
+      id = random[TxId]
+    ),
+    redeemer = redeemer.toData,
+    scriptInfo = ScriptInfo.SpendingScript(txOutRef, Option.None)
+  )
+
+  val program = crowdfundingContract.program $ context.toData
+  val result = program.evaluateDebug
+
+  assert(result.isFailure)
+  assert(result.logs.exists(_.contains("before deadline")))
+}
+```
+
+### Evaluating SIR and Programs
+
+`ScalusTest` adds extension methods for evaluation:
+
+```scala
+// From SIR (intermediate representation)
+val result = mySIR.runScript(scriptContext)
+val result = mySIR.runScript(scriptContext, param = Some(paramData))
+
+// From Program (compiled UPLC)
+val result = myProgram.runWithDebug(scriptContext)
+```
+
+Both return a `Result` — either `Result.Success(term, budget, costs, logs)` or `Result.Failure(exception, budget, costs, logs)`.
+
+## Checking Results
+
+### checkResult
+
+For structured result checking with optional budget verification:
+
+```scala
+test("validator accepts valid bid") {
+  val result = program.runWithDebug(scriptContext)
+  checkResult(success, result)
+}
+
+test("validator rejects low bid") {
+  val result = program.runWithDebug(scriptContext)
+  checkResult(failure("Bid must exceed current highest"), result)
+}
+
+test("validator accepts with expected budget") {
+  val result = program.runWithDebug(scriptContext)
+  checkResult(success(ExUnits(memory = 314279, steps = 94_609535)), result)
+}
+```
+
+### Direct Result Inspection
+
+```scala
+val result = program.evaluateDebug
+
+// Success checks
+assert(result.isSuccess)
+assert(result.budget == ExUnits(memory = 314279, steps = 94_609535))
+assert(result.budget.fee == Coin(3656))
+
+// Failure checks
+assert(result.isFailure)
+assert(result.logs.exists(_.contains("expected error message")))
+```
+
+## Budget Testing
+
+Track execution budgets to catch regressions when the validator or compiler changes:
+
+```scala
+test("budget: first bid") {
+  val budget = TestCase(
+    action = TestAction.Bid(bidAmount = 3_000_000L),
+    expected = Expected.Success
+  ).runWithBudget()
+  assert(budget == ExUnits(memory = 314279, steps = 94_609535))
+}
+
+test("budget: outbid with refund") {
+  val budget = TestCase(
+    action = TestAction.Outbid(newBidAmount = 5_000_000L),
+    expected = Expected.Success
+  ).runWithBudget()
+  assert(budget == ExUnits(memory = 410558, steps = 122_052616))
+}
+```
+
+`ExUnits` has a `.fee` method that computes the Cardano transaction fee from CPU and memory costs — useful for estimating real costs.
+
+Budget values are deterministic for a given validator and transaction. Pin exact values in tests to detect unintended changes from compiler upgrades or code refactoring.
+
+## Random Data Generation
+
+`ScalusTest` provides `random[A]` for generating test data via ScalaCheck's `Arbitrary`:
+
+```scala
+test("example with random data") {
+  val txId = random[TxId]
+  val txInfo = random[TxInfo]
+  val address = random[Address]
+  val value = random[Value]
+  val pkh = random[PubKeyHash]
+}
+```
+
+Available `Arbitrary` instances cover all Cardano types:
+- **Plutus types:** `TxInfo`, `TxOut`, `TxInInfo`, `ScriptContext`, `Value`, `Address`, etc.
+- **Primitives:** `PubKeyHash`, `TxId`, `TxOutRef`, `POSIXTime`, `ValidatorHash`, etc.
+- **Custom types** with `derives FromData, ToData`
+
+For property-based testing with `forAll`, see [Property-Based Testing](/docs/testing/property-based-testing).
+
+## TestUtil Helpers
+
+`TestUtil` provides mock data generators and script context extraction:
+
+```scala
+import scalus.testing.kit.TestUtil
+
+// Mock hashes for test data
+val pkh = TestUtil.mockPubKeyHash(variation = 1)
+val scriptHash = TestUtil.mockScriptHash(variation = 1)
+val txOutRef = TestUtil.mockTxOutRef(variation = 1, idx = 0)
+
+// Genesis hash for emulator initial UTxOs
+val genesisHash = TestUtil.genesisHash
+
+// Extract script context from a built transaction
+val ctx = tx.getScriptContextV3(utxos, RedeemerPurpose.ForSpend(input))
+val ctx = tx.getScriptContextV2(utxos, RedeemerPurpose.ForMint(policyId))
+```
+
+## Examples
+
+- [AuctionValidatorTest](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala) — Unit tests and budget assertions for an auction validator
+- [HtlcTest](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala) — HTLC validator with assertScriptFail and budget tracking
+
+## Related
+
+- [Property-Based Testing](/docs/testing/property-based-testing) — ScalaCheck forAll, random sequences, invariant checking
+- [Boundary Testing](/docs/testing/boundary-testing) — Attack patterns, transaction variations, state-space exploration
+- [Emulator](/docs/testing/emulator) — In-memory Cardano node for fast iteration
+- [TDD & ATDD Workflow](/docs/testing/tdd-atdd-workflow) — Test-first development for smart contracts
+- [Debugging](/docs/testing/debugging) — IDE debugging and logging for validators

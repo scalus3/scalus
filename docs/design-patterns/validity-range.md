@@ -1,0 +1,159 @@
+Source: https://scalus.org/docs/design-patterns/validity-range
+
+# Validity Range Normalization
+
+Normalize Plutus validity ranges into four standardized forms to simplify time validation and protect against protocol changes.
+
+## The Challenge
+
+Plutus validators receive transaction validity ranges with lower and upper bounds that can be:
+- Finite or infinite (-∞ or +∞)
+- Open or closed at each end
+
+This creates multiple valid representations of the same range:
+- `(a, b)` equals `[a+1, b-1]` for finite integer values
+- Infinite bounds are sometimes marked as closed despite being mathematically open
+- The "always" range is inconsistently denoted as `[-∞, +∞]`
+
+This ambiguity risks unintended validator failures. Since Cardano may change how ranges are communicated during hard forks, long-lived contracts must handle various representations to prevent funds from becoming permanently locked.
+
+## How It Works
+
+Normalize all validity ranges into four standardized forms where finite bounds are always **inclusive**:
+
+```scala
+import scalus.patterns.NormalizedInterval
+
+enum NormalizedInterval:
+    case ClosedRange(lower: PosixTime, upper: PosixTime)  // [lower, upper]
+    case FromNegInf(upper: PosixTime)                     // (-∞, upper]
+    case ToPosInf(lower: PosixTime)                       // [lower, +∞)
+    case Always                                           // (-∞, +∞)
+```
+
+This reduces pattern-matching complexity from dozens of cases to four clear categories.
+
+## When to Use This Pattern
+
+**Best for:**
+- Any validator that checks transaction validity time
+- Long-lived contracts that must survive protocol upgrades
+- Simplifying time-based validation logic
+
+**Not ideal for:**
+- Contracts that don't use time constraints
+- Off-chain code (use standard library time functions)
+
+## API Reference
+
+| Method | Description |
+|--------|-------------|
+| `interval.tryNormalize` | Safe normalization - returns `Option[NormalizedInterval]` |
+| `interval.normalize` | Unsafe normalization - fails on improper intervals |
+
+Extension methods are provided on the `Interval` type.
+
+## Implementation Guide
+
+### Safe Normalization
+
+```scala
+import scalus.patterns.NormalizedInterval
+import scalus.cardano.onchain.plutus.v1.*
+
+val interval: Interval = txInfo.validRange
+
+interval.tryNormalize match
+    case Option.Some(NormalizedInterval.ClosedRange(start, end)) =>
+        // Valid time window [start, end]
+        require(currentTime >= start && currentTime <= end)
+    case Option.Some(NormalizedInterval.ToPosInf(start)) =>
+        // Open-ended: [start, +∞)
+        require(currentTime >= start)
+    case Option.Some(NormalizedInterval.FromNegInf(end)) =>
+        // Before deadline: (-∞, end]
+        require(currentTime <= end)
+    case Option.Some(NormalizedInterval.Always) =>
+        // No time constraints
+        ()
+    case Option.None =>
+        // Improper interval (e.g., Interval.never)
+        fail("Invalid time range")
+```
+
+### Unsafe Normalization
+
+```scala
+// Throws error on improper intervals
+val normalized: NormalizedInterval = interval.normalize
+
+normalized match
+    case NormalizedInterval.ClosedRange(start, end) => ...
+    case NormalizedInterval.ToPosInf(start) => ...
+    case NormalizedInterval.FromNegInf(end) => ...
+    case NormalizedInterval.Always => ...
+```
+
+### Examples
+
+**Exclusive bounds are converted to inclusive:**
+
+```scala
+val interval = Interval(
+  from = IntervalBound(IntervalBoundType.Finite(10), false),  // exclusive 10
+  to = IntervalBound(IntervalBoundType.Finite(20), false)     // exclusive 20
+)
+interval.normalize  // ClosedRange(11, 19)
+```
+
+**Infinite bounds:**
+
+```scala
+val openEnded = Interval(
+  from = IntervalBound(IntervalBoundType.Finite(100), true),
+  to = IntervalBound(IntervalBoundType.PosInf, false)
+)
+openEnded.normalize  // ToPosInf(100)
+
+val beforeDeadline = Interval(
+  from = IntervalBound(IntervalBoundType.NegInf, false),
+  to = IntervalBound(IntervalBoundType.Finite(500), true)
+)
+beforeDeadline.normalize  // FromNegInf(500)
+```
+
+**Improper intervals:**
+
+```scala
+val never = Interval(
+  from = IntervalBound(IntervalBoundType.Finite(200), true),
+  to = IntervalBound(IntervalBoundType.Finite(100), true)   // lower > upper!
+)
+never.tryNormalize  // None
+never.normalize     // throws error
+```
+
+### Type Class Instances
+
+`NormalizedInterval` provides `Eq`, `Ord`, and `Show` instances for use in on-chain code:
+
+```scala
+val range1 = NormalizedInterval.ClosedRange(100, 200)
+val range2 = NormalizedInterval.ClosedRange(100, 300)
+
+range1 === range2      // false
+range1 < range2        // true (compares lower, then upper)
+range1.show            // "NormalizedInterval.ClosedRange(100, 200)"
+```
+
+**On-Chain Safety:** Use `tryNormalize` in validators to handle all cases gracefully. The `normalize` method is useful when you're certain the interval is valid.
+
+## Related Patterns
+
+- **[Stake Validator](/docs/design-patterns/withdraw-zero)** - Often combined with time checks in reward endpoints
+- **[UTxO Indexer](/docs/design-patterns/utxo-indexer)** - Time validation in indexed transactions
+
+## Resources
+
+- [Anastasia Labs: Validity Range Normalization](https://github.com/Anastasia-Labs/design-patterns/blob/main/validity-range-normalization/VALIDITY-RANGE-NORMALIZATION.md) - Original pattern documentation
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests

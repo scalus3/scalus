@@ -1,0 +1,151 @@
+Source: https://scalus.org/docs/formal-verification/examples
+
+# Examples: HTLC and Linear Vesting
+
+The Scalus repository has suites of proofs about four of its example validators. Two of them show
+the two ways to use a Lean workspace:
+
+| Example                           | Suite                                                                                                                                                         | Workspace                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [HTLC](#htlc)                     | [`HtlcVerificationTest`](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala)          | [temporary checks](/docs/formal-verification/lean-workspace#temporary-checks) |
+| [Linear vesting](#linear-vesting) | [`VestingVerificationTest`](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala) | [a persistent Lean project](/docs/formal-verification/advanced/lean-proofs) |
+
+The other two are
+[`PaymentSplitterVerificationTest`](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala)
+and
+[`MintingPolicyVerificationTest`](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/oneshotmint/MintingPolicyVerificationTest.scala),
+for the one-shot minting policy.
+
+## Run Them
+
+From a checkout of the Scalus repository, with elan and Z3 5.4.0 or later on the `PATH`
+(`nix develop` has both):
+
+```bash copy
+sbt "scalusExamplesJVM/verify HtlcVerificationTest"
+sbt "scalusExamplesJVM/verify VestingVerificationTest"
+```
+
+`verify` first builds the two Lean workspaces the examples' checks run in: Scalus's Lean library,
+`scalus-verification/src/main/lean`, with Blaster and PlutusCore, whose first build takes several
+minutes, and the vesting example's, `LinearVesting`, which shares the library's packages and
+builds in seconds. Then it runs the suite with Lean required. Last, whichever suite it ran, it
+builds the vesting example's proofs written by hand, `lake build LinearVestingProofs`.
+
+With the kept results committed beside each suite, a run asks Lean only what changed, and takes
+about the time of compiling the examples. Proving everything again
+(`SCALUS_KEPT_RESULTS=recalculate`) takes about 2 minutes for vesting and 8 for HTLC.
+
+  In the Scalus build the examples depend on `scalus-verification` as a project, not as a jar, so
+  they have no workspace of the plugin's: the build sets their `leanBuild` to build the two above.
+  `leanProve` and `verify` find `LinearVesting` beside the project's own workspace, and build its
+  proofs by hand. A plain `testOnly` builds nothing. After a Lean change, or a new pin of Blaster
+  or PlutusCore, run `sbt scalusExamplesJVM/leanBuild` before it, or a check fails with "Imports
+  are out of date and must be rebuilt".
+
+## HTLC
+
+The [hashed timelock contract](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/htlc)
+locks funds for a receiver who reveals a secret before a timeout, and lets the committer take
+them back after it. The suite states every rule of every script context the ledger can pass the
+validator: `forAllData[ScriptContext]`, with `isValid(ctx)` as the first premise and what the rule
+is about as the second:
+
+```scala
+forAllData[ScriptContext](ctx =>
+    isValid(ctx) ==>: (isRefund(ctx) && !startsFromTheTimeout(ctx)) ==>: fails(validator, ctx.toData)
+)
+```
+
+`isValid(ctx)` holds where the ledger's rules do, as IOG's
+[CardanoLedgerApi](https://github.com/input-output-hk/CardanoLedgerApiBlaster) states them in Lean:
+the transaction spends the output with its datum, is balanced, pays a fee, has a validity range
+that is not empty and the redeemer for the spend. Lean evaluates the rules; no program runs for
+them. With `isValid` as a premise, the context reaches Lean as a value of the library's type
+([How a Script Context Reaches Lean](/docs/formal-verification/tuning#how-a-script-context-reaches-lean)).
+
+**Proved of every script context**, with no limit on its inputs, outputs or signatures:
+
+- what the validator rejects before it reads the transaction: a spend of an output without a
+  datum, any purpose but spending, a redeemer of neither action;
+- a refund is rejected unless its validity range starts at the timeout or later
+  ([Your First Proof](/docs/formal-verification/first-proof) builds this one);
+- a reveal is rejected unless its validity range ends by the timeout;
+- an accepted reveal ends before any accepted refund begins, so there is no time at which both are
+  valid.
+
+The validator decides these by the time, before it searches the signatories, so Lean decides them
+for every context.
+
+**Proved of the contexts of at most two signatures.** The rules that the validator decides by
+searching the signatories are stated of every context too, but Lean does not finish them there:
+those tests are tagged `Unfinished`. Each is stated again of the contexts of at most two
+signatures, with `_limited` in its name, where Lean proves it
+([Tuning Your Proof](/docs/formal-verification/tuning#limit-the-data) shows how):
+
+- nobody but the committer refunds, and from the timeout on the committer can;
+- nobody but the receiver reveals, a reveal of what is not a preimage is rejected, and up to the
+  timeout the receiver can reveal;
+- whether a bound of the validity range is inclusive does not matter.
+
+Each property has a negative control beside it, of every context, valid or not: with `isValid`
+the solver would have to build a balanced transaction the validator accepts, which takes it too
+long. Sample spends, valid transactions decided by running the validator with the real hash, show
+that it accepts a refund and a reveal of a transaction the ledger accepts.
+
+The suite states what is **not** proved, in its header:
+
+- **Nothing about the hash.** To the solver, `sha3_256` is a function it knows nothing about. So a
+  proof holds whatever the function is, and says nothing about how hard a preimage is to find.
+- **Where the funds go.** The validator asks for a signature and constrains no output.
+- **The published script's bytes.** The validator is compiled with the tactic's options, not
+  those of `HtlcContract`: see [limitations](/docs/formal-verification#limitations).
+
+**Its workspace is temporary.** The suite names no workspace and writes nothing into one. Each
+check is generated, run in a temporary directory, and removed. What persists is
+[`HtlcVerificationTest.proofs.json`](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.proofs.json),
+the kept results, which let CI pass the suite without Lean. In the Scalus repository, the checks
+run in the workspace of Scalus's own Lean library.
+
+## Linear Vesting
+
+The [vesting contract](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/vesting)
+releases an amount to a beneficiary linearly over a period. The suite proves three groups of
+statements, from the most general to the most specific:
+
+- **The schedule, `linearVesting`, for every datum and time:** nothing is vested before the start;
+  everything is vested from the end on; it returns, so it never divides by a zero duration; the
+  vested amount does not decrease with time; and the contract stated in its body holds.
+- **The validator on every script context:** it rejects an output without a datum, a withdrawal
+  of a non-positive amount, and any purpose but spending.
+- **The validator on contexts of a few inputs and outputs:** two of the three guarantees that
+  `spend` states with `Spec.ensures`, that the beneficiary signed and that something is withdrawn,
+  and the obligation that its call of the schedule owes. Sample withdrawals are accepted, and
+  rejected unsigned or for more than is vested.
+
+Statements that Lean does not finish are tagged `Unfinished` and left out of `verify`: the third
+guarantee, that what is not vested stays locked, and the statements on contexts of any size.
+
+**Its workspace is persistent**, as [Mixing UPLC and Lean Proofs](/docs/formal-verification/advanced/lean-proofs)
+describes. The suite overrides `leanWorkspace` with
+[`scalus-examples/jvm/src/test/lean/LinearVesting`](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/test/lean/LinearVesting),
+a Lean project committed with the example:
+
+- `LinearVesting/Generated/` has every named statement of the suite as a Lean module, with its
+  programs, written by `leanExport`, and `Types.lean`, the Lean types of the datum, the redeemer
+  and the script context.
+- `LinearVesting/Proofs/Schedule.lean` proves two of the statements by hand, as theorems of the
+  generated propositions.
+- Its `lakefile.lean` requires Scalus's Lean library by its path, and sets `packagesDir` to the
+  library's, so Blaster and PlutusCore are built once for both workspaces.
+
+Export the statements, and check the proofs by hand against the code as it is:
+
+```bash copy
+sbt "scalusExamplesJVM/leanExport scalus.examples.vesting.VestingVerificationTest"
+(cd scalus-examples/jvm/src/test/lean/LinearVesting && lake build LinearVestingProofs)
+```
+
+Building the proofs takes a few minutes: each statement module runs its programs symbolically.
+`sbt scalusExamplesJVM/leanProve` runs the same build, and `sbt scalusExamplesJVM/verify` runs it
+after the suites.

@@ -1,0 +1,2815 @@
+# Scalus 1.5.0. Latest version: https://scalus.org/llms-ts.txt
+# Scalus for TypeScript and JavaScript (npm package scalus 1.5.0)
+
+The npm package README, then the full TypeScript definitions (scalus.d.ts).
+When the package is installed, node_modules/scalus/README.md and node_modules/scalus/scalus.d.ts
+match the version your project uses; prefer them over this file.
+
+# Scalus - Cardano Toolkit for JavaScript
+
+Scalus brings a near-complete Cardano node emulator, Plutus script evaluator, and transaction
+tooling to JavaScript and TypeScript. It is compiled from the JVM Scalus codebase via Scala.js.
+
+The core features include a **Node Emulator** -- a local, in-process implementation of a Cardano node, complete with
+most of the ledger rules to validate incoming transactions, as well ledger state transitions.
+
+## Conformance
+
+The JavaScript build is checked against the
+[Plutus conformance test suite](https://github.com/IntersectMBO/plutus/tree/master/plutus-conformance)
+on every CI run, not only the JVM build, with the corpus of the plutus-core version that the latest
+production cardano-node runs. It passes **every** UPLC evaluation case of that corpus, in both its
+textual (`.uplc`) and flat-encoded (`.flat`) form, with none skipped.
+
+For each program the reference evaluates successfully, two things are asserted: the resulting term
+is α-equivalent to the expected one, and the **execution budget matches the reference exactly** –
+the same CPU and memory numbers a Cardano node would charge, under Plutus's reference variant-E
+builtin cost model and CEK machine costs.
+
+For the programs the reference rejects, because it fails to evaluate, parse or decode them, the
+corpus records no term or budget, so what is asserted is that Scalus rejects them the same way.
+
+Budget equality is the part that matters for a transaction builder. An evaluator that agrees on
+success but disagrees on cost still produces transactions a node rejects.
+
+## Installation
+
+```bash
+npm install scalus
+```
+
+## Upgrading from 1.4.x
+
+- **Crossing two or more epoch boundaries now pays rewards and moves `deltaT` from the reserves
+  to the treasury.** A test that asserts an absolute treasury, reserves or reward balance after
+  such a jump changes.
+- **`Emulator.create` without `treasury` starts with the mainnet treasury, not 0.** Use
+  `getTreasury()` as the transaction's `currentTreasuryValue`.
+- **A PlutusV3 transaction that spends and references one UTxO is rejected**, as on the ledger.
+- `getTransactionStatus` can also return `"Pending"`, `"Dropped"` and `"RolledBack"`.
+
+## Upgrading from 1.3.x
+
+The Emulator now follows more of the ledger rules, so a test that passed on 1.3 can fail:
+
+- **The factories and queries deprecated in 1.2.0 are removed.** Replace `Emulator.withState`
+  and `Emulator.withAddresses` with `Emulator.create`, and `getUtxosForAddress` and `getAllUtxos`
+  with `getUtxos`. `new Emulator(utxosCbor, slotConfig)` still works but stays deprecated; use
+  `Emulator.create`.
+- **`Emulator.create` throws a `TypeError` for every invalid option**, including a `datums` entry
+  whose `hash` is not the blake2b-256 hash of its `datum` bytes.
+- **The Emulator rejects transactions that a node rejects:** a delegation to an unregistered pool
+  or DRep, a `currentTreasuryValue` other than `getTreasury()`, a withdrawal from a key-hash reward
+  account with no DRep delegation (from protocol version 10), a proposal whose deposit is not
+  `govActionDeposit`, and reference scripts that total more than 200 KiB.
+- A withdrawal keeps the account registered, with balance 0.
+- An inline datum or a native script keeps the bytes it arrived in. A non-minimal encoding is no
+  longer re-encoded, so `inlineDatum`, `getDatum` and the script hash match the chain.
+
+## Upgrading from 0.18.x
+
+The npm package now carries the same version number as the Scalus JVM libraries, so 0.18.1 is
+followed by 1.1.1. Six changes affect existing code:
+
+- **Protocol version 11 (van Rossem) is the default.** `evaluateScript` and
+  `evalPlutusScripts` use the mainnet PV11 cost models. Version 0.18.1 used PV10
+  (Plomin). Execution budgets therefore differ. Pass `protocolMajorVersion` to
+  `evalPlutusScripts` to select another version.
+- **`scalus.js` is an ES module.** Import it with `import` or with
+  `<script type="module">`. `require("scalus")` still works from CommonJS on Node 22.12+ and
+  20.19+, which load an ES module from `require()` natively – there is no separate CommonJS
+  build, so you get one module instance either way. On older Node it fails with
+  `ERR_REQUIRE_ESM`; use `const scalus = await import("scalus")` there.
+  The old CommonJS shim for browsers no longer works. See [Browser Usage](#browser-usage).
+- **`ExUnits`, `Result` and `Redeemer` are top-level exports**, not members of `Scalus`. The
+  runtime behaviour did not change, but the type declarations were wrong before. Import them
+  from the package root: `import { ExUnits } from "scalus"`.
+- **The evaluation functions are top-level exports too**, and two classes were renamed:
+  `Result` is now `EvaluationResult` and `Redeemer` is now `RedeemerBudget`. Prefer
+  `import { evaluateScript } from "scalus"` over `Scalus.evaluateScript`; since 1.2.0 both are
+  deprecated in favour of `evaluator.evaluateScript` and `evaluator.evaluateTx`. The `Scalus`
+  object and the old class names still work as deprecated **value** aliases and will be
+  removed in a later release.
+- **`Scalus.Result` and `Scalus.Redeemer` in a type position no longer compile.** Version
+  0.18.1 declared `Scalus` as a TypeScript `namespace` that also re-exported the class
+  *types*; the generated declarations export it as a `const`, so
+  `const r: Scalus.Result = ...` now fails with
+  `'Scalus' refers to a value, but is being used as a type`. Calls through the object
+  (`Scalus.evaluateScript(...)`) are unaffected. Import the types from the package root
+  instead: `import { EvaluationResult, ExUnits, RedeemerBudget } from "scalus"`.
+- **`Emulator.withAddresses` funds 10 000 ada per address** when you omit
+  `lovelacePerAddress`, that is `10_000_000_000n` lovelace. It funded 10 000 lovelace before,
+  which is below min-ada, so seeded outputs were unusable. (`withAddresses` is removed in
+  1.4.0; see [Emulator](#emulator) for `Emulator.create`.)
+
+## Emulator
+
+The emulator implements Cardano ledger validation locally. Transactions go through the same
+rule checks as a real node: phase 1 & 2 validation, and a near-complete suite of ledger rules. This makes it suitable
+for automated tests, local development, and any application that needs a self-contained Cardano environment.
+
+### Quick Start
+
+```typescript
+import { CardanoInfo, Emulator, Utxo, Value } from "scalus";
+
+const alice = "addr_test1vzpwq95z3xyum8vqndgdd9mdnmafh3djcxnc6jemlgdmswcve6tkw";
+
+// A network is a slot configuration and a set of protocol parameters together, so the
+// emulator cannot validate against one network's parameters while doing slot arithmetic
+// for another.
+const emulator = Emulator.create(CardanoInfo.preview(), {
+  utxos: [new Utxo("00".repeat(32), 0, alice, Value.ada(1000n))],
+});
+
+// Build and sign a transaction with your favourite builder, then submit the bytes:
+const result = emulator.submitTx(txCborBytes);
+if (result.isSuccess) {
+  console.log(result.txHash);
+} else {
+  console.log(`rejected by ${result.errorRule}: ${result.error}`);
+  console.log(result.logs.join("\n")); // empty unless a Plutus script traced
+}
+```
+
+`CardanoInfo.mainnet()`, `.preprod()`, `.preview()` and `.custom(network, slotConfig, params)`
+cover the networks. Every field of the options object is optional: `utxos`, `slot`,
+`stakeRegistrations`, `poolRegistrations`, `drepRegistrations`, `datums`, `treasury`,
+`reserves`, `protocolParams`, `clock`, the chain options (`blockProduction`, `awaitTx`,
+`orphanTxs`, `securityParam`), the governance options (`committee`, `committeeHotKeys`,
+`constitution`) and the reward options (`blockIssuer`, `poolPerformance`, `activeSlotsCoeff`).
+An invalid option throws a `TypeError`.
+
+### Querying UTxOs
+
+Queries return objects, not CBOR. `getUtxos()` returns everything; `getUtxos(filter)` narrows
+it, and the filtering happens inside the ledger, so no object is built for a row the filter
+drops.
+
+```typescript
+emulator.getUtxos();                                  // everything
+emulator.getUtxos({ address: alice });                // one address
+emulator.getUtxos({ paymentCredential: keyHashHex }); // either credential kind
+emulator.getUtxos({ paymentCredential: keyHashHex, paymentCredentialType: "key" });
+emulator.getUtxos({ paymentCredential: scriptHashHex, paymentCredentialType: "script" });
+emulator.getUtxos({ unit: policyId + assetNameHex }); // holders of one asset
+emulator.getUtxos({ minLovelace: 5_000_000n, limit: 10 });
+emulator.getUtxos({ outRefs: [{ txHash, outputIndex: 0 }] });
+
+const [utxo] = emulator.getUtxos({ address: alice });
+utxo.txHash;        // hex
+utxo.outputIndex;   // number
+utxo.address;       // bech32
+utxo.value.coin;    // bigint lovelace
+utxo.value.assets;  // Asset[], each with policyId, assetName, quantity and unit
+utxo.datumHash;     // string | undefined
+utxo.inlineDatum;   // Uint8Array | undefined, the bytes it arrived in
+utxo.scriptRef;     // Uint8Array | undefined
+utxo.script;        // { type, script } | undefined, the shape withScriptRef takes
+```
+
+Fields given are ANDed together. `outRefs` is the exception: it matches any of the references
+given, which is what a "resolve these inputs" query needs.
+
+A `Utxo` holds the ledger's own input and output, so one a query hands you can be handed
+straight back to `evaluateTx` or `addUtxo` with no encoding step in between.
+
+`Utxo`, `Value`, `Asset`, `ProtocolParams` and `CardanoInfo` expose their fields through
+accessors on the prototype, so `JSON.stringify`, object spread and a test framework's `toEqual`
+all see an empty object. Call `toObject()` and assert on that.
+
+`getUtxosCbor()` still returns the whole set as one CBOR map, for a consumer that wants the
+raw ledger encoding.
+
+### Protocol Parameters
+
+```typescript
+const params = emulator.getProtocolParameters();
+params.txFeePerByte;         // number
+params.utxoCostPerByte;      // bigint
+params.maxTxExecutionSteps;  // bigint
+params.costModels.PlutusV3;  // number[], keyed by language rather than by position
+
+// For an adapter that already parses Blockfrost's shape:
+ProtocolParams.fromBlockfrostJson(params.toBlockfrostJson());
+```
+
+Quantities that can exceed `Number.MAX_SAFE_INTEGER` are `bigint`; fee rates, sizes,
+percentages, counts and slots are `number`.
+
+### Evaluating Scripts Against the Ledger
+
+`evaluateTx` runs every Plutus script a transaction triggers, resolving its inputs against this
+emulator's UTxO set, slot config, cost models and protocol version. Nothing has to be passed
+in, so nothing can be passed in wrongly.
+
+```typescript
+for (const r of emulator.evaluateTx(txCborBytes)) {
+  console.log(`${r.tag}[${r.index}]: ${r.budget.memory} mem, ${r.budget.steps} steps`);
+}
+
+// Inputs the emulator does not hold yet go in the second argument, as Utxos or
+// [input, output] CBOR pairs, the same as evaluator.evaluateTx takes.
+emulator.evaluateTx(txCborBytes, [new Utxo(txHash, 0, scriptAddress, Value.ada(5n))]);
+```
+
+A failing script throws `PlutusScriptEvaluationError`, the same error `evaluator.evaluateTx`
+throws; see "When a script fails" below.
+
+### Time Control
+
+```typescript
+emulator.getSlot();           // current slot
+emulator.setSlot(500);        // jump to an absolute slot, forwards or backwards
+emulator.tick(10);            // advance by 10 slots
+emulator.getTime();           // POSIX ms at which the current slot starts
+emulator.setTime(Date.now());
+```
+
+Use this to test validity-interval logic, time-locked scripts, and epoch transitions. No blocks
+are produced in between. Crossing an epoch boundary runs the epoch rules: pool retirement,
+proposal expiry and refunds, rewards and enactment.
+
+With `clock: "wall"` in the options of `Emulator.create`, the emulator moves to the slot that
+contains `Date.now()` before it validates or evaluates a transaction, so a validity interval built
+from the wall clock holds. The default, `"manual"`, moves the slot only when you move it.
+
+### Transaction Lookup
+
+```typescript
+emulator.hasTx(txHashHex);                // boolean
+emulator.getTransactionStatus(txHashHex); // "Pending" | "Confirmed" | "Dropped" | "RolledBack" | "NotFound"
+emulator.getTransaction(txHashHex);       // Uint8Array | undefined
+emulator.getAppliedTxs();                 // [{ txHash, slot }, ...], oldest first
+```
+
+### Blocks, Mempool and Rollback
+
+With the default `blockProduction: "instant"`, each accepted transaction is a block of its own.
+With `"manual"`, accepted transactions wait in the mempool until you forge a block, so a test can
+see a pending transaction, a fork and a rollback:
+
+```typescript
+const emulator = Emulator.create(CardanoInfo.preview(), { utxos, blockProduction: "manual" });
+
+emulator.submitTx(txCborBytes);
+emulator.getTxStatus(txHash).status; // "Pending"
+emulator.getMempool();               // [txHash]
+
+const point = emulator.produceBlock(); // forge a block from the mempool
+emulator.getTxStatus(txHash);          // { status: "Confirmed", depth: 1, point }
+
+const back = emulator.rollback(1);     // drop the last block
+if (!back.isSuccess) throw new Error(back.error);
+emulator.getTxStatus(txHash).status;   // "Pending": back in the mempool (orphanTxs: "returnToMempool")
+```
+
+`produceBlockOn(point, txs)` forges a rival block on any block of the tree, for example one that
+double-spends a pending transaction. The emulator follows the longest chain. `getTip()` gives the
+tip and its height, and `awaitTx(txHash)` forges until the transaction is in a block, as a
+provider's `awaitTx` does.
+
+### Why a Transaction Fails
+
+`submitTx` reports the first failure. `ledgerFailures` lists every ledger-rule failure in the
+ledger's order, by its cardano-ledger name, without submitting:
+
+```typescript
+emulator.ledgerFailures(txCborBytes); // for example ["MissingRedeemers", "ConwayWdrlNotDelegatedToDRep"]
+```
+
+### Epochs, Rewards and Governance
+
+Crossing an epoch boundary with `setSlot` or `tick` runs the ledger's epoch rules: stake
+snapshots, rewards, pool retirement, and the expiry, ratification and enactment of proposals.
+Read the results with `getEpoch()`, `getReserves()`, `getTreasury()`, `getStakeSnapshots()`,
+`getPendingRewards()`, `getGovState()` and `getLedgerState()`.
+
+### Staking and Delegation
+
+Stake queries take a bech32 reward address, so a key credential and a script credential are
+told apart by the address itself:
+
+```typescript
+emulator.getStakeReward("stake_test1...");   // bigint | undefined
+emulator.getDelegation("stake_test1...");    // { poolId?: string, rewards: bigint }
+emulator.getAccount("stake_test1...");       // { balance, deposit, poolId?, drep? } | undefined
+emulator.addRewards("stake_test1...", 5_000_000n); // pay rewards into a registered account
+emulator.getStakeDistribution();             // live stake per credential, with its rewardAddress
+emulator.getTreasury();                      // bigint, the currentTreasuryValue a tx must state
+```
+
+From protocol version 10, a withdrawal from a key-hash reward account needs a DRep delegation, as
+on chain. A delegation needs a registered pool or DRep: seed it with `poolRegistrations` or
+`drepRegistrations`, or register it in an earlier transaction.
+
+### Datum Store
+
+```typescript
+emulator.getDatum(datumHashHex);         // Uint8Array | undefined
+const hash = emulator.addDatum(datumCbor); // hex or bytes in, hex hash of those bytes out
+```
+
+Datums witnessed by accepted transactions are indexed automatically. Pre-seed others with the
+`datums` option of `Emulator.create`, or add them later with `addDatum`, for example for a UTxO
+added with `addUtxo` that holds only a datum hash. The store keeps the bytes as given, so the hash
+is the hash of exactly those bytes.
+
+### Editing the Ledger Directly
+
+```typescript
+emulator.addUtxo(utxo);                          // seed a UTxO, skipping validation
+emulator.removeUtxo({ txHash, outputIndex: 0 }); // take one away
+const snap = emulator.snapshot();                // independent copy of the current state
+```
+
+`snapshot` copies the UTxOs, registrations and rewards, the datum store, the accepted
+transactions and the current slot, so one expensive setup can branch into several test
+scenarios without being rebuilt.
+
+### Seeding Stake, Pools, DReps and Datums
+
+Every field of `Emulator.create`'s options object beyond `utxos` seeds ledger state that a
+transaction would otherwise have to establish first:
+
+```typescript
+const emulator = Emulator.create(CardanoInfo.preview(), {
+  utxos: [new Utxo(txHash, 0, alice, Value.ada(1000n))],
+  slot: 1_000_000,   // defaults to the slot containing Date.now()
+  stakeRegistrations: [
+    { credentialType: "key", credentialHash: "abcd…", rewards: 42_000_000n },
+    { credentialType: "key", credentialHash: "1234…", rewards: 0n, delegatedTo: poolIdHex },
+  ],
+  poolRegistrations: [
+    { params: poolRegCertCbor },  // a full pool_registration certificate
+    { poolId: poolIdHex },        // or a pool whose parameters do not matter
+  ],
+  drepRegistrations: [
+    { credentialType: "key", credentialHash: "ef01…", deposit: 500_000_000n },
+  ],
+  datums: [{ hash: datumHashHex, datum: datumCborHex }],
+  treasury: 1_000_000_000n,                  // defaults to the mainnet treasury
+  reserves: 6_000_000_000_000_000n,          // defaults to the mainnet reserves
+  protocolParams: { maxTxSize: 32_768 },     // replaces only the fields given
+});
+```
+
+### As a Transaction-Builder Backend
+
+Both MeshJS and lucid-evolution take a provider object, and the emulator answers what either of
+them asks: `getProtocolParameters`, `getUtxos(filter)`, `submitTx` and `evaluateTx` cover
+lucid's `Provider` and mesh's `IFetcher`/`ISubmitter`/`IEvaluator` between them, so an adapter
+is field renaming with no CBOR codec, no protocol-parameter table and no cost model of its own.
+`Asset.unit` is the concatenated policy id and asset name both SDKs call a unit, and
+`UtxoFilter.paymentCredential` is the query a wallet makes.
+
+Complete, runnable adapters for both are in this package's test suite, at
+`__tests__/provider-lucid.test.ts` and `__tests__/provider-mesh.test.ts`. See
+[the emulator guide](https://scalus.org/docs/testing/js-emulator) for the walkthrough.
+
+## Plutus Script Evaluation
+
+`uplc` applies arguments to a script, and `evaluator` runs it. Both take CBOR, so whatever your
+SDK already produces is what you pass in.
+
+### Apply arguments and evaluate
+
+```typescript
+import { uplc, evaluator, EvaluationOptions } from "scalus";
+
+const script = "545301010023357389210753756363657373004981";
+const options = EvaluationOptions.mainnet("PlutusV3");
+
+const result = evaluator.evaluateScript(script, ["182a"], options);
+// { isSuccess: true, budget: { memory: 1032n, steps: 203598n }, logs: [...] }
+```
+
+Scripts and arguments are each a hex `string` or a `Uint8Array`, and the two mix freely:
+
+```typescript
+evaluator.evaluateScript(scriptBytes, ["182a", argumentBytes], options);
+```
+
+Arguments apply left to right, so `[datum, redeemer, context]` is the order the script sees.
+
+A script may arrive as raw flat, single CBOR or double CBOR; all are accepted, and none is guessed
+at (a flat program never starts with a CBOR byte-string header).
+
+To bake parameters into a script, `uplc.applyParamsToScript` has the contract of Lucid's and
+Mesh's function of the same name: any script form in, double-CBOR hex out.
+
+```typescript
+uplc.applyParamsToScript(blueprintCompiledCode, [paramCbor]);   // double-CBOR hex
+```
+
+It is a composition of byte-level primitives, which also build any other form a tool expects:
+
+```typescript
+import { uplc, cbor, bytesToHex } from "scalus";
+
+const flat = uplc.applyArgs(uplc.decodeToFlat(script), [paramCbor]);  // flat program bytes
+const single = cbor.wrapBytes(flat);                // blueprint compiledCode, script hash input
+const double = cbor.wrapBytes(single);              // Lucid and Mesh script objects, .plutus files
+bytesToHex(double);                                 // hexToBytes goes the other way
+```
+
+CBOR round trips preserve the *value*, not the original bytes. Semantically equal Data can have
+more than one encoding, so do not use this path to reproduce a datum hash.
+
+### Evaluating one script many times
+
+`evaluator.evaluateScript` builds a machine from the options and decodes the script on every call.
+To evaluate many times, build the machine once with `new PlutusVM(options)` and decode the script
+once with `uplc.decodeProgram` (or `new Program(script)`):
+
+```typescript
+import { uplc, PlutusVM, EvaluationOptions } from "scalus";
+
+const vm = new PlutusVM(EvaluationOptions.mainnet("PlutusV3"));
+const program = uplc.decodeProgram(script);
+for (const redeemer of redeemers) {
+  vm.evaluateScript(program, [datum, redeemer, context]);
+}
+```
+
+`evaluator.evaluateScript` also takes a `Program`, and `program.toFlat()` gives the flat bytes back.
+
+### Feeding it from Lucid, Mesh or the Evolution SDK
+
+Serialize with the SDK you already use, then hand over the bytes. No Scalus-specific Data type,
+no JSON step. Each of these produces identical CBOR:
+
+```typescript
+import { Data as LucidData, Constr } from "@lucid-evolution/lucid";
+import { toPlutusData } from "@meshsdk/core-cst";
+import * as EvolutionData from "@evolution-sdk/evolution/Data";
+
+const fromLucid = LucidData.to(new Constr(0, [42n, "deadbeef"]));       // Data.to, not Data.do
+const fromMesh = toPlutusData({ alternative: 0, fields: [42n, "deadbeef"] }).toCbor().toString();
+const fromEvolution = EvolutionData.toCBORBytes(EvolutionData.constr(0n, [42n]));
+
+evaluator.evaluateScript(script, [fromLucid], options);
+```
+
+`LucidData` above is a local import alias for Lucid's `Data`; the SDKs are test dependencies of
+this package, never runtime ones.
+
+### Script and datum hashes
+
+```typescript
+import { dataHash, scriptHash } from "scalus";
+
+scriptHash({ type: "PlutusV3", script: compiledCode });  // policy id or credential, hex
+scriptHash({ type: "Native", script: nativeScriptCbor });
+dataHash(datumCborHex);                                   // the datum hash, hex
+```
+
+`scriptHash` takes the script in the shape `Utxo.withScriptRef` does, with `type` one of
+`"Native"`, `"PlutusV1"` to `"PlutusV4"`, and a Plutus program in any CBOR wrapping gives the same
+hash. `dataHash` hashes the CBOR exactly as given, as the ledger does.
+
+### Evaluation options
+
+`EvaluationOptions` is both the record type and the factory object, so the same import works in
+type and value position:
+
+```typescript
+const options: EvaluationOptions = EvaluationOptions.mainnet("PlutusV3");
+```
+
+Options are plain records. Copy and adjust them with object spread:
+
+```typescript
+const forV2: EvaluationOptions = {
+  ...options,
+  plutusVersion: "PlutusV2",
+  costModel: params.costModels.PlutusV2,
+};
+```
+
+A field this API does not know is ignored rather than rejected, so spreading a record that
+carries extra keys is safe.
+
+| Field | Meaning |
+| --- | --- |
+| `plutusVersion` | `"PlutusV1"`, `"PlutusV2"` or `"PlutusV3"`; the bytes do not carry it |
+| `protocolMajorVersion` | Picks builtin semantics and costing rules |
+| `costModel` | That language's parameters, in protocol order |
+| `maxBudget` | Optional `{ memory, steps }`, as `number` or `bigint`: the most the script may spend |
+
+There is no implicit default: the first three fields are required. `EvaluationOptions.mainnet(version)`
+fills them from the protocol parameters bundled with this release of Scalus, a snapshot rather
+than a live query, so pin your own parameters for reproducible tests and supply the target
+network's for production.
+
+For custom parameters, pass a `ProtocolParams` handle rather than a plain object:
+
+```typescript
+import { CardanoInfo, ProtocolParams } from "scalus";
+
+EvaluationOptions.fromProtocolParams("PlutusV3", CardanoInfo.mainnet().protocolParams);
+EvaluationOptions.fromProtocolParams("PlutusV3", ProtocolParams.fromBlockfrostJson(json));
+```
+
+`fromBlockfrostJson` is the only JSON reader exported to JavaScript. For any other provider, take
+the positional cost array out of its response and write the record yourself:
+
+```typescript
+const options: EvaluationOptions = {
+  plutusVersion: "PlutusV3",
+  protocolMajorVersion: 11,
+  costModel: json.cost_models_raw.PlutusV3,
+};
+```
+
+**No cost-model length is rejected.** A short model configures and prices out what it does not
+cover: a parameter the array does not reach costs more than any budget, so a builtin whose
+parameters are absent cannot run, rather than being given a plausible cost nobody could tell from
+a real one. That is what plutus does, and it is what lets a custom network, an older chain and a
+future longer model all configure.
+
+### The validator return rule
+
+`evaluateScript` enforces CIP-117: under Plutus V3 a validator must return unit. Under V1 and V2
+any result is accepted, as the ledger accepts it.
+
+The rule is checked *after* the machine stops, so a rejected result still carries the budget the
+program really spent and the traces it emitted. That is how you cost a pure on-chain function
+that returns something other than unit – read `error.code`, not `isSuccess`:
+
+```typescript
+const r = evaluator.evaluateScript(program, [], options);   // program returns (con integer 3)
+r.isSuccess;        // false
+r.error?.code;      // "INVALID_RETURN_VALUE"
+r.budget.steps;     // the real cost, as if it had succeeded
+```
+
+It does not build a `ScriptContext`, resolve UTxOs, or validate a transaction. For that, use
+`evaluator.evaluateTx` or the `Emulator`.
+
+**Bound untrusted scripts with `maxBudget`.** Without it there is no ceiling, so a script that
+does not terminate does not return. With it, a script that spends more stops with
+`OUT_OF_BUDGET`, and `budget` says what it spent:
+
+```typescript
+const r = evaluator.evaluateScript(script, [context], { ...options, maxBudget: redeemer.exUnits });
+if (r.error?.code === "OUT_OF_BUDGET") { /* spent more than the redeemer declared */ }
+```
+
+### Failures
+
+A script that fails is an outcome, not an exception: `isSuccess` is `false`, and `error` says why.
+
+```typescript
+const result = evaluator.evaluateScript(failingScript, [], options);
+result.error;   // { code: "SCRIPT_FAILURE", message: "..." }
+result.logs;    // the script's traces, and nothing else
+result.budget;  // what it spent before failing
+```
+
+| `code` | Meaning |
+| --- | --- |
+| `SCRIPT_FAILURE` | The script failed, for example by evaluating `error` |
+| `BUILTIN_FAILURE` | A builtin rejected its arguments |
+| `INVALID_RETURN_VALUE` | A Plutus V3 script returned something other than unit |
+| `OUT_OF_BUDGET` | The script spent more than `maxBudget` |
+| `INTERNAL_ERROR` | A defect in Scalus, not in your script: please report it |
+
+Branch on `code`; the `message` text is free to improve. The result, `error` included, is plain
+data: `JSON.stringify(result)` works, with the budget as decimal strings. The budget spent at each
+trace is in the profile: `evaluateScriptProfile` returns `profileJson` whose `traces` array pairs
+every message with the cumulative `mem` and `cpu`.
+
+A call that cannot be read throws a `TypeError` instead: a script or an argument that is not hex
+or bytes of the right CBOR, or options with a missing or mistyped field. The `uplc` utilities
+throw the same way.
+
+`evaluator.evaluateTx` and `evalPlutusScripts` throw on a failing script too, because a
+transaction has no partial success; see "When a script fails" under "Evaluate All Scripts in a
+Transaction".
+
+### Profiling
+
+`evaluator` does not profile. A profile attributes cost to source lines, which needs the compiler
+output that produced the script, so it belongs to the build rather than to the runtime. Profile
+from the JVM, where `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full
+interactive report.
+
+The deprecated `evaluateScriptProfile(script)` still works and still fills `profileJson`, on a
+Plutus V3 mainnet machine only.
+
+### Migrating from the earlier entry points
+
+`applyDataArgToScript`, `evaluateScript`, `evaluateScriptProfile` and `evalPlutusScripts` still
+work exactly as before. All four are deprecated; three have a replacement in the explicit API:
+
+| Was | Now |
+| --- | --- |
+| `applyDataArgToScript(script, json)` | `uplc.applyParamsToScript(script, [cbor])` |
+| `evaluateScript(script)` | `evaluator.evaluateScript(script, args, EvaluationOptions.mainnet("PlutusV3"))` |
+| `evaluateScriptProfile(script)` | no replacement – `evaluator` does not profile; keep using this, or profile from the JVM |
+| `evalPlutusScripts(tx, utxoMap, slotConfig, [v1, v2, v3])` | `evaluator.evaluateTx(tx, utxoPairs, slotConfig, { PlutusV1: v1, PlutusV2: v2, PlutusV3: v3 }, 11)` |
+
+### Evaluate All Scripts in a Transaction
+
+`evaluator.evaluateTx` takes what a transaction builder already holds: the transaction, its
+resolved inputs as CBOR `[input, output]` pairs, the slot configuration, and the cost models by
+language.
+
+```typescript
+import { evaluator } from "scalus";
+
+const budgets = evaluator.evaluateTx(
+  txCborHex,                           // string | Uint8Array
+  utxos,                               // (string | Uint8Array | Utxo)[]: a Utxo, or one [input, output] pair
+  { zeroTime, zeroSlot, slotLength },  // zeroTime and zeroSlot may be number or bigint
+  { PlutusV2: plutusV2Costs, PlutusV3: plutusV3Costs },
+  11,                                  // protocol major version
+  // optional: { memory, steps } the whole transaction may spend, e.g. maxTxExecutionUnits
+);
+
+for (const r of budgets) {
+  console.log(`${r.tag}[${r.index}]: ${r.budget.memory} mem, ${r.budget.steps} steps`);
+}
+```
+
+A pair is `transaction_unspent_output` from the ledger CDDL. CML's
+`TransactionUnspentOutput.to_cbor_bytes()`, CST's `TransactionUnspentOutput.toCbor()` and a CIP-30
+wallet's `getUtxos()` all produce it, so nothing needs assembling. A `Utxo` goes in as it is, with
+no encoding step. A later entry with the same input replaces an earlier one. An SDK that encodes
+the input and the output separately, as the Evolution SDK does, joins them under the CBOR header
+of a two-element array:
+
+```typescript
+const pair = new Uint8Array([0x82, ...TransactionInput.toCBORBytes(input), ...TxOut.toCBORBytes(output)]);
+```
+
+The slot configuration is a `SlotConfigLike` and the cost models a `CostModelsLike`: a
+`SlotConfig` or a `CostModels` fits, and so does any plain object with those fields. Extra fields
+are ignored.
+
+Each `r.tag` is one of `"Spend"`, `"Mint"`, `"Cert"`, `"Reward"`, `"Voting"` or `"Proposing"`,
+and `r.index` is the position within that group, counting from 0. An SDK adapter maps those six
+names to its own spelling; that table is most of the adapter.
+
+The deprecated `evalPlutusScripts` still works for a caller that holds the UTxO set as one CBOR
+map:
+
+```typescript
+import { evalPlutusScripts, SlotConfig } from "scalus";
+
+// One cost model per Plutus version, indexed by position: [0] is V1, [1] is V2, [2] is V3.
+// Give a model for every version the transaction uses; an earlier version cannot be skipped.
+const costModels = [plutusV1Costs, plutusV2Costs, plutusV3Costs];
+const redeemers = evalPlutusScripts(txCborBytes, utxoMapCborBytes, SlotConfig.mainnet, costModels);
+```
+
+#### When a script fails
+
+Both throw `PlutusScriptEvaluationError`, which extends `Error`. Its message names the redeemer,
+the script, the units spent and the traces, so a caller that only prints the message still learns
+what failed:
+
+```
+Spend[0] failed: Error evaluated
+script: 8a8c37e9775e3369118ef4946ce1534ca64690382825207d05c72b17
+spent budget: { mem: 1132, steps: 219598 }
+logs:
+boom
+```
+
+The same facts are fields:
+
+```typescript
+try {
+  evaluator.evaluateTx(tx, utxos, slotConfig, costModels, 11);
+} catch (e) {
+  if (e instanceof PlutusScriptEvaluationError) {
+    e.redeemer;    // { tag: "Spend", index: 0, budget: { memory, steps } }, spent before failing
+    e.scriptHash;  // hex
+    e.code;        // "SCRIPT_FAILURE" | "BUILTIN_FAILURE" | "INVALID_RETURN_VALUE" | "INTERNAL_ERROR"
+    e.logs;        // the script's traces
+    e.args;        // the Data arguments it was applied to, each as CBOR hex, in order
+  }
+}
+```
+
+`args` is a property like the others, but not an enumerable one, so `console.log(e)` and
+`JSON.stringify(e)` stay readable instead of printing a screenful of script-context hex. Decode it
+when you want to see what the script saw; `scriptHash` says which script saw it, and you already
+hold that script, in the transaction or in the UTxO you passed.
+
+Anything else that stops evaluation, such as an input no pair resolves or a script the transaction
+does not carry, throws a plain `Error`; input that cannot be read throws `TypeError`.
+
+In TypeScript the six fields are declared optional, because the two-argument constructor
+`new PlutusScriptEvaluationError(message, logs)` leaves them `undefined`. An error thrown by
+`evaluateTx` always carries them, so after the `instanceof` check `e.redeemer!` is safe.
+
+#### Many transactions under the same parameters
+
+`evaluator.evaluateTx` prepares the cost models on every call. An SDK that evaluates many
+transactions under the same parameters keeps one `TxEvaluator` instead, which prepares them once.
+Create a new one when the parameters change. A `ScriptCache` keeps decoded scripts across
+evaluations, so a script that many transactions carry or reference is hashed and decoded once.
+One cache can serve several evaluators. When it is full, it drops the least recently used script.
+
+```typescript
+import { ScriptCache, TxEvaluator } from "scalus";
+
+const scripts = new ScriptCache(64);
+const ev = new TxEvaluator({
+  slotConfig,                              // SlotConfigLike
+  costModels,                              // CostModelsLike
+  protocolMajorVersion: 11,
+  maxBudget: { memory: 14_000_000n, steps: 10_000_000_000n }, // optional
+  scriptCache: scripts,                    // optional
+});
+ev.evaluate(tx1, utxos1);                  // RedeemerBudget[], as evaluator.evaluateTx returns
+ev.evaluate(tx2, utxos2);
+```
+
+`evaluate` throws as `evaluator.evaluateTx` does.
+
+### Plutus Data JSON Format
+
+The deprecated `applyDataArgToScript` takes its argument in the standard Plutus Data JSON
+encoding. `uplc.applyParamsToScript` takes CBOR instead; convert before calling it.
+
+```jsonc
+{ "int": 42 }
+{ "bytes": "deadbeef" }
+{ "list": [{ "int": 1 }, { "int": 2 }] }
+{ "map": [{ "k": { "int": 1 }, "v": { "bytes": "aa" } }] }
+{ "constructor": 0, "fields": [{ "int": 42 }] }
+```
+
+## Balancing a Transaction
+
+**Experimental:** `balancer.balanceTx` may change shape in any release.
+
+`balancer.balanceTx` takes a transaction you have built and sets every redeemer's execution
+units, the fee, and the lovelace of one change output, until the three agree. Coin selection and
+change placement stay with you.
+
+```typescript
+import { balancer, CardanoInfo } from "scalus";
+
+const info = CardanoInfo.preprod();
+const balanced: Uint8Array = balancer.balanceTx(
+  unbalancedTxCbor,     // hex or bytes
+  utxos,                // every UTxO the inputs, collateral and reference inputs name
+  info.slotConfig,
+  info.protocolParams,  // a ProtocolParams, or a plain record of the same fields
+  1,                    // index of the change output
+  [],                   // key hashes that will sign but that the transaction does not name
+);
+```
+
+The signers are found as the ledger finds them: key inputs and collateral, key withdrawals,
+certificates a key must sign (a pool's operator and owners too), key voters and required signers.
+Only the keys of a native script cannot be found; pass them in the last argument. A script that
+fails throws `PlutusScriptEvaluationError`. A transaction that cannot be balanced throws
+`TxBalancingError` with `code` `"INSUFFICIENT_FUNDS"` or `"NOT_CONVERGED"`.
+
+## Slot Configuration
+
+Built-in configs for mainnet, preview, and preprod, or construct your own:
+
+```typescript
+import { SlotConfig } from "scalus";
+
+const cfg = SlotConfig.mainnet; // or .preview, .preprod
+const time = cfg.slotToTime(100_000); // POSIX ms
+const slot = cfg.timeToSlot(time);    // fractional unless `time` is on a slot boundary
+
+// Custom config
+const custom = new SlotConfig(zeroTime, zeroSlot, slotLength);
+```
+
+`timeToSlot` does not round. With one-second slots, `cfg.timeToSlot(Date.now())` almost
+always has a fraction, so round it yourself (for example with `Math.floor`) before you use it
+as a slot number.
+
+## Browser Usage
+
+`scalus.js` is a self-contained ES module. It has no runtime dependencies, so a browser can
+load it directly, with no bundler and no import map:
+
+```html
+<script type="module">
+    import { evaluator, EvaluationOptions } from "./scalus.js";
+
+    const options = EvaluationOptions.mainnet("PlutusV3");
+    const result = evaluator.evaluateScript(scriptHex, [], options);
+    console.log(result.isSuccess, result.budget.steps);
+</script>
+```
+
+The same bundle runs in Node 18+ and browsers without a Node crypto polyfill. Optional
+filesystem operations require a Node CommonJS host; evaluation, hashing, signature
+verification and the Emulator do not require filesystem access.
+
+Run `npm run test:browser` for the automated Chromium regression check used in CI.
+It runs the shared evaluator tests and a typed credential query against the bundle.
+See [BROWSER-TESTING.md](BROWSER-TESTING.md) for browser setup and interactive tests.
+
+## TypeScript Definitions
+
+`scalus.d.ts` is generated from the Scala sources by `scalus-ts-exporter`
+(`sbt scalusCardanoLedgerJS/generateDts`). Do not edit it by hand. CI fails
+if it drifts from the Scala facades.
+
+## For AI Coding Agents
+
+Point your agent at `node_modules/scalus/scalus.d.ts` and this README. They match the installed
+version. Without the package installed, <https://scalus.org/llms-ts.txt> holds both for the latest
+release. Claude Code users can install the `scalus` plugin
+(`/plugin marketplace add scalus3/scalus`, then `/plugin install scalus@scalus`). Its
+`scalus:typescript` skill loads in any project whose `package.json` depends on `scalus`.
+
+## License
+
+Apache-2.0
+
+## Links
+
+- [Repository](https://github.com/scalus3/scalus)
+- [Documentation](https://scalus.org)
+
+# TypeScript definitions (scalus.d.ts)
+
+```ts
+// Generated by scalus-ts-exporter. DO NOT EDIT.
+
+/** A registered reward account, returned by `Emulator.getAccount`. */
+export interface AccountInfo {
+  /** Reward balance in lovelace. */
+  readonly balance: bigint;
+  /** The deposit paid to register the account, in lovelace. */
+  readonly deposit: bigint;
+  /** Hex-encoded 28-byte key hash of the pool the account delegates to, or `undefined`. */
+  readonly poolId?: string;
+  /**
+   * The DRep the account delegates its vote to, or `undefined`: a key or script credential with
+   * its hex-encoded 28-byte hash, or one of the two predefined DReps by name.
+   */
+  readonly drep?: { readonly type: "key" | "script"; readonly hash: string } | "AlwaysAbstain" | "AlwaysNoConfidence";
+}
+
+/** One row of `Emulator.getAppliedTxs`. */
+export interface AppliedTxInfo {
+  /** Hex-encoded 32-byte transaction hash. */
+  readonly txHash: string;
+  /** The emulator slot at the time this transaction was applied. */
+  readonly slot: number;
+}
+
+/**
+ * One native asset: a policy, a name under it, and how much of it.
+ *
+ * `policyId` and `assetName` are hex. `unit` is the two concatenated, which is what
+ * lucid-evolution and MeshJS call a unit - provided so adapters need no string arithmetic.
+ */
+export class Asset {
+  constructor(policyIdHex: string, assetNameHex: string, amount: bigint);
+  readonly policyId: string;
+  readonly assetName: string;
+  readonly quantity: bigint;
+  readonly unit: string;
+  /** A plain object with the same fields. Assert on this, never on the handle. */
+  toObject(): PlainAsset;
+}
+
+/**
+ * Network, slot arithmetic and protocol parameters as one coherent triple.
+ *
+ * This is what an emulator is built from, because a network name alone cannot express what an
+ * emulated network needs: slot configuration and protocol parameters vary independently of the
+ * network id, and Yaci DevKit's custom `zeroTime`, `slotLength` and short `epochLength` are the
+ * standing example.
+ *
+ * Use `mainnet()`, `preprod()`, `preview()` or `custom()`. The public constructor exists only
+ * because Scala.js requires one; it yields an all-zero placeholder.
+ */
+export class CardanoInfo {
+  constructor();
+  /**
+   * `"mainnet"` or `"testnet"`.
+   *
+   * Throws for a network id outside those two, which `custom` will not construct. The type is
+   * exactly what `custom` accepts, so a value that cannot be named fails loudly rather than
+   * degrading to a string no caller asked for.
+   */
+  readonly network: "mainnet" | "testnet";
+  readonly slotConfig: SlotConfig;
+  readonly protocolParams: ProtocolParams;
+  /**
+   * A copy carrying `params` in place of the current protocol parameters. Network and slot
+   * config are unchanged.
+   */
+  withProtocolParams(params: ProtocolParams): CardanoInfo;
+  /**
+   * A plain object with the same fields.
+   *
+   * A handle's fields are accessors on the prototype, so `JSON.stringify`, object spread and
+   * (the dangerous one) a test framework's `toEqual` all see an empty object on the handle
+   * itself. Assert on this instead.
+   */
+  toObject(): PlainCardanoInfo;
+  toString(): string;
+  /** Current Cardano mainnet parameters and slot configuration. */
+  static mainnet(): CardanoInfo;
+  /** Preprod testnet parameters and slot configuration. */
+  static preprod(): CardanoInfo;
+  /** Preview testnet parameters and slot configuration. */
+  static preview(): CardanoInfo;
+  /**
+   * Yaci DevKit, private testnets, or any other network with its own slot config and parameters.
+   * `network` must be `"mainnet"` or `"testnet"`; anything else throws, since those are the only
+   * two values `network` can ever read back (see the accessor's doc).
+   */
+  static custom(network: string, slotConfig: SlotConfig, params: ProtocolParams): CardanoInfo;
+}
+
+/**
+ * A block of the emulator's chain: its slot and its block id, the hex hash of its header. The
+ * genesis point is `{ slot: 0, blockHash: "00".repeat(32) }`.
+ */
+export interface ChainPoint {
+  readonly slot: number;
+  readonly blockHash: string;
+}
+
+/**
+ * Result of `produceBlockOn` and `rollback`. Read `isSuccess` first: `point` is present only on
+ * success, `error` and `errorKind` only on failure.
+ */
+export interface ChainResult {
+  readonly isSuccess: boolean;
+  /** The new block, or the tip after a rollback; present on success. */
+  readonly point?: ChainPoint;
+  /** What went wrong, in prose; present on failure. */
+  readonly error?: string;
+  /** Why nothing changed; present on failure. Stable enough to assert on, unlike `error`. */
+  readonly errorKind?: "SlotNotAfterParent" | "UnknownPoint" | "TooDeep" | "InvalidTx" | "BlockTooBig" | "NotPositive" | "PastGenesis";
+}
+
+/**
+ * The last block of the chain, with its height, the number of blocks from genesis. A tip is also a
+ * `ChainPoint`.
+ */
+export interface ChainTip {
+  readonly height: number;
+  readonly slot: number;
+  readonly blockHash: string;
+}
+
+/** A constitutional committee: its members and the fraction of them that must vote yes. */
+export interface Committee {
+  readonly members: CommitteeMember[];
+  readonly threshold: Fraction;
+}
+
+/** A hot key a committee member authorized, for `EmulatorOptions.committeeHotKeys`. */
+export interface CommitteeHotKey {
+  /** Credential type of the member's cold credential: "key" or "script". */
+  readonly coldCredentialType: "key" | "script";
+  /** Hex-encoded 28-byte hash of the member's cold credential. */
+  readonly coldCredentialHash: string;
+  /** Credential type of the hot credential: "key" or "script". */
+  readonly hotCredentialType: "key" | "script";
+  /** Hex-encoded 28-byte hash of the hot credential. */
+  readonly hotCredentialHash: string;
+}
+
+/** One member of a constitutional committee. */
+export interface CommitteeMember {
+  /** Credential type of the member's cold credential: "key" or "script". */
+  readonly credentialType: "key" | "script";
+  /** Hex-encoded 28-byte hash of the member's cold credential. */
+  readonly credentialHash: string;
+  /** The last epoch of the member's term. */
+  readonly expiresAfter: number;
+}
+
+/** The constitution: its anchor and, if any, the hash of its guardrails script. */
+export interface Constitution {
+  /** The URL of the constitution text. */
+  readonly anchorUrl: string;
+  /** Hex-encoded 32-byte hash of the document at `anchorUrl`. */
+  readonly anchorDataHash: string;
+  /** Hex-encoded 28-byte hash of the guardrails script, or `undefined` for none. */
+  readonly guardrailsScriptHash?: string;
+}
+
+/**
+ * The three Plutus cost models, by language rather than by position - so a caller reads
+ * `costModels.PlutusV3`, never `Object.values(costModels)[2]` and a comment explaining why.
+ */
+export interface CostModels {
+  readonly PlutusV1: number[];
+  readonly PlutusV2: number[];
+  readonly PlutusV3: number[];
+}
+
+/**
+ * Cost parameters per Plutus language, each in protocol-parameter order and each a safe-integer
+ * `number` or a `bigint`. A `CostModels` has them, and so does a plain object from any SDK; a
+ * language the transaction does not use may be absent, and other fields are ignored.
+ */
+export interface CostModelsLike {
+  readonly PlutusV1?: readonly (number | bigint)[];
+  readonly PlutusV2?: readonly (number | bigint)[];
+  readonly PlutusV3?: readonly (number | bigint)[];
+}
+
+/** DRep registration entry for `EmulatorOptions`. */
+export interface DRepRegistration {
+  /** Credential type: "key" for pub key hash, "script" for script hash. */
+  readonly credentialType: "key" | "script";
+  /** Hex-encoded 28-byte credential hash */
+  readonly credentialHash: string;
+  /** Deposit held for this DRep registration, in lovelace. */
+  readonly deposit: bigint;
+  /**
+   * The DRep's metadata anchor as CBOR: a `[url, dataHash]` pair, where `dataHash` is the
+   * 32-byte hash of the document the URL points at.
+   */
+  readonly anchor?: Uint8Array;
+}
+
+/** Datum entry for `EmulatorOptions`. */
+export interface DatumEntry {
+  /** Hex-encoded 32-byte datum hash */
+  readonly hash: string;
+  /** The datum itself as CBOR, hex-encoded. Its hash must be `hash`; nothing checks that. */
+  readonly datum: string;
+}
+
+/** Delegation info returned by `Emulator.getDelegation`. */
+export interface DelegationInfo {
+  /** Hex-encoded 28-byte pool key hash, or `undefined` if not delegated. */
+  readonly poolId?: string;
+  /** Reward balance in lovelace. */
+  readonly rewards: bigint;
+}
+
+/**
+ * An in-memory Cardano ledger for tests and local development.
+ *
+ * A submitted transaction goes through the same phase-1 checks a node performs (fees, value
+ * conservation, signatures, validity interval, min-ada, script and datum witnesses, certificates)
+ * and then phase-2 Plutus script execution, over most of the node's UTxO ledger rules. Everything
+ * lives in this object: no node, no network, no disk. The ledger starts with what you seed it
+ * with, and disappears with the process.
+ *
+ * Build one with `Emulator.create`. The constructor below is deprecated: it takes protocol
+ * parameters from the slot configuration alone, so a `SlotConfig.preview` emulator validated
+ * transactions against mainnet's parameters. `Emulator.create` takes a `CardanoInfo`, in which the
+ * two cannot disagree.
+ *
+ * @param initialUtxosCbor The UTxO set to start from, as CBOR: a map whose keys are transaction inputs (a `[transactionHash, outputIndex]` pair) and whose values are transaction outputs, as in the Cardano ledger CDDL. This is the same shape `getUtxosCbor` gives back. An array of `[input, output]` pairs, as `Utxo.toCbor` writes each, is read too.
+ * @param slotConfig Slot arithmetic for the emulated network, for example `SlotConfig.preview`.
+ * @param initialStakeRewards Stake credentials to register before the first transaction: a map from a hex-encoded 28-byte script hash to a reward balance in lovelace, written as a decimal string. Only script credentials can be seeded here; use `Emulator.create` with `stakeRegistrations` to seed key credentials. A balance of `"0"` is the usual case: a reward (staking) validator only runs when a transaction withdraws from its address, and a withdrawal of zero lovelace is enough, but the address must already be registered for the transaction to be valid.
+ */
+export class Emulator {
+  /** @deprecated use Emulator.create (since 1.2.0) */
+  constructor(initialUtxosCbor: Uint8Array, slotConfig: SlotConfig, initialStakeRewards?: { [key: string]: string });
+  /**
+   * Network, slot configuration and protocol parameters this emulator validates transactions
+   * against, as one coherent triple. For an emulator built with `Emulator.create`, this is the
+   * `CardanoInfo` it was created from, with the pparams that later epoch boundaries enacted
+   * (ledger-rules spec [ES-15]); for the deprecated constructors, protocol parameters come from
+   * `slotConfig` alone (mainnet parameters for `SlotConfig.mainnet`, `UtxoEnv.default`'s
+   * parameters otherwise), which is the mismatch `Emulator.create` fixes.
+   */
+  getCardanoInfo(): CardanoInfo;
+  /**
+   * The protocol parameters this emulator validates transactions against. Equivalent to
+   * `getCardanoInfo().protocolParams`.
+   */
+  getProtocolParameters(): ProtocolParams;
+  /**
+   * Runs every Plutus script the transaction triggers and reports what each one costs, resolving
+   * inputs against this emulator's UTxO set, slot config, cost models and protocol version.
+   *
+   * The standalone `evalPlutusScripts` needs all of that passed in, and getting any of it wrong
+   * produces plausible, wrong budgets. Here there is nothing to get wrong.
+   *
+   * Unlike `submitTx`, this throws rather than returning a result object: it answers a question
+   * about a transaction, and has no shape in which to say "there was no transaction". Bytes from
+   * an untrusted source therefore need a `try`.
+   *
+   * @throws PlutusScriptEvaluationError if a script fails; it names the redeemer, classifies the failure, carries the script's traces and the arguments the script saw.
+   * @throws Error for any other failure: `txCborBytes` does not decode as a transaction, an input no UTxO resolves, a script the transaction does not carry.
+   */
+  evaluateTx(txCborBytes: Uint8Array): RedeemerBudget[];
+  /**
+   * As above, plus UTxOs the emulator does not hold - outputs of a transaction not yet
+   * submitted, typically. Each is a `Utxo` or an `[input, output]` pair as hex or bytes, as
+   * `evaluator.evaluateTx` takes them.
+   */
+  evaluateTx(txCborBytes: Uint8Array, additionalUtxos: readonly (string | Uint8Array | Utxo)[]): RedeemerBudget[];
+  /**
+   * The cardano-ledger names of every ledger failure of a transaction, in the ledger's order,
+   * for example `["BadInputsUTxO", "OutsideValidityIntervalUTxO"]`; empty when the ledger rules
+   * accept it. A dry run: the ledger state does not change. Ledger-rules spec [FL-8].
+   *
+   * `submitTx` reports one failure; this lists them all, as a Haskell ledger test asserts them.
+   *
+   * @throws Error if `txCborBytes` does not decode as a transaction
+   */
+  ledgerFailures(txCborBytes: Uint8Array): string[];
+  /**
+   * Validates a transaction and, if it passes, applies it to the ledger state.
+   *
+   * Never throws: bytes that are not a transaction at all come back as a failure result with
+   * `errorRule: "InvalidTransaction"`, the same shape as a rejection, so a caller handling
+   * untrusted bytes needs one branch rather than a branch and a `try`.
+   *
+   * @param txCborBytes CBOR bytes of the signed transaction, as it would be sent to a node.
+   * @returns `{ isSuccess: true, txHash }` when the transaction was accepted, otherwise `{ isSuccess: false, error, errorRule }`, where `errorRule` is the condition that rejected it and `logs` carries the script's trace output (empty unless a Plutus script failed and produced any). A rejected transaction leaves the ledger unchanged.
+   */
+  submitTx(txCborBytes: Uint8Array): SubmitResult;
+  /**
+   * Submits a transaction the same way, but keeps a debug build of each script at hand. A
+   * release script that fails with no trace output is replayed with its debug build, so the
+   * failure message carries real diagnostics instead of nothing.
+   *
+   * @param txCborBytes CBOR bytes of the signed transaction.
+   * @param debugScripts Map from the hex-encoded script hash of a script in the transaction, to the double-CBOR hex of the debug build of that same script. Its Plutus version is taken from the script in the transaction; an entry that matches no script there is ignored, with a console warning.
+   * @returns The same shape as the one-argument `submitTx`.
+   */
+  submitTx(txCborBytes: Uint8Array, debugScripts: { [key: string]: string }): SubmitResult;
+  /**
+   * The whole UTxO set in a single CBOR map: keys are transaction inputs (a
+   * `[transactionHash, outputIndex]` pair), values are transaction outputs, as in the Cardano
+   * ledger CDDL. `getUtxos` returns the same UTxOs as `Utxo` handles.
+   */
+  getUtxosCbor(): Uint8Array;
+  /** Every UTxO in the ledger, as `Utxo` handles. */
+  getUtxos(): Utxo[];
+  /**
+   * The UTxOs matching `filter`. Filtering happens in the ledger, so only matches cross into
+   * JavaScript - no `Utxo` handle is ever built for a row the filter would drop.
+   *
+   * Every field given is ANDed together; an empty filter matches everything. `outRefs` is the
+   * one field that is itself a disjunction: it matches any of the given refs, not all of them.
+   *
+   * @throws Error if the filter carries a field `UtxoFilter` does not declare. An unknown field cannot be honoured, and ignoring it would silently widen the query - a misspelt `{ adress: ... }` would hand back every UTxO in the ledger rather than one address's.
+   */
+  getUtxos(filter: UtxoFilter): Utxo[];
+  /**
+   * The UTxOs matching `filter`, in the ledger state `view` names: `"tip"`, the chain's last
+   * block, as `getUtxos(filter)` reads; `"mempool"`, after the pending transactions too; or `{
+   * stable: n }`, after the block of depth `n`, where the tip has depth 1 and `height + 1` is
+   * genesis. Pass `{}` as the filter for every UTxO.
+   *
+   * @throws TypeError if `view` is none of these shapes.
+   * @throws RangeError if `stable` is below 1 or above the tip height plus 1, or its block is deeper than `securityParam + 1`, whose ledger state the emulator no longer keeps.
+   */
+  getUtxos(filter: UtxoFilter, view: "tip" | "mempool" | { stable: number }): Utxo[];
+  /**
+   * The reward balance of a stake credential, key or script.
+   *
+   * @param rewardAddressBech32 The reward (stake) address in bech32 form, for example `stake1...` or `stake_test1...`. The address carries which kind of credential it names, so this works for a key credential too - unlike the deprecated `Uint8Array` form this replaces, which only ever built a script credential.
+   * @returns The balance in lovelace, or `undefined` if that credential is not registered.
+   */
+  getStakeReward(rewardAddressBech32: string): bigint | undefined;
+  /**
+   * Moves the clock to an absolute slot, forwards or backwards. Validity intervals and
+   * time-aware scripts see the difference; no blocks are produced in between. Crossing an epoch
+   * boundary forwards runs the epoch rules: pool retirement, proposal expiry and refunds,
+   * rewards and enactment. Each boundary crossed costs one epoch transition, so a move across
+   * millions of epochs is slow. A fractional value is truncated.
+   */
+  setSlot(slot: number): void;
+  /**
+   * The treasury in lovelace at the start of the current epoch: the value a transaction must
+   * state as its `currentTreasuryValue`. An epoch boundary changes it as the epoch rules do:
+   * donations, the treasury cut of the rewards and enacted withdrawals.
+   */
+  getTreasury(): bigint;
+  /** The reserves in lovelace. They start as the `reserves` option. */
+  getReserves(): bigint;
+  /**
+   * The gov state: the proposals in the order they were submitted, with their votes, the
+   * committee and the constitution. A committee member's hot key is not here: a tx authorizes it
+   * with a certificate, and the vote it casts shows in `votes`.
+   */
+  getGovState(): GovState;
+  /**
+   * The current slot number of the emulator. With clock `"wall"`, reading it does not move the
+   * clock: only `submitTx`, `evaluateTx`, `ledgerFailures`, `produceBlock` and `awaitTx` do.
+   */
+  getSlot(): number;
+  /** The epoch of the current slot. */
+  getEpoch(): number;
+  /** Advance the current slot by `n` slots. */
+  tick(n: number): void;
+  /**
+   * POSIX time in milliseconds at which the emulator's current slot starts. Equivalent to
+   * `getCardanoInfo().slotConfig.slotToTime(getSlot())`. With clock `"wall"`, reading it does
+   * not move the clock: only `submitTx`, `evaluateTx`, `ledgerFailures`, `produceBlock` and
+   * `awaitTx` do.
+   */
+  getTime(): number;
+  /**
+   * Moves the clock to the slot containing this POSIX time - the inverse of `getTime`. A
+   * fractional slot is truncated, the same as `setSlot`.
+   */
+  setTime(posixMillis: number): void;
+  /**
+   * Whether the transaction is confirmed: in a block on the selected chain. A pending
+   * transaction, with `blockProduction: "manual"`, reads `false`; `getTxStatus` tells pending
+   * from unknown.
+   *
+   * @param txHashHex Hex-encoded 32-byte transaction hash.
+   */
+  hasTx(txHashHex: string): boolean;
+  /**
+   * Where a transaction stands, as one word: `"Pending"` in the mempool, `"Confirmed"` in a
+   * block of the chain, `"Dropped"` when it left the mempool without a block, `"RolledBack"`
+   * when its block left the chain under `orphanTxs: "drop"`, `"NotFound"` if this emulator never
+   * saw it. `getTxStatus` gives the details. With the default `blockProduction: "instant"`, an
+   * accepted transaction is `"Confirmed"` at once.
+   *
+   * @param txHashHex Hex-encoded 32-byte transaction hash.
+   */
+  getTransactionStatus(txHashHex: string): "Pending" | "Confirmed" | "Dropped" | "RolledBack" | "NotFound";
+  /**
+   * Where a transaction stands, with the details: the depth and the block of a confirmed
+   * transaction (the tip has depth 1), the reason of a dropped one.
+   *
+   * @param txHashHex Hex-encoded 32-byte transaction hash.
+   */
+  getTxStatus(txHashHex: string): TxStatusInfo;
+  /**
+   * Forges a block from the mempool and returns its point. With `blockProduction: "manual"` this
+   * is the only way a block appears: at slot `max(getSlot(), tip slot + 1)`, with the oldest
+   * pending transactions that fit the block limits, after the clock moves to that slot and the
+   * mempool is checked again. An empty mempool forges an empty block.
+   */
+  produceBlock(): ChainPoint;
+  /**
+   * Forges a block of `txs`, as CBOR, on the block `on`, at slot `on.slot + 1`: a block from
+   * another pool, so the mempool is not read. A branch longer than the chain becomes the chain,
+   * and the transactions of the blocks it replaces follow `orphanTxs`. `on` is a block of this
+   * emulator, or the genesis point `{ slot: 0, blockHash: "00".repeat(32) }`.
+   *
+   * @returns `{ isSuccess: true, point }`, or `{ isSuccess: false, error, errorKind }`, and then nothing changed.
+   * @throws TypeError if `on` is not a point, or an element of `txs` is not a transaction.
+   */
+  produceBlockOn(on: ChainPoint, txs: readonly Uint8Array[]): ChainResult;
+  /** As above, at `slot`, which must be greater than `on.slot`. */
+  produceBlockOn(on: ChainPoint, txs: readonly Uint8Array[], slot: number): ChainResult;
+  /**
+   * Removes the last `n` blocks of the chain, and returns the new tip. Their transactions follow
+   * `orphanTxs`, and the clock stays. `n` can be at most `securityParam`.
+   *
+   * @returns `{ isSuccess: true, point }`, or `{ isSuccess: false, error, errorKind }`, and then nothing changed.
+   */
+  rollback(n: number): ChainResult;
+  /** The hashes of the pending transactions, oldest first. */
+  getMempool(): string[];
+  /**
+   * The last block of the chain, with its height. Before the first block it is genesis:
+   * `{ slot: 0, blockHash: "00".repeat(32), height: 0 }`.
+   */
+  getTip(): ChainTip;
+  /**
+   * Waits for a pending transaction, as a provider's `awaitTx` does, and says if it is
+   * confirmed. With `awaitTx: "produceBlock"`, the default, it forges blocks while the
+   * transaction is pending; with `"waitOnly"` it forges nothing and reports the status as it is.
+   *
+   * @param txHashHex Hex-encoded 32-byte transaction hash.
+   */
+  awaitTx(txHashHex: string): boolean;
+  /**
+   * Looks up a previously applied transaction by hash.
+   *
+   * @param txHashHex Hex-encoded 32-byte transaction hash.
+   * @returns The transaction as CBOR, or `undefined` if this emulator never applied it.
+   */
+  getTransaction(txHashHex: string): Uint8Array | undefined;
+  /** Every transaction this emulator has applied, oldest first. */
+  getAppliedTxs(): AppliedTxInfo[];
+  /**
+   * The pool a stake credential delegates to, and its reward balance.
+   *
+   * @param rewardAddressBech32 The reward (stake) address in bech32 form, for example `stake1...` or `stake_test1...`.
+   * @returns `poolId` is `undefined` when the credential delegates to no pool. `rewards` is `0n` both for a registered credential with no rewards and for one that was never registered, so use `getStakeReward` when you need to tell the two apart.
+   */
+  getDelegation(rewardAddressBech32: string): DelegationInfo;
+  /**
+   * Pays `lovelace` into a registered reward account, as an epoch boundary pays rewards. A later
+   * withdrawal of the balance needs no registration first.
+   *
+   * @param rewardAddressBech32 The reward (stake) address in bech32 form, for example `stake1...` or `stake_test1...`.
+   * @throws Error if the account is not registered, or `lovelace` is negative.
+   */
+  addRewards(rewardAddressBech32: string, lovelace: bigint): void;
+  /**
+   * The reward account of a reward address.
+   *
+   * @param rewardAddressBech32 The reward (stake) address in bech32 form, for example `stake1...` or `stake_test1...`.
+   * @returns The account, or `undefined` if it is not registered.
+   */
+  getAccount(rewardAddressBech32: string): AccountInfo | undefined;
+  /**
+   * Live stake per registered stake credential: the lovelace sitting at addresses delegating to
+   * it, plus its reward balance, and the pool it delegates to. Not a reward calculation -
+   * nothing is paid out.
+   */
+  getStakeDistribution(): StakeDistributionEntry[];
+  /**
+   * The stake snapshots of the last epoch boundary: `mark`, `set` and `go`, each with one row
+   * per credential that has active stake, and the fee snapshot. The genesis fills all three from
+   * the initial state; each boundary moves `set` to `go`, `mark` to `set`, and takes a new
+   * `mark`.
+   */
+  getStakeSnapshots(): StakeSnapshots;
+  /**
+   * The reward update the last epoch boundary computed, which the next boundary pays, or
+   * `undefined` before the first boundary.
+   */
+  getPendingRewards(): RewardUpdate | undefined;
+  /**
+   * The ratify result the last epoch boundary computed, which the next boundary enacts: the ids
+   * of the actions it enacts, in order, the ids of the actions that expired, and whether an
+   * enacted action delayed the rest. At the start it enacts nothing. What a boundary enacted
+   * shows after it in `getGovState`, `getProtocolParameters` and the balances.
+   */
+  getPendingRatify(): PendingRatify;
+  /**
+   * The whole ledger state, read at once, so its parts come from one state: the UTxOs, the pots,
+   * the gov state, the stake snapshots, the reward update, the ratify result, the pparams and
+   * the pool distribution. Each part equals what its own getter returns.
+   */
+  getLedgerState(): LedgerState;
+  /**
+   * Looks a datum up by its hash, across the datums seeded into this emulator and the ones
+   * witnessed by accepted transactions.
+   *
+   * @param datumHashHex Hex-encoded 32-byte datum hash.
+   * @returns The datum as CBOR, or `undefined` if this emulator has never seen it.
+   */
+  getDatum(datumHashHex: string): Uint8Array | undefined;
+  /**
+   * Adds a datum to the datum store `getDatum` reads. Use it for a UTxO added with `addUtxo`
+   * that holds only the hash of its datum, so `getDatum` finds the datum, as a node does once a
+   * transaction has carried it. The store keeps the bytes as given, and adding a datum it
+   * already holds changes nothing.
+   *
+   * @param datumCbor The datum as CBOR, hex-encoded or as bytes.
+   * @returns The hex-encoded hash of exactly those bytes: the hash `getDatum` finds the datum under.
+   * @throws TypeError if `datumCbor` is not the CBOR of one datum.
+   */
+  addDatum(datumCbor: string | Uint8Array): string;
+  /**
+   * Adds a UTxO to the ledger directly, bypassing transaction validation. Useful for seeding a
+   * UTxO a later transaction will spend, without the ceremony of a genesis transaction for it.
+   * Overwrites any UTxO already sitting at the same input.
+   *
+   * @throws Error if `utxo` is not a `Utxo`. A plain `{ txHash, outputIndex, address, value }` object is the natural thing for an untyped caller to build, and it carries none of the parsed ledger pair this reads, so it would otherwise fail a frame later with an unreadable `undefined (of class java.lang.Void)`.
+   */
+  addUtxo(utxo: Utxo): void;
+  /**
+   * Removes a UTxO from the ledger directly, bypassing transaction validation. A no-op if no
+   * UTxO sits at that input.
+   */
+  removeUtxo(outRef: OutRef): void;
+  /**
+   * An independent copy of the whole ledger state: UTxOs, registrations and rewards, the datum
+   * store, the accepted transactions, and the current slot. The copy and the original evolve
+   * separately from then on, so one expensive setup can branch into several test scenarios
+   * without being rebuilt.
+   */
+  snapshot(): Emulator;
+  /**
+   * An emulator for a network, with an empty ledger.
+   *
+   * @param info Network, slot configuration and protocol parameters, as one coherent triple - see the class doc for why this replaces a bare `slotConfig` parameter.
+   */
+  static create(info: CardanoInfo): Emulator;
+  /**
+   * An emulator for a network, seeded with UTxOs and registrations.
+   *
+   * Unlike the older constructors, protocol parameters, network id and slot config come from one
+   * `CardanoInfo`, so they cannot disagree - fixing the bug where a `SlotConfig.preview`
+   * emulator would validate transactions against mainnet's protocol parameters.
+   *
+   * @param info Network, slot configuration and protocol parameters, as one coherent triple.
+   * @param options UTxOs and registrations to start from. Every field is optional.
+   * @throws TypeError if an option is invalid.
+   */
+  static create(info: CardanoInfo, options: EmulatorOptions): Emulator;
+}
+
+/**
+ * Everything an emulator may start with beyond its chain parameters, passed to `Emulator.create`.
+ * Every field is optional.
+ */
+export interface EmulatorOptions {
+  /** UTxOs to start from. */
+  readonly utxos?: readonly Utxo[];
+  /** Starting slot. Defaults to the slot containing `Date.now()`. */
+  readonly slot?: number;
+  /**
+   * Stake credentials that count as already registered, with their reward balances and, if you
+   * want, the pool each delegates to.
+   */
+  readonly stakeRegistrations?: readonly StakeRegistration[];
+  /**
+   * Stake pools that count as already registered, so transactions may delegate to them. Each
+   * gives exactly one of `params` and `poolId`.
+   */
+  readonly poolRegistrations?: readonly (PoolRegistration & ({ params: Uint8Array; poolId?: undefined } | { poolId: string; params?: undefined }))[];
+  /** DReps that count as already registered, so transactions may delegate votes to them. */
+  readonly drepRegistrations?: readonly DRepRegistration[];
+  /**
+   * Datums to put in the emulator's datum store, where `getDatum` looks them up by hash. The
+   * store is only a lookup table: every accepted transaction adds the datums it witnesses to it,
+   * and validation still requires a transaction to carry the datums it needs. Each `hash` must
+   * be the blake2b-256 hash of its `datum` bytes.
+   */
+  readonly datums?: readonly DatumEntry[];
+  /**
+   * The constitutional committee at the start. Leave it out for none: then only `NoConfidence`
+   * and `UpdateCommittee` actions can be ratified.
+   */
+  readonly committee?: Committee;
+  /**
+   * The hot key each committee member has authorized at the start. Every cold credential must be
+   * a member of `committee`, else `create` throws a `TypeError`.
+   */
+  readonly committeeHotKeys?: readonly CommitteeHotKey[];
+  /**
+   * The constitution at the start. Leave it out for one with an empty anchor and no guardrails
+   * script.
+   */
+  readonly constitution?: Constitution;
+  /**
+   * The treasury in lovelace at the start of the current epoch. Defaults to the mainnet treasury
+   * at epoch 665, 1 392 896 975 262 771 lovelace. A transaction that states a
+   * `currentTreasuryValue` must state this value until the next epoch boundary, which changes it
+   * as the epoch rules do. A negative value throws a `TypeError`.
+   */
+  readonly treasury?: bigint;
+  /**
+   * The reserves in lovelace at the start. Defaults to the mainnet reserves at epoch 665, 6 029
+   * 414 056 167 760 lovelace. No UTxO holds them. A negative value throws a `TypeError`.
+   */
+  readonly reserves?: bigint;
+  /**
+   * Protocol parameters that replace those of the `CardanoInfo`. Only the fields given change,
+   * and in `costModels` only the languages given: every other value stays as the `CardanoInfo`
+   * has it. `getProtocolParameters` returns the result.
+   */
+  readonly protocolParams?: Partial<ProtocolParamsLike>;
+  /**
+   * `"manual"`, the default: the slot moves only when you move it. `"wall"`: before it validates
+   * or evaluates a transaction, the emulator moves to the slot that contains `Date.now()`, never
+   * backwards, so a validity interval built from the wall clock holds. `getSlot` and `getTime`
+   * do not move the clock: only `submitTx`, `evaluateTx`, `ledgerFailures`, `produceBlock` and
+   * `awaitTx` do.
+   */
+  readonly clock?: "manual" | "wall";
+  /**
+   * `"instant"`, the default: every accepted transaction is in a block at once. `"manual"`: an
+   * accepted transaction waits in the mempool, and only `produceBlock` or `awaitTx` forges a
+   * block, so `getUtxos` shows its outputs only then, as a real provider does.
+   */
+  readonly blockProduction?: "instant" | "manual";
+  /**
+   * What `awaitTx` does while the transaction is pending: `"produceBlock"`, the default, forges
+   * blocks; `"waitOnly"` forges nothing.
+   */
+  readonly awaitTx?: "produceBlock" | "waitOnly";
+  /**
+   * What happens to the transactions of a block that leaves the chain: `"returnToMempool"`, the
+   * default, puts them back in the mempool; `"drop"` drops them, and their status is
+   * `"RolledBack"`.
+   */
+  readonly orphanTxs?: "returnToMempool" | "drop";
+  /** The deepest rollback the emulator allows, at least 1. Defaults to 2160. */
+  readonly securityParam?: number;
+  /**
+   * How the reward calculation rates the pools: `"ideal"`, the default, pays every pool with
+   * stake as a perfect pool; `"measured"` pays by the blocks each pool made in the epoch before,
+   * as the ledger does, so a pool with no block earns nothing.
+   */
+  readonly poolPerformance?: "ideal" | "measured";
+  /**
+   * `f`, the share of slots with a block, above 0 and at most 1: it sets the blocks an epoch is
+   * expected to have under `"measured"`. Defaults to 1/20.
+   */
+  readonly activeSlotsCoeff?: Fraction;
+  /**
+   * The hex id of the pool, 28 bytes, that each forged block counts for, registered or not.
+   * Leave it out for blocks that count for no pool, the default.
+   */
+  readonly blockIssuer?: string;
+}
+
+/**
+ * Why a script did not succeed.
+ *
+ * Branch on `code` rather than on `message`, whose wording may improve. `INTERNAL_ERROR` means
+ * a defect in Scalus, not a problem with the script: report it.
+ */
+export interface EvaluationError {
+  /**
+   * `SCRIPT_FAILURE`: the script failed, for example by evaluating `error`. `BUILTIN_FAILURE`: a
+   * builtin rejected its arguments. `INVALID_RETURN_VALUE`: a Plutus V3 script returned
+   * something other than unit. `OUT_OF_BUDGET`: the script spent more than `maxBudget`.
+   * `INTERNAL_ERROR`: a defect in Scalus.
+   */
+  readonly code: "SCRIPT_FAILURE" | "BUILTIN_FAILURE" | "INVALID_RETURN_VALUE" | "OUT_OF_BUDGET" | "INTERNAL_ERROR";
+  /** What went wrong, in prose. The wording may change between releases. */
+  readonly message: string;
+}
+
+/** Factories for `EvaluationOptions`. A plain object literal with the same fields works too. */
+export const EvaluationOptions: {
+  /**
+   * Options from a `ProtocolParams` handle, as returned by `CardanoInfo`, an emulator's
+   * `getProtocolParameters()`, or `ProtocolParams.fromBlockfrostJson`.
+   *
+   * @throws TypeError if the parameters have no cost model for `plutusVersion`
+   */
+  fromProtocolParams(plutusVersion: "PlutusV1" | "PlutusV2" | "PlutusV3", params: ProtocolParams): EvaluationOptions;
+  /**
+   * Options from Scalus's bundled mainnet snapshot at protocol version 11. It makes no network
+   * request, so it does not follow later parameter changes.
+   */
+  mainnet(plutusVersion: "PlutusV1" | "PlutusV2" | "PlutusV3"): EvaluationOptions;
+};
+
+/**
+ * How to run one script: the language, the protocol version, the cost model and, optionally, a
+ * budget limit.
+ */
+export interface EvaluationOptions {
+  /**
+   * Which Plutus language the script is written in. The script bytes do not carry it, and the
+   * same bytes cost differently under different languages.
+   */
+  readonly plutusVersion: "PlutusV1" | "PlutusV2" | "PlutusV3";
+  /**
+   * The Cardano major protocol version to evaluate under. It selects the builtin semantics and
+   * the costing rules.
+   */
+  readonly protocolMajorVersion: number;
+  /**
+   * That language's cost parameters, in protocol-parameter order, each a safe-integer `number`
+   * or a `bigint`. The factories fill it with numbers.
+   *
+   * Any length is accepted. A builtin whose parameters the array does not reach is priced beyond
+   * any budget, as in Plutus.
+   */
+  readonly costModel: readonly (number | bigint)[];
+  /**
+   * The most the script may spend, for example the ex-units its redeemer declares. A script that
+   * exceeds it stops with `OUT_OF_BUDGET`. Without it, execution is not bounded.
+   */
+  readonly maxBudget?: ExUnitsLike;
+}
+
+/** Outcome of evaluating one Plutus script. Read `isSuccess` first. */
+export class EvaluationResult {
+  constructor(isSuccess: boolean, budget: ExUnits, logs: readonly string[], profileJson?: string);
+  /** Whether the script ran to completion and returned a value the ledger accepts. */
+  readonly isSuccess: boolean;
+  /** Units the machine spent. On failure, what was spent before the script failed. */
+  readonly budget: ExUnits;
+  /**
+   * Trace output the script emitted, oldest first. From the deprecated `evaluateScript` and
+   * `evaluateScriptProfile`, a failure's message comes first.
+   */
+  readonly logs: string[];
+  /** Profiling data as JSON; set only by the deprecated `evaluateScriptProfile`. */
+  readonly profileJson?: string;
+  /** Why the script did not succeed. Set by `evaluator.evaluateScript` on failure. */
+  readonly error?: EvaluationError;
+}
+
+/**
+ * Execution units: what a script costs to run, in abstract machine memory and steps. A transaction
+ * pays a fee for the units its scripts declare, and the ledger rejects it if a script goes over
+ * what it declared.
+ */
+export class ExUnits {
+  constructor(memory: bigint, steps: bigint);
+  readonly memory: bigint;
+  readonly steps: bigint;
+  /** The units as decimal strings, so `JSON.stringify` works: it throws on a `bigint`. */
+  toJSON(): { memory: string; steps: string };
+}
+
+/**
+ * Execution units as a plain record: `memory` and `steps`, each a safe-integer `number` or a
+ * `bigint`. An `ExUnits` fits, and so does any `{ memory, steps }` object.
+ */
+export interface ExUnitsLike {
+  readonly memory: number | bigint;
+  readonly steps: number | bigint;
+}
+
+/** A fraction: `numerator / denominator`. */
+export interface Fraction {
+  readonly numerator: number;
+  readonly denominator: number;
+}
+
+/**
+ * The id of a gov action: the proposing transaction and the index of the proposal in it, as in
+ * `GovActionState`.
+ */
+export interface GovActionRef {
+  /** Hex-encoded 32-byte hash of the transaction that proposed the action. */
+  readonly txHash: string;
+  /** The index of the proposal among the proposals of that transaction. */
+  readonly index: number;
+}
+
+/** One proposal in `GovState.proposals`. */
+export interface GovActionState {
+  /** Hex-encoded 32-byte hash of the transaction that proposed the action. */
+  readonly txHash: string;
+  /** The index of the proposal among the proposals of that transaction. */
+  readonly index: number;
+  /** The kind of gov action. */
+  readonly actionType: "ParameterChange" | "HardForkInitiation" | "TreasuryWithdrawals" | "NoConfidence" | "UpdateCommittee" | "NewConstitution" | "InfoAction";
+  /** The epoch the action was proposed in. */
+  readonly proposedIn: number;
+  /** The last epoch in which the action can be ratified. */
+  readonly expiresAfter: number;
+  /** The votes cast on the action, the last vote of each voter only. */
+  readonly votes: GovVote[];
+}
+
+/** The gov state, returned by `Emulator.getGovState`. */
+export interface GovState {
+  /** The proposals, in the order they were submitted. */
+  readonly proposals: GovActionState[];
+  /** The committee, or `undefined` when there is none. */
+  readonly committee?: Committee;
+  readonly constitution: Constitution;
+}
+
+/** One vote on a proposal, in `GovActionState.votes`. */
+export interface GovVote {
+  /** Who votes: a committee hot credential, a DRep, or a stake pool. */
+  readonly voterRole: "committee" | "drep" | "pool";
+  /** Credential type of the voter: "key" or "script". A pool is always "key". */
+  readonly credentialType: "key" | "script";
+  /**
+   * Hex-encoded 28-byte hash of the voter: the hot credential, the DRep credential, or the pool
+   * key hash.
+   */
+  readonly credentialHash: string;
+  readonly vote: "Yes" | "No" | "Abstain";
+}
+
+/** The result of `Emulator.getLedgerState`: the whole ledger state, read at once. */
+export interface LedgerState {
+  /** The epoch of the last boundary the ledger ran. */
+  readonly lastEpoch: number;
+  /** The blocks each pool made in the epoch before the last boundary, sorted by pool. */
+  readonly blocksMadePrev: PoolBlocks[];
+  /** The blocks each pool made since the last boundary, sorted by pool. */
+  readonly blocksMadeCur: PoolBlocks[];
+  /** The treasury in lovelace, as `getTreasury`. */
+  readonly treasury: bigint;
+  /** The reserves in lovelace, as `getReserves`. */
+  readonly reserves: bigint;
+  /** The UTxO set, as `getUtxos`. */
+  readonly utxos: Utxo[];
+  /** The deposits the ledger holds, in lovelace. */
+  readonly deposited: bigint;
+  /** The fee pot, in lovelace. */
+  readonly fees: bigint;
+  /** The donations of this epoch, in lovelace. */
+  readonly donation: bigint;
+  /** The gov state, as `getGovState`. */
+  readonly govState: GovState;
+  /** The stake snapshots, as `getStakeSnapshots`. */
+  readonly stakeSnapshots: StakeSnapshots;
+  /** The reward update the next boundary pays, as `getPendingRewards`. */
+  readonly pendingRewards?: RewardUpdate;
+  /** The ratify result the next boundary enacts, as `getPendingRatify`. */
+  readonly pendingRatify: PendingRatify;
+  /** The current pparams, as `getProtocolParameters`. */
+  readonly protocolParams: ProtocolParams;
+  /** The pparams before the last boundary. */
+  readonly prevProtocolParams: ProtocolParams;
+  /** The pparams the next boundary adopts, or `undefined` when it adopts none. */
+  readonly futureProtocolParams?: ProtocolParams;
+  /** The stake distribution of the pools for this epoch. */
+  readonly poolDistr: PoolDistr;
+}
+
+/** Identifies one transaction output: the pair a `TransactionInput` is made of. */
+export interface OutRef {
+  readonly txHash: string;
+  readonly outputIndex: number;
+}
+
+/** The result of `Emulator.getPendingRatify`. */
+export interface PendingRatify {
+  /** The actions the next boundary enacts, in the order they were ratified. */
+  readonly enacted: GovActionRef[];
+  /**
+   * The actions that expired unenacted; the next boundary removes them and refunds their
+   * deposits.
+   */
+  readonly expired: GovActionRef[];
+  /** Whether an enacted action delayed every other action to a later boundary. */
+  readonly delayed: boolean;
+}
+
+/** The structural form of {@link Asset}. */
+export interface PlainAsset {
+  readonly policyId: string;
+  readonly assetName: string;
+  readonly quantity: bigint;
+  readonly unit: string;
+}
+
+/** The structural form of {@link CardanoInfo}. */
+export interface PlainCardanoInfo {
+  readonly network: string;
+  readonly slotConfig: SlotConfig;
+  readonly protocolParams: PlainProtocolParams;
+}
+
+/** The structural form of {@link ProtocolParams}. */
+export interface PlainProtocolParams {
+  readonly txFeePerByte: number;
+  readonly txFeeFixed: number;
+  readonly maxTxSize: number;
+  readonly maxValueSize: number;
+  readonly stakeAddressDeposit: bigint;
+  readonly stakePoolDeposit: bigint;
+  readonly dRepDeposit: bigint;
+  readonly govActionDeposit: bigint;
+  readonly utxoCostPerByte: bigint;
+  readonly priceMemory: number;
+  readonly priceSteps: number;
+  readonly maxTxExecutionMemory: bigint;
+  readonly maxTxExecutionSteps: bigint;
+  readonly collateralPercentage: number;
+  readonly maxCollateralInputs: number;
+  readonly minFeeRefScriptCostPerByte: number;
+  readonly protocolMajorVersion: number;
+  readonly costModels: CostModels;
+}
+
+/**
+ * A script as `{ type, script }`, the shape `withScriptRef` takes and Lucid's `Script` has.
+ * `script` is hex: the native-script CBOR for `"Native"`, and for Plutus the program in double
+ * CBOR.
+ */
+export interface PlainScript {
+  readonly type: "Native" | "PlutusV1" | "PlutusV2" | "PlutusV3" | "PlutusV4";
+  readonly script: string;
+}
+
+/** The structural form of {@link Utxo}. */
+export interface PlainUtxo {
+  readonly txHash: string;
+  readonly outputIndex: number;
+  readonly address: string;
+  readonly value: PlainValue;
+  readonly datumHash?: string;
+  readonly inlineDatum?: Uint8Array;
+  readonly scriptRef?: Uint8Array;
+  readonly scriptLanguage?: string;
+  readonly script?: PlainScript;
+}
+
+/** The structural form of {@link Value}. */
+export interface PlainValue {
+  readonly coin: bigint;
+  readonly assets: PlainAsset[];
+}
+
+/**
+ * Thrown by `evaluator.evaluateTx`, `evalPlutusScripts` and `Emulator.evaluateTx` when a Plutus
+ * script fails. Extends `Error`, so `instanceof Error`, `.stack` and unhandled-rejection output
+ * all behave normally.
+ *
+ * `args` is an own property but not an enumerable one: it holds the script context, and printing
+ * kilobytes of hex by default would bury the fields that say what failed.
+ *
+ * From JavaScript, construct with `(message, logs)`.
+ */
+export class PlutusScriptEvaluationError extends Error {
+  /**
+   * The constructor of releases before 1.3. An error built through it has no redeemer, hash,
+   * code or arguments.
+   */
+  constructor(message: string, logs: readonly string[]);
+  /** The failing script's own `trace` output, oldest first. Empty if it emitted none. */
+  readonly logs: string[];
+  /** Which redeemer failed. Its `budget` is what the script spent before it failed. */
+  readonly redeemer?: RedeemerBudget;
+  /** Hash of the failing script, as lowercase hex. */
+  readonly scriptHash?: string;
+  /** Why it failed, classified the same way `evaluator.evaluateScript` classifies. */
+  readonly code?: "SCRIPT_FAILURE" | "BUILTIN_FAILURE" | "INVALID_RETURN_VALUE" | "OUT_OF_BUDGET" | "INTERNAL_ERROR";
+  /**
+   * The `Data` arguments the script was applied to, each as CBOR hex, in order: for a `PlutusV3`
+   * script the script context alone, for a `PlutusV1` or `PlutusV2` spend the datum, the redeemer
+   * and the script context.
+   */
+  readonly args?: readonly string[];
+  readonly name: string;
+}
+
+/**
+ * A Plutus machine, built once from its options, to evaluate many scripts.
+ *
+ * `evaluator.evaluateScript` builds the machine from the cost model on every call. A `PlutusVM`
+ * builds it once, so repeated evaluations skip that work.
+ *
+ * ```ts
+ * const vm = new PlutusVM(EvaluationOptions.mainnet("PlutusV3"))
+ * for (const script of scripts) vm.evaluateScript(script, [])
+ * ```
+ *
+ * @param options the language, protocol version and cost model, and optionally a `maxBudget` that applies to every evaluation
+ * @throws TypeError if the options cannot be read
+ */
+export class PlutusVM {
+  constructor(options: EvaluationOptions);
+  /**
+   * Applies the arguments to the script, runs it, and reports what it cost, as
+   * `evaluator.evaluateScript` does with this machine's options.
+   *
+   * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR, or a `Program`
+   * @param args the arguments, each a CBOR-encoded `Data`, applied left to right
+   * @throws TypeError if the script or an argument cannot be read
+   */
+  evaluateScript(script: string | Uint8Array | Program, args: readonly (string | Uint8Array)[]): EvaluationResult;
+}
+
+/** The blocks one pool made, in `LedgerState.blocksMadePrev` and `blocksMadeCur`. */
+export interface PoolBlocks {
+  /** Hex-encoded 28-byte key hash of the pool. */
+  readonly pool: string;
+  /** The number of blocks. */
+  readonly blocks: number;
+}
+
+/** The stake distribution of the pools, `LedgerState.poolDistr`. */
+export interface PoolDistr {
+  /** One row per pool with at least one delegator, sorted by pool. */
+  readonly pools: PoolStake[];
+  /** The total active stake in lovelace, at least 1. */
+  readonly totalActiveStake: bigint;
+}
+
+/** Pool registration entry for `EmulatorOptions`. Give exactly one of `params` and `poolId`. */
+export interface PoolRegistration {
+  /**
+   * The pool's parameters, as one CBOR-encoded Cardano certificate: the whole 10-element
+   * `pool_registration` array, tag `3` first, then operator key hash, VRF key hash, pledge,
+   * cost, margin, reward account, owners, relays and metadata. The bare parameter list without
+   * the certificate tag is rejected.
+   */
+  readonly params?: Uint8Array;
+  /**
+   * Hex-encoded 28-byte pool key hash, for a pool whose parameters do not matter: its operator
+   * is its only owner and takes its rewards, with no pledge, the minimum cost, no margin and no
+   * relays.
+   */
+  readonly poolId?: string;
+}
+
+/** The stake of one pool in `PoolDistr.pools`. */
+export interface PoolStake {
+  /** Hex-encoded 28-byte key hash of the pool. */
+  readonly pool: string;
+  /** The numerator of the pool's share of the total active stake, in lowest terms. */
+  readonly stakeShareNumerator: bigint;
+  /** The denominator of the pool's share of the total active stake, in lowest terms. */
+  readonly stakeShareDenominator: bigint;
+  /** The stake delegated to the pool, in lovelace. */
+  readonly totalStake: bigint;
+  /** Hex-encoded 32-byte hash of the pool's VRF key. */
+  readonly vrfKeyHash: string;
+}
+
+/**
+ * A UPLC program, decoded once, to evaluate many times without decoding it again.
+ *
+ * Pass it to `PlutusVM.evaluateScript` or `evaluator.evaluateScript` in place of the script bytes.
+ * `uplc.decodeProgram(script)` makes one too.
+ *
+ * ```ts
+ * const program = uplc.decodeProgram(scriptHex)
+ * const vm = new PlutusVM(EvaluationOptions.mainnet("PlutusV3"))
+ * vm.evaluateScript(program, [datum, redeemer, context])
+ * ```
+ *
+ * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR
+ * @throws TypeError if the script cannot be read
+ */
+export class Program {
+  constructor(script: string | Uint8Array);
+  /** The program as flat bytes, as `uplc.decodeToFlat` returns them. */
+  toFlat(): Uint8Array;
+}
+
+/**
+ * The protocol parameters a transaction is built and validated against.
+ *
+ * These are the fields a transaction builder reads - the ones MeshJS's and the Evolution SDK's own
+ * parameter types both carry. Fee rates, sizes, percentages and counts are `number`; every
+ * deposit, `utxoCostPerByte` and the execution-unit maxima are `bigint`, because lovelace exceeds
+ * `Number.MAX_SAFE_INTEGER`.
+ *
+ * Get them from `CardanoInfo.mainnet()`/`preprod()`/`preview()`/`custom()`, from an emulator's
+ * `getProtocolParameters()`, or from `ProtocolParams.fromBlockfrostJson`. The public constructor
+ * exists only because Scala.js requires one; it yields all-zero placeholder parameters and is not
+ * a supported way to get real ones.
+ */
+export class ProtocolParams {
+  constructor();
+  readonly txFeePerByte: number;
+  readonly txFeeFixed: number;
+  readonly maxTxSize: number;
+  readonly maxValueSize: number;
+  readonly stakeAddressDeposit: bigint;
+  readonly stakePoolDeposit: bigint;
+  readonly dRepDeposit: bigint;
+  readonly govActionDeposit: bigint;
+  readonly utxoCostPerByte: bigint;
+  readonly priceMemory: number;
+  readonly priceSteps: number;
+  readonly maxTxExecutionMemory: bigint;
+  readonly maxTxExecutionSteps: bigint;
+  readonly collateralPercentage: number;
+  readonly maxCollateralInputs: number;
+  readonly minFeeRefScriptCostPerByte: number;
+  readonly protocolMajorVersion: number;
+  /**
+   * The three cost models, keyed by language rather than by position.
+   *
+   * A `def`, like every other accessor - it appears in the `.d.ts` as a readonly property, same
+   * as `txFeePerByte` and the rest, because a parameterless Scala.js member always does.
+   */
+  readonly costModels: CostModels;
+  /**
+   * Render as Blockfrost's `/epochs/{n}/parameters` JSON - what MeshJS's and the Evolution SDK's
+   * own Blockfrost adapters already know how to parse.
+   */
+  toBlockfrostJson(): string;
+  /**
+   * A plain object with the same fields.
+   *
+   * A handle's fields are accessors on the prototype, so `JSON.stringify`, object spread and
+   * (the dangerous one) a test framework's `toEqual` all see an empty object on the handle
+   * itself. Assert on this instead.
+   */
+  toObject(): PlainProtocolParams;
+  toString(): string;
+  /**
+   * Reads protocol parameters from Blockfrost's `/epochs/{n}/parameters` JSON.
+   *
+   * The only JSON entry point exported to JavaScript. `cardano-cli query protocol-parameters`
+   * output is readable from Scala but not from here: it is devops-tool output rather than
+   * something a browser or Node client has to hand, and exporting the reader would pull the JSON
+   * derivation for six more ledger types into the bundle. To configure an evaluation from any
+   * other provider, put its cost array in an `EvaluationOptions` record instead of parsing a
+   * whole parameter set.
+   */
+  static fromBlockfrostJson(json: string): ProtocolParams;
+}
+
+/**
+ * The protocol parameters balancing reads, as a record any SDK can build from numbers it already
+ * holds. A `ProtocolParams` handle satisfies it, and so does the `PlainProtocolParams` its
+ * `toObject()` returns, so all three work.
+ *
+ * Every integer takes a `number` or a `bigint`: lovelace and execution units exceed 2^53 in
+ * principle, but the values an SDK carries are usually plain numbers. The two prices are ratios,
+ * so they are always `number`.
+ *
+ * Fields absent from this record stay at zero inside Scalus. Balancing reads fees, min-ada,
+ * collateral, the cost models and the protocol version, and never a governance, block or pool
+ * parameter.
+ */
+export interface ProtocolParamsLike {
+  readonly txFeePerByte: number | bigint;
+  readonly txFeeFixed: number | bigint;
+  readonly maxTxSize: number | bigint;
+  readonly maxValueSize: number | bigint;
+  readonly stakeAddressDeposit: number | bigint;
+  readonly stakePoolDeposit: number | bigint;
+  readonly dRepDeposit: number | bigint;
+  readonly govActionDeposit: number | bigint;
+  readonly utxoCostPerByte: number | bigint;
+  readonly priceMemory: number;
+  readonly priceSteps: number;
+  readonly maxTxExecutionMemory: number | bigint;
+  readonly maxTxExecutionSteps: number | bigint;
+  readonly collateralPercentage: number | bigint;
+  readonly maxCollateralInputs: number | bigint;
+  readonly minFeeRefScriptCostPerByte: number | bigint;
+  readonly protocolMajorVersion: number | bigint;
+  readonly costModels: CostModelsLike;
+}
+
+/**
+ * One redeemer of a transaction, together with the execution budget its script really used. `tag`
+ * and `index` together say which script this is, and match the redeemer in the transaction.
+ *
+ * `tag` is why the script ran: `"Spend"` for a script input, `"Mint"` for a minting policy,
+ * `"Cert"` for a certificate, `"Reward"` for a withdrawal, `"Voting"` for a vote, and
+ * `"Proposing"` for a governance proposal.
+ */
+export class RedeemerBudget {
+  constructor(tag: "Spend" | "Mint" | "Cert" | "Reward" | "Voting" | "Proposing", index: number, budget: ExUnits);
+  /** Why the script ran, and so which group `index` counts within. */
+  readonly tag: "Spend" | "Mint" | "Cert" | "Reward" | "Voting" | "Proposing";
+  /**
+   * Position within the group named by `tag`, counting from 0: for `"Spend"` it indexes the
+   * transaction's inputs in ledger order, for `"Mint"` its minting policies, and so on.
+   */
+  readonly index: number;
+  /** What this redeemer's script actually spent, to put in the transaction. */
+  readonly budget: ExUnits;
+}
+
+/** One reward of `RewardUpdate.rewards`. */
+export interface RewardEntry {
+  /** Hex-encoded 28-byte credential hash, a key hash or a script hash, with no discriminator. */
+  readonly credential: string;
+  /** The reward (stake) address of this credential in bech32, on the emulator's network. */
+  readonly rewardAddress: string;
+  /** The reward in lovelace: the leader and member rewards of this credential, summed. */
+  readonly amount: bigint;
+}
+
+/** The result of `Emulator.getPendingRewards`. The four parts sum to 0. */
+export interface RewardUpdate {
+  /** The change to the treasury, in lovelace. */
+  readonly deltaT: bigint;
+  /** The change to the reserves, in lovelace, with its sign. */
+  readonly deltaR: bigint;
+  /** The change to the fees, in lovelace, with its sign. */
+  readonly deltaF: bigint;
+  /**
+   * The reward of each credential. The next boundary pays it to the credential's balance if it
+   * is registered then, and to the treasury if not.
+   */
+  readonly rewards: RewardEntry[];
+}
+
+/**
+ * The `Scalus` namespace object.
+ *
+ * @deprecated Use the top-level exports instead; this namespace object remains for backwards compatibility. `applyDataArgToScript` becomes `uplc.applyParamsToScript`, `evaluateScript` becomes `evaluator.evaluateScript` with an `EvaluationOptions`, `evalPlutusScripts` becomes `evaluator.evaluateTx`, and `evaluateScriptProfile` is not replaced.
+ */
+export const Scalus: {
+  /**
+   * Applies one argument to a Plutus script and returns the applied script. Use it to bake a
+   * parameter into a parameterized validator before you compute its script hash.
+   *
+   * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
+   * @param data The argument in the standard Plutus Data JSON encoding, for example `{"int":42}` or `{"constructor":0,"fields":[{"bytes":"deadbeef"}]}`.
+   * @returns The double-CBOR-encoded hex representation of the script with the argument applied.
+   * @deprecated (since 1.2.0) Use `uplc.applyParamsToScript`, which takes a list of parameters and accepts hex or bytes. It reads Data as CBOR rather than JSON, so convert first; `uplc.applyParamsToScript(script, [cborHex])` then returns what this function returns.
+   */
+  applyDataArgToScript(doubleCborHex: string, data: string): string;
+  /**
+   * Evaluates a Plutus script on its own, with no transaction around it. The script runs on a
+   * Plutus V3 machine with the mainnet cost models of the current mainnet protocol major version
+   * (11, van Rossem).
+   *
+   * This never throws. A script that fails, and a script whose hex cannot even be decoded, both
+   * come back as a result with `isSuccess: false` and the message in `logs[0]`.
+   *
+   * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
+   * @returns The outcome, with the units spent and the trace logs.
+   * @deprecated (since 1.2.0) Use `evaluator.evaluateScript(script, args, options)`, which takes the language, protocol version and cost model explicitly instead of assuming Plutus V3 on mainnet, and reports why a script failed in `error`. `EvaluationOptions.mainnet("PlutusV3")` reproduces this function's configuration.
+   */
+  evaluateScript(doubleCborHex: string): EvaluationResult;
+  /**
+   * Evaluates a Plutus script with profiling enabled.
+   *
+   * Same evaluation and same never-throws contract as {@link evaluateScript}, but the result also
+   * carries the machine's profiling data as JSON in `profileJson`: cost per source location,
+   * cost per builtin, and the transition edges between them.
+   *
+   * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
+   * @returns The outcome, with `profileJson` populated.
+   * @deprecated (since 1.2.0) Not replaced: `evaluator.evaluateScript` does not profile. Attributing cost to source lines needs the compiler output that produced the script, so profile from the JVM, where the Scala `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full report. The JS `PlutusVM` does not profile. This function keeps working meanwhile.
+   */
+  evaluateScriptProfile(doubleCborHex: string): EvaluationResult;
+  /**
+   * Evaluates every Plutus script a transaction runs, and reports what each one costs. Use it to
+   * fill in a transaction's execution units before you balance and submit it.
+   *
+   * @param txCborBytes CBOR bytes of the transaction whose scripts should run.
+   * @param utxoCborBytes CBOR bytes of the UTxO set the scripts see: a CBOR map whose keys are transaction inputs (a `[transactionHash, outputIndex]` pair) and whose values are transaction outputs, as in the Cardano ledger CDDL. It must resolve every input and reference input of the transaction.
+   * @param slotConfig Slot arithmetic for the target network, used to turn the transaction's validity interval into the POSIX times the scripts observe.
+   * @param costModels One cost model per Plutus language version, indexed by position: `costModels[0]` is Plutus V1, `[1]` is V2, `[2]` is V3. Each inner array holds that version's cost parameters in protocol-parameter order. Give a model for every version the transaction uses; since the position is the version, an earlier version cannot be skipped.
+   * @param protocolMajorVersion Cardano protocol major version, which picks the builtin semantics and the costing rules. Defaults to the current mainnet version, 11 (van Rossem).
+   * @returns One entry per redeemer of the transaction, carrying the units that redeemer's script spent.
+   * @throws PlutusScriptEvaluationError if a script fails; it names the redeemer, classifies the failure, carries the script's traces and the arguments the script saw.
+   * @throws Error for any other failure: malformed transaction or UTxO CBOR, an input no entry of the UTxO set resolves, a script the transaction does not carry.
+   * @deprecated (since 1.2.0) Use `evaluator.evaluateTx(tx, utxos, slotConfig, costModels, protocolMajorVersion)`, the same evaluation. It takes the resolved inputs as CBOR `[input, output]` pairs instead of one map, the cost models by language name instead of by position, and the protocol version explicitly instead of defaulting to mainnet's.
+   */
+  evalPlutusScripts(txCborBytes: Uint8Array, utxoCborBytes: Uint8Array, slotConfig: SlotConfig, costModels: readonly (readonly number[])[], protocolMajorVersion?: number): RedeemerBudget[];
+};
+
+/**
+ * Plutus scripts kept across evaluations, so a script that many transactions carry or reference is
+ * hashed and decoded once. Give one cache to several `TxEvaluator`s through their `scriptCache`
+ * option, for example one evaluator per slot configuration.
+ *
+ * When the cache is full, the least recently used script is dropped.
+ *
+ * ```ts
+ * const scripts = new ScriptCache(64)
+ * const ev = new TxEvaluator({ slotConfig, costModels, protocolMajorVersion: 11, scriptCache: scripts })
+ * ```
+ *
+ * @param maxEntries how many scripts to keep, a positive integer
+ * @throws TypeError if `maxEntries` is not a positive integer
+ */
+export class ScriptCache {
+  constructor(maxEntries: number);
+  /** How many scripts the cache holds. */
+  readonly size: number;
+}
+
+/**
+ * Slot and epoch configuration for a Cardano network.
+ *
+ * Encodes the linear (post-Byron) era as an anchor point: slot `zeroSlot` starts at `zeroTime`
+ * (POSIX milliseconds) and falls at the beginning of epoch `zeroEpoch`; slots are `slotLength`
+ * milliseconds long and epochs are `epochLength` slots long.
+ */
+export class SlotConfig {
+  constructor(zeroTime: number, zeroSlot: number, slotLength: number, epochLength?: number, zeroEpoch?: number);
+  /** POSIX time in milliseconds at which slot `zeroSlot` starts. */
+  readonly zeroTime: number;
+  /** The slot this config is anchored at: the first slot of the linear (post-Byron) era. */
+  readonly zeroSlot: number;
+  /** Slot length in milliseconds. */
+  readonly slotLength: number;
+  /** Epoch length in slots. */
+  readonly epochLength: number;
+  /** Number of the epoch that begins at `zeroSlot`. */
+  readonly zeroEpoch: number;
+  /** POSIX time in milliseconds at which the given slot starts. */
+  slotToTime(slot: number): number;
+  /**
+   * The slot that contains the given POSIX time in milliseconds.
+   *
+   * The result is fractional whenever the time does not land exactly on a slot boundary, and
+   * with one-second slots `timeToSlot(Date.now())` almost never does. Round it yourself before
+   * you use it as a slot number, for example with `Math.floor`; `Emulator.setSlot` truncates a
+   * fractional value rather than rejecting it.
+   */
+  timeToSlot(time: number): number;
+  /** Epoch containing the given slot. Slots before `zeroSlot` are clamped to `zeroEpoch`. */
+  epochOf(slot: number): number;
+  /** First slot of the given epoch (for epochs >= `zeroEpoch`). */
+  firstSlotOfEpoch(epoch: number): number;
+  /** Mainnet slot configuration starting at Shelley era (slot 4492800 = start of epoch 208) */
+  static readonly mainnet: SlotConfig;
+  /** Preview testnet slot configuration starting at Shelley era (1-day epochs) */
+  static readonly preview: SlotConfig;
+  /** Preprod testnet slot configuration (slot 86400 = start of epoch 4, after 4 Byron epochs) */
+  static readonly preprod: SlotConfig;
+}
+
+/**
+ * The slot arithmetic `evaluator.evaluateTx` reads. A `SlotConfig` has it, and so does a plain
+ * object from any SDK; other fields are ignored.
+ */
+export interface SlotConfigLike {
+  /** POSIX time in milliseconds at which slot `zeroSlot` starts. */
+  readonly zeroTime: number | bigint;
+  /** The slot the configuration is anchored at. */
+  readonly zeroSlot: number | bigint;
+  /** Slot length in milliseconds. */
+  readonly slotLength: number;
+}
+
+/** One row of `Emulator.getStakeDistribution`. */
+export interface StakeDistributionEntry {
+  /**
+   * Hex-encoded 28-byte credential hash - a key hash or a script hash, with no discriminator,
+   * the same convention `UtxoFilter.paymentCredential` uses.
+   */
+  readonly credential: string;
+  /** The reward (stake) address of this credential in bech32, on the emulator's network. */
+  readonly rewardAddress: string;
+  /** Hex-encoded 28-byte pool key hash, or `undefined` if this credential delegates to no pool. */
+  readonly pool?: string;
+  /** Live stake: the lovelace sitting at addresses delegating to this credential. */
+  readonly stake: bigint;
+  /** This credential's reward balance. */
+  readonly rewards: bigint;
+}
+
+/** Stake registration entry for `EmulatorOptions`. */
+export interface StakeRegistration {
+  /** Credential type: "key" for pub key hash, "script" for script hash. */
+  readonly credentialType: "key" | "script";
+  /** Hex-encoded 28-byte credential hash */
+  readonly credentialHash: string;
+  /** Starting reward balance in lovelace. */
+  readonly rewards: bigint;
+  /**
+   * Hex-encoded 28-byte key hash of the pool this credential delegates to. Leave it out for a
+   * credential that is registered but delegates to nothing.
+   */
+  readonly delegatedTo?: string;
+}
+
+/**
+ * One row of a stake snapshot of `Emulator.getStakeSnapshots`: a registered credential that
+ * delegates to a pool and has stake above 0.
+ */
+export interface StakeSnapshotEntry {
+  /** Hex-encoded 28-byte credential hash, a key hash or a script hash, with no discriminator. */
+  readonly credential: string;
+  /** The reward (stake) address of this credential in bech32, on the emulator's network. */
+  readonly rewardAddress: string;
+  /** Hex-encoded 28-byte key hash of the pool this credential delegated to. */
+  readonly pool: string;
+  /** The stake in lovelace: the coin of its base-address outputs plus its reward balance. */
+  readonly stake: bigint;
+}
+
+/** The result of `Emulator.getStakeSnapshots`. */
+export interface StakeSnapshots {
+  /** The stake taken at the last epoch boundary. */
+  readonly mark: StakeSnapshotEntry[];
+  /** The stake taken at the boundary before. */
+  readonly set: StakeSnapshotEntry[];
+  /** The stake taken two boundaries ago, which the reward update of the last boundary read. */
+  readonly go: StakeSnapshotEntry[];
+  /** The fees of the epoch before the last boundary, in lovelace. */
+  readonly fee: bigint;
+}
+
+/**
+ * Result of `Emulator.submitTx`. Read `isSuccess` first: `txHash` is present only on success,
+ * `error`/`errorRule` only on failure. `logs` is the exception - always an array, empty when there
+ * is nothing to report.
+ */
+export interface SubmitResult {
+  readonly isSuccess: boolean;
+  /** Transaction hash hex; present on success. */
+  readonly txHash?: string;
+  /** Error message; present on failure. */
+  readonly error?: string;
+  /**
+   * The condition that rejected the transaction; present on failure.
+   *
+   * Four conditions have a name of their own, because a caller branches on them rather than on
+   * the rule: `UtxoNotAvailable` (an input this transaction spends is not in the ledger - the
+   * ledger rules `BadInputsUTxO` and `BadAllInputsUTxO` are deliberately folded into this one
+   * name, since they are one condition), `TransactionExpired`, `ValueNotConserved` and
+   * `ScriptFailure` (a native or a Plutus script did not validate). Bytes that are not a
+   * transaction at all give `InvalidTransaction`.
+   *
+   * Every other rejection reports the ledger rule's own name: `FeesOk`, `MissingKeyHashes`,
+   * `BadCollateralInputsUTxO`, `BadReferenceInputsUTxO`, `InvalidScriptDataHash`, `Datums`,
+   * `ExUnitsExceedMax`, `WithdrawalsNotInRewards` and the rest.
+   *
+   * Stable enough to assert on in a test, unlike `error`; a name here does not minify away or
+   * otherwise change under refactoring, unlike `getClass.getSimpleName`.
+   */
+  readonly errorRule?: string;
+  /** Script trace logs, oldest first. Always an array; empty when the script produced none. */
+  readonly logs: string[];
+}
+
+/**
+ * Thrown by `balancer.balanceTx` when the transaction cannot be balanced. A script that fails is
+ * not this: it throws `PlutusScriptEvaluationError`, because that is the evaluator's failure.
+ *
+ * Branch on `code`, not on the message.
+ */
+export class TxBalancingError extends Error {
+  constructor(message: string, code: "INSUFFICIENT_FUNDS" | "NOT_CONVERGED");
+  /**
+   * `INSUFFICIENT_FUNDS` when the change output cannot hold min-ada, `NOT_CONVERGED` when the fee,
+   * the execution units and the change do not settle.
+   */
+  readonly code: "INSUFFICIENT_FUNDS" | "NOT_CONVERGED";
+  readonly name: string;
+}
+
+/**
+ * Evaluates the Plutus scripts of transactions under one set of protocol parameters.
+ *
+ * It does what `evaluator.evaluateTx` does, but prepares the cost models once, when it is created,
+ * instead of on every call. Keep one for as long as the parameters stay the same, and create a new
+ * one when they change.
+ *
+ * ```ts
+ * const ev = new TxEvaluator({ slotConfig, costModels, protocolMajorVersion: 11 })
+ * ev.evaluate(tx1, utxos1)
+ * ev.evaluate(tx2, utxos2)
+ * ```
+ *
+ * @throws TypeError if an option cannot be read
+ */
+export class TxEvaluator {
+  constructor(options: TxEvaluatorOptions);
+  /**
+   * Evaluates every Plutus script of a transaction and reports what each redeemer cost, as
+   * `evaluator.evaluateTx` does.
+   *
+   * @param tx the transaction, as hex or bytes
+   * @param utxos the resolved inputs and reference inputs, each a `Utxo` or an `[input, output]` pair as hex or bytes
+   * @returns one entry per redeemer, carrying the units that redeemer's script spent
+   * @throws PlutusScriptEvaluationError if a script fails
+   * @throws TypeError if an input cannot be read
+   */
+  evaluate(tx: string | Uint8Array, utxos: readonly (string | Uint8Array | Utxo)[]): RedeemerBudget[];
+}
+
+/**
+ * What a `TxEvaluator` evaluates under: the arguments `evaluator.evaluateTx` takes besides the
+ * transaction and its inputs.
+ */
+export interface TxEvaluatorOptions {
+  /** The chain's slot arithmetic: a `SlotConfig`, or any object with the same three fields. */
+  readonly slotConfig: SlotConfigLike;
+  /**
+   * Cost parameters per language, keyed by name: a `CostModels`, or any object with some of its
+   * fields.
+   */
+  readonly costModels: CostModelsLike;
+  /** Picks the builtin semantics and the costing rules. */
+  readonly protocolMajorVersion: number;
+  /**
+   * The execution units all of a transaction's scripts may spend together, usually the
+   * protocol's maximum transaction execution units. Without it, execution is not bounded.
+   */
+  readonly maxBudget?: ExUnitsLike;
+  /**
+   * Scripts to keep across evaluations, so each is hashed and decoded once. One cache can be
+   * given to several evaluators. Without it, every evaluation hashes and decodes its scripts.
+   */
+  readonly scriptCache?: ScriptCache;
+}
+
+/** Result of `getTxStatus`. */
+export interface TxStatusInfo {
+  readonly status: "Pending" | "Confirmed" | "Dropped" | "RolledBack" | "NotFound";
+  /**
+   * The depth of the block that holds the transaction, the tip being 1; present when
+   * `"Confirmed"`.
+   */
+  readonly depth?: number;
+  /** The block that holds the transaction; present when `"Confirmed"`. */
+  readonly point?: ChainPoint;
+  /**
+   * Why the transaction left the mempool; present when `"Dropped"`. `"Expired"`: its validity
+   * interval ended. `"InputsSpent"`: an input is gone. `"Invalid"`: another rule failed.
+   */
+  readonly reason?: "Expired" | "InputsSpent" | "Invalid";
+  /** The message of the rule that failed; present when `reason` is `"Invalid"`. */
+  readonly error?: string;
+}
+
+/**
+ * One unspent output: where it is, whose it is, and what it holds.
+ *
+ * Holds the ledger's own input and output, so a `Utxo` a query hands you can be handed straight
+ * back - to `evaluateTx` or `addUtxo` - with no encoding step in between. Constructing one from
+ * strings costs nothing until an accessor needs the parsed form.
+ */
+export class Utxo {
+  constructor(txHash0: string, outputIndex0: number, address0: string, value0: Value);
+  readonly txHash: string;
+  readonly outputIndex: number;
+  /**
+   * Bech32 address.
+   *
+   * Throws when the ledger address cannot be bech32-encoded - which happens only for an address
+   * on a network id outside `{Mainnet, Testnet}` (`Network.Other`), since bech32 has no defined
+   * human-readable prefix for an arbitrary network id. This is a genuine "cannot represent"
+   * case, not malformed input, so it fails loudly rather than degrading to hex: a caller
+   * comparing, filtering on, or handing this value to a wallet needs to know its address is
+   * unrepresentable, not receive a string that silently is not one.
+   */
+  readonly address: string;
+  readonly value: Value;
+  /** The datum hash, when the output references a datum rather than carrying one. */
+  readonly datumHash?: string;
+  /** The datum itself as CBOR, when the output carries it inline: the bytes it arrived in. */
+  readonly inlineDatum?: Uint8Array;
+  /** The reference script as CBOR, when the output carries one. */
+  readonly scriptRef?: Uint8Array;
+  /** Which language `scriptRef` is written in. */
+  readonly scriptLanguage?: string;
+  /**
+   * The reference script as `{ type, script }`, when the output carries one: what
+   * `withScriptRef` takes. A Plutus script comes back in double CBOR, whatever wrapping it was
+   * given in.
+   */
+  readonly script?: PlainScript;
+  /**
+   * This UTxO as CBOR `[input, output]`, CIP-30's `transaction_unspent_output`: the shape
+   * `evaluator.evaluateTx` reads, and what CML, CST and a wallet's `getUtxos()` produce.
+   */
+  toCbor(): Uint8Array;
+  /** A copy carrying `hash` as a datum hash, in place of whatever datum this output had. */
+  withDatumHash(hash: string): Utxo;
+  /**
+   * A copy carrying `cbor` as its inline datum. The output keeps these bytes as given, a
+   * non-minimal encoding included.
+   */
+  withInlineDatum(cbor: Uint8Array): Utxo;
+  /**
+   * A copy carrying `script` as its reference script.
+   *
+   * Takes the script as `{ type, script }`, the shape Lucid's `Script` has: `script` is hex or
+   * bytes, the native-script CBOR for `"Native"`, and for Plutus the program as raw flat, single
+   * or double CBOR. Also takes the ledger's `script_ref` CBOR, as `scriptRef` returns it. A
+   * Plutus program is stored as given, not checked.
+   *
+   * @throws TypeError if `script` is neither form, its hex is invalid, or a `"Native"` script or a `script_ref` does not decode
+   */
+  withScriptRef(script: Uint8Array | { readonly type: "Native" | "PlutusV1" | "PlutusV2" | "PlutusV3" | "PlutusV4"; readonly script: string | Uint8Array }): Utxo;
+  /**
+   * A plain object with the same fields.
+   *
+   * A handle's fields are accessors on the prototype, so `JSON.stringify`, object spread and
+   * (the dangerous one) a test framework's `toEqual` all see an empty object on the handle
+   * itself. Assert on this instead.
+   */
+  toObject(): PlainUtxo;
+  toString(): string;
+  /**
+   * Read back what `toCbor` wrote: CBOR `[input, output]`. Also reads the one-entry map
+   * `{input: output}` that `toCbor` wrote up to 1.2.
+   *
+   * A map of any other size is rejected, an empty one and a many-entry one alike. Taking the
+   * first entry of a many-entry map would drop the rest without a word, and which one survived
+   * would be whichever the decoded `Map` happened to iterate first - so a caller who passed a
+   * whole UTxO set here (the shape `Emulator.getUtxosCbor` returns) would get one arbitrary UTxO
+   * back and no hint that the others existed.
+   *
+   * @throws Error if the map does not hold exactly one entry.
+   */
+  static fromCbor(cbor: Uint8Array): Utxo;
+}
+
+/** Narrows `getUtxos`. Every field is optional; several may be combined, and they are ANDed. */
+export interface UtxoFilter {
+  readonly address?: string;
+  /**
+   * Hex payment-credential hash: matches every address with this payment part, whatever its
+   * stake part. This is the query a wallet wants.
+   */
+  readonly paymentCredential?: string;
+  /**
+   * Restricts paymentCredential to key or script credentials. Requires paymentCredential;
+   * omitted means either kind. Other filters still AND together.
+   */
+  readonly paymentCredentialType?: "key" | "script";
+  /** `"lovelace"`, or a policy id and asset name concatenated as hex. */
+  readonly unit?: string;
+  /**
+   * Matches a UTxO whose input is any of these - a disjunction over this array, unlike the other
+   * fields, which AND together.
+   */
+  readonly outRefs?: readonly OutRef[];
+  readonly txHash?: string;
+  readonly minLovelace?: bigint;
+  /** Applied last, after every other field above has been matched. */
+  readonly limit?: number;
+}
+
+/**
+ * An amount of ada together with any native assets beside it.
+ *
+ * This wraps the ledger's own `Value`: the object handed to you by a query holds the real thing,
+ * so passing it back to the emulator costs no re-encoding.
+ */
+export class Value {
+  constructor(lovelace: bigint);
+  constructor(lovelace: bigint, assets: readonly Asset[]);
+  /** Lovelace. A `bigint` because the ada supply exceeds `Number.MAX_SAFE_INTEGER`. */
+  readonly coin: bigint;
+  /** The native assets, in ledger order. Empty for pure ada. */
+  readonly assets: Asset[];
+  /** This value plus another. Neither operand is modified. */
+  plus(other: Value): Value;
+  toString(): string;
+  /**
+   * A plain object with the same fields.
+   *
+   * Handle accessors live on the prototype, so `JSON.stringify`, spread and (the dangerous one)
+   * vitest's `toEqual` all see an empty object, which makes `expect(a).toEqual(b)` pass for two
+   * different values. Assert through this instead.
+   */
+  toObject(): PlainValue;
+  /**
+   * `n` ada, as lovelace.
+   *
+   * A named factory rather than a constructor overload on purpose: `new Value(5n)` already means
+   * five *lovelace*, so a same-arity constructor meaning five *ada* would be indistinguishable
+   * at the call site and silently a million times off. The unit has to be in the name.
+   */
+  static ada(ada: bigint): Value;
+}
+
+/**
+ * Applies one argument to a Plutus script and returns the applied script. Use it to bake a
+ * parameter into a parameterized validator before you compute its script hash.
+ *
+ * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
+ * @param data The argument in the standard Plutus Data JSON encoding, for example `{"int":42}` or `{"constructor":0,"fields":[{"bytes":"deadbeef"}]}`.
+ * @returns The double-CBOR-encoded hex representation of the script with the argument applied.
+ * @deprecated (since 1.2.0) Use `uplc.applyParamsToScript`, which takes a list of parameters and accepts hex or bytes. It reads Data as CBOR rather than JSON, so convert first; `uplc.applyParamsToScript(script, [cborHex])` then returns what this function returns.
+ */
+export function applyDataArgToScript(doubleCborHex: string, data: string): string;
+
+/** Balancing a transaction: the fee, the execution units and one change output, to a fixpoint. */
+export const balancer: {
+  /**
+   * Balances a transaction you have already built: sets every redeemer's execution units, the
+   * fee, and the lovelace of one change output, until the three agree.
+   *
+   * EXPERIMENTAL. This may change shape or be removed in any release, including a patch one. It
+   * is published to be used and reported on, not to be depended upon yet.
+   *
+   * Coin selection and change placement stay with you. This only settles the numbers, so your
+   * own policy for choosing inputs and splitting change is untouched: name the output that
+   * should absorb the difference, and its lovelace is the only field edited.
+   *
+   * Why it is a loop. A script sees the whole transaction, so adding change can change what the
+   * script costs, which changes the fee, which changes the change. Each pass evaluates the
+   * scripts, writes the redeemers and the script data hash, prices the transaction, moves the
+   * difference into the change output, and starts again; it returns when a pass changes nothing.
+   * Dummy signatures are added before the fee is priced and removed afterwards, so the fee pays
+   * for the witnesses the transaction will really carry.
+   *
+   * The scripts are limited together by the protocol's `maxTxExecutionMemory` and
+   * `maxTxExecutionSteps`, exactly as a node limits them, so a transaction whose scripts do not
+   * fit fails here instead of being rejected after you submit it.
+   *
+   * ```ts
+   * import { balancer, CardanoInfo } from "scalus";
+   *
+   * const info = CardanoInfo.preprod();
+   * const utxos = await provider.fetchAddressUTxOs(myAddress); // or Utxo handles, or CBOR pairs
+   *
+   * // `1` is the index of the change output in the transaction you built.
+   * const balanced = balancer.balanceTx(
+   *   unbalancedTxCbor, utxos, info.slotConfig, info.protocolParams, 1, [],
+   * );
+   * ```
+   *
+   * `extraSigners` is the keys that will sign but that the transaction does not name. Pass `[]`
+   * when there are none, which is the usual case.
+   *
+   * The signers are otherwise worked out for you, as the ledger works them out: every input and
+   * collateral input paying to a key address, every key withdrawal, every certificate a key must
+   * sign (a pool's operator and owners included), every key voter, and the transaction's own
+   * required-signers field. Reference inputs are read-only and need none. That matters because
+   * each signature is about 101 bytes, so a fee priced for the wrong number of them is wrong by
+   * roughly 4,400 lovelace each.
+   *
+   * What cannot be worked out is a native script. Its input sits at a script address, so the
+   * keys its `ScriptAll` or `ScriptAny` requires are invisible from the transaction, and a fee
+   * priced without them is short one witness per key and rejected. Name them here:
+   *
+   * ```ts
+   * // A 2-of-2 native script input: neither key can be inferred from the script address.
+   * const balanced = balancer.balanceTx(
+   *   tx, utxos, info.slotConfig, info.protocolParams, 1,
+   *   ["1c7f...28-byte-key-hash", "9ab3...28-byte-key-hash"],
+   * );
+   * ```
+   *
+   * These are added to the inferred signers, never used instead of them, because an inferred
+   * signer is required whatever you pass. A hash given twice counts once.
+   *
+   * @param tx the transaction to balance, as hex or CBOR bytes
+   * @param utxos every UTxO the transaction's inputs, collateral inputs and reference inputs name. Each is a `Utxo`, or a CIP-30 `[input, output]` pair as hex or bytes
+   * @param slotConfig slot arithmetic for the network, so a script sees the validity interval as POSIX times
+   * @param params the protocol parameters, either a `ProtocolParams` or a plain record of the same fields. Fees, min-ada, collateral, the cost models and the protocol version all come from here
+   * @param changeOutputIndex which output of the transaction absorbs the difference, counting from 0
+   * @param extraSigners hex key hashes, 28 bytes each, for signatures the transaction does not name. `[]` for none
+   * @returns the balanced transaction, as CBOR bytes. Sign these bytes; changing them afterwards invalidates the fee
+   * @throws TypeError if an argument cannot be read, or `changeOutputIndex` is not an output of the transaction
+   * @throws PlutusScriptEvaluationError if one of the transaction's scripts fails, or together they exceed the protocol's maximum
+   * @throws TxBalancingError with `code: "INSUFFICIENT_FUNDS"` if the change output cannot hold min-ada, or `code: "NOT_CONVERGED"` if the numbers never settle
+   */
+  balanceTx(tx: string | Uint8Array, utxos: readonly (string | Uint8Array | Utxo)[], slotConfig: SlotConfigLike, params: ProtocolParamsLike, changeOutputIndex: number, extraSigners: readonly string[]): Uint8Array;
+};
+
+/** The bytes as lowercase hex. */
+export function bytesToHex(bytes: Uint8Array): string;
+
+/** A CBOR byte-string envelope, one layer at a time. */
+export const cbor: {
+  /** Wraps bytes in one CBOR byte string: flat to single CBOR, or single to double. */
+  wrapBytes(bytes: Uint8Array): Uint8Array;
+  /**
+   * Removes one CBOR byte-string layer: double CBOR to single, or single to flat.
+   *
+   * @throws TypeError if the bytes are not a CBOR byte string
+   */
+  unwrapBytes(bytes: Uint8Array): Uint8Array;
+};
+
+/**
+ * The hash a datum is identified by, in an output's datum hash or a witness set.
+ *
+ * Hashes the CBOR exactly as given: two encodings of the same `Data` hash differently, as on
+ * the ledger.
+ *
+ * @param data the datum, CBOR-encoded `Data`, as hex or bytes
+ * @returns the 32-byte hash, as lowercase hex
+ */
+export function dataHash(data: string | Uint8Array): string;
+
+/**
+ * Evaluates every Plutus script a transaction runs, and reports what each one costs. Use it to
+ * fill in a transaction's execution units before you balance and submit it.
+ *
+ * @param txCborBytes CBOR bytes of the transaction whose scripts should run.
+ * @param utxoCborBytes CBOR bytes of the UTxO set the scripts see: a CBOR map whose keys are transaction inputs (a `[transactionHash, outputIndex]` pair) and whose values are transaction outputs, as in the Cardano ledger CDDL. It must resolve every input and reference input of the transaction.
+ * @param slotConfig Slot arithmetic for the target network, used to turn the transaction's validity interval into the POSIX times the scripts observe.
+ * @param costModels One cost model per Plutus language version, indexed by position: `costModels[0]` is Plutus V1, `[1]` is V2, `[2]` is V3. Each inner array holds that version's cost parameters in protocol-parameter order. Give a model for every version the transaction uses; since the position is the version, an earlier version cannot be skipped.
+ * @param protocolMajorVersion Cardano protocol major version, which picks the builtin semantics and the costing rules. Defaults to the current mainnet version, 11 (van Rossem).
+ * @returns One entry per redeemer of the transaction, carrying the units that redeemer's script spent.
+ * @throws PlutusScriptEvaluationError if a script fails; it names the redeemer, classifies the failure, carries the script's traces and the arguments the script saw.
+ * @throws Error for any other failure: malformed transaction or UTxO CBOR, an input no entry of the UTxO set resolves, a script the transaction does not carry.
+ * @deprecated (since 1.2.0) Use `evaluator.evaluateTx(tx, utxos, slotConfig, costModels, protocolMajorVersion)`, the same evaluation. It takes the resolved inputs as CBOR `[input, output]` pairs instead of one map, the cost models by language name instead of by position, and the protocol version explicitly instead of defaulting to mainnet's.
+ */
+export function evalPlutusScripts(txCborBytes: Uint8Array, utxoCborBytes: Uint8Array, slotConfig: SlotConfig, costModels: readonly (readonly number[])[], protocolMajorVersion?: number): RedeemerBudget[];
+
+/**
+ * Evaluates a Plutus script on its own, with no transaction around it. The script runs on a
+ * Plutus V3 machine with the mainnet cost models of the current mainnet protocol major version
+ * (11, van Rossem).
+ *
+ * This never throws. A script that fails, and a script whose hex cannot even be decoded, both
+ * come back as a result with `isSuccess: false` and the message in `logs[0]`.
+ *
+ * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
+ * @returns The outcome, with the units spent and the trace logs.
+ * @deprecated (since 1.2.0) Use `evaluator.evaluateScript(script, args, options)`, which takes the language, protocol version and cost model explicitly instead of assuming Plutus V3 on mainnet, and reports why a script failed in `error`. `EvaluationOptions.mainnet("PlutusV3")` reproduces this function's configuration.
+ */
+export function evaluateScript(doubleCborHex: string): EvaluationResult;
+
+/**
+ * Evaluates a Plutus script with profiling enabled.
+ *
+ * Same evaluation and same never-throws contract as {@link evaluateScript}, but the result also
+ * carries the machine's profiling data as JSON in `profileJson`: cost per source location,
+ * cost per builtin, and the transition edges between them.
+ *
+ * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
+ * @returns The outcome, with `profileJson` populated.
+ * @deprecated (since 1.2.0) Not replaced: `evaluator.evaluateScript` does not profile. Attributing cost to source lines needs the compiler output that produced the script, so profile from the JVM, where the Scala `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full report. The JS `PlutusVM` does not profile. This function keeps working meanwhile.
+ */
+export function evaluateScriptProfile(doubleCborHex: string): EvaluationResult;
+
+/** Synchronous evaluation of one script, or of every script of a transaction. */
+export const evaluator: {
+  /**
+   * Applies the arguments to the script, runs it, and reports what it cost.
+   *
+   * A script that fails comes back as a result with `isSuccess: false` and an `error` saying
+   * why, together with the budget it spent and the traces it emitted. A Plutus V3 script must
+   * return unit (CIP-117); V1 and V2 may return anything, as in the ledger.
+   *
+   * The script is not checked against the language and protocol you name: a builtin that
+   * protocol never had still runs. Whether a chain would accept the script is
+   * `Script.isWellFormed`'s question.
+   *
+   * It builds the machine from `options` on every call. To evaluate many scripts with the same
+   * options, build a `PlutusVM` once and call its `evaluateScript`.
+   *
+   * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR, or a `Program`
+   * @param args the arguments, each a CBOR-encoded `Data`, applied left to right
+   * @param options the language, protocol version and cost model, and optionally a `maxBudget`
+   * @throws TypeError if the script, an argument or the options cannot be read
+   */
+  evaluateScript(script: string | Uint8Array | Program, args: readonly (string | Uint8Array)[], options: EvaluationOptions): EvaluationResult;
+  /**
+   * Evaluates every Plutus script of a transaction and reports what each redeemer cost.
+   *
+   * The resolved inputs arrive as CBOR `[input, output]` pairs, `transaction_unspent_output` in
+   * the ledger CDDL: CML's `TransactionUnspentOutput.to_cbor_bytes()`, CST's
+   * `TransactionUnspentOutput.toCbor()`, a CIP-30 wallet's `getUtxos()` and `Utxo.toCbor()` all
+   * produce it. A `Utxo` itself is taken too, with no encoding step. A later entry with the same
+   * input replaces an earlier one.
+   *
+   * @param tx the transaction, as hex or bytes
+   * @param utxos the resolved inputs and reference inputs, each a `Utxo` or an `[input, output]` pair as hex or bytes
+   * @param slotConfig the chain's slot arithmetic: a `SlotConfig`, or any object with the same three fields
+   * @param costModels cost parameters per language, keyed by name: a `CostModels`, or any object with some of its fields
+   * @param protocolMajorVersion picks the builtin semantics and the costing rules
+   * @returns one entry per redeemer, carrying the units that redeemer's script spent
+   * @throws PlutusScriptEvaluationError if a script fails; it names the redeemer and carries the arguments the script saw
+   * @throws TypeError if an input cannot be read as described
+   * @throws Error if the transaction evaluator stops for any other reason: an input no pair resolves, a script the transaction does not carry, a missing datum
+   */
+  evaluateTx(tx: string | Uint8Array, utxos: readonly (string | Uint8Array | Utxo)[], slotConfig: SlotConfigLike, costModels: CostModelsLike, protocolMajorVersion: number): RedeemerBudget[];
+  /**
+   * As above, with the scripts of the whole transaction limited to `maxBudget` together, as the
+   * ledger limits them to the protocol's maximum transaction execution units. A script that
+   * would exceed what the scripts before it left fails with `OUT_OF_BUDGET`.
+   *
+   * @param maxBudget the execution units all the transaction's scripts may spend together
+   */
+  evaluateTx(tx: string | Uint8Array, utxos: readonly (string | Uint8Array | Utxo)[], slotConfig: SlotConfigLike, costModels: CostModelsLike, protocolMajorVersion: number, maxBudget: ExUnitsLike): RedeemerBudget[];
+};
+
+/**
+ * The bytes a hex string spells, in either case.
+ *
+ * @throws TypeError if the string has an odd length or a non-hex character
+ */
+export function hexToBytes(hex: string): Uint8Array;
+
+/**
+ * The hash a script is identified by: its policy id, or its payment credential.
+ *
+ * Takes the script as `Utxo.withScriptRef` does: `{ type, script }`, with a Plutus program in
+ * any CBOR wrapping, or the ledger's `script_ref` CBOR. The wrapping does not change the hash.
+ *
+ * @returns the 28-byte hash, as lowercase hex
+ * @throws TypeError if `script` is neither form, its hex is invalid, or a `"Native"` script or a `script_ref` does not decode
+ */
+export function scriptHash(script: Uint8Array | { readonly type: "Native" | "PlutusV1" | "PlutusV2" | "PlutusV3" | "PlutusV4"; readonly script: string | Uint8Array }): string;
+
+/**
+ * UPLC scripts as bytes.
+ *
+ * The primitives work on flat program bytes: `decodeToFlat` takes a script in any form a caller
+ * holds, and `applyArgs` applies arguments to it. Together with `cbor.wrapBytes` and
+ * `bytesToHex` they compose into any envelope a tool expects. `applyParamsToScript` is the
+ * common composition in one call. Every member throws a `TypeError` for input it cannot read.
+ */
+export const uplc: {
+  /**
+   * The flat program bytes of a script, whatever form it arrives in.
+   *
+   * Takes hex or bytes of raw flat, single CBOR or double CBOR. Only the envelopes are read, so
+   * this is cheap and the script's own bytes come back unchanged; the program is decoded where
+   * it is used, by `applyArgs` or the evaluator.
+   *
+   * @param script the script, as hex or bytes
+   * @returns the flat program bytes
+   */
+  decodeToFlat(script: string | Uint8Array): Uint8Array;
+  /**
+   * Decodes a script once, to evaluate it many times: pass the `Program` to
+   * `PlutusVM.evaluateScript` or `evaluator.evaluateScript` in place of the bytes.
+   *
+   * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR
+   * @returns the decoded program
+   * @throws TypeError if the script cannot be read
+   */
+  decodeProgram(script: string | Uint8Array): Program;
+  /**
+   * Applies `Data` arguments to a flat program, left to right.
+   *
+   * @param flat the flat program bytes, as `decodeToFlat` returns them
+   * @param args the arguments, each a CBOR-encoded `Data`, as hex or bytes
+   * @returns the applied program, as flat bytes
+   */
+  applyArgs(flat: Uint8Array, args: readonly (string | Uint8Array)[]): Uint8Array;
+  /**
+   * Applies CBOR-encoded `Data` parameters to a script and returns it as double-CBOR hex.
+   *
+   * The same contract as Lucid's and Mesh's `applyParamsToScript`: any script form in, the
+   * double-CBOR hex their script objects hold out. It is
+   * `bytesToHex(cbor.wrapBytes(cbor.wrapBytes(uplc.applyArgs(uplc.decodeToFlat(script),
+   * params))))`.
+   *
+   * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR
+   * @param params the parameters, each a CBOR-encoded `Data`, as hex or bytes
+   * @returns the applied script, double-CBOR, as lowercase hex
+   */
+  applyParamsToScript(script: string | Uint8Array, params: readonly (string | Uint8Array)[]): string;
+};
+
+/** @deprecated Use RedeemerBudget instead. */
+export { RedeemerBudget as Redeemer };
+/** @deprecated Use EvaluationResult instead. */
+export { EvaluationResult as Result };
+```

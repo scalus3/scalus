@@ -1,0 +1,1398 @@
+<!DOCTYPE html><html data-pathToRoot="../../../" data-rawLocation="scalus/testing/kit/ArbitraryInstances" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>ArbitraryInstances</title><link rel="shortcut icon" type="image/x-icon" href="../../../favicon.ico"></link><script type="text/javascript" src="../../../scripts/theme.js"></script><script type="text/javascript" src="../../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../../styles/nord-light.css"></link><link rel="stylesheet" href="../../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../../styles/searchbar.css"></link><link rel="stylesheet" href="../../../styles/social-links.css"></link><link rel="stylesheet" href="../../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../../styles/fontawesome.css"></link><script type="text/javascript" src="../../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../../styles/apistyles.css"></link><script>var pathToRoot = "../../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../../index.html">Scalus</a>/<a href="../../../scalus.html">scalus</a>/<a href="../../testing.html">scalus.testing</a>/<a href="../kit.html">scalus.testing.kit</a>/<a href="ArbitraryInstances.html">ArbitraryInstances</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon tr"></span></span>
+ <h1 class="h600 single">ArbitraryInstances</h1>
+</div>
+<div class="fqname body-large">
+ <span>scalus.testing.kit.ArbitraryInstances</span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="ArbitraryInstances.html" t="n" class="documentableName ">ArbitraryInstances</a><span t="k"> extends </span><a href="../../cardano/onchain/plutus/v3/ArbitraryInstances.html" t="t">ArbitraryInstances</a><span t="k">, </span></span><span class="signature-long"><a href="../../uplc/test/ArbitraryInstances.html" t="t">ArbitraryInstances</a></span>
+ </div>
+</div>
+<div class="cover">
+ <div class="doc"></div>
+ <section id="attributes">
+  <h2 class="h500">Attributes</h2>
+  <dl class="attributes">
+   <dt class="body-small">
+    Graph
+   </dt>
+   <dd class="body-medium">
+    <div id="inheritance-diagram" class="diagram-class showGraph">
+     <button type="button" class="label-only-button" onclick="zoomOut()">Reset zoom</button><button type="button" class="label-only-button" onclick="hideGraph()">Hide graph</button><button type="button" class="label-only-button" onclick="showGraph()">Show graph</button>
+     <svg id="graph"></svg>
+     <script type="text/dot" id="dot"> digraph g {
+ node0 [id=node0, label="<span style=\"color: #FFFFFF;\">trait <a href=\"ArbitraryInstances.html\" t=\"n\">ArbitraryInstances</a></span>", class="trait vertex"];
+node1 [id=node1, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Object</span></span>", class="class vertex"];
+node2 [id=node2, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Any</span></span>", class="class vertex"];
+node3 [id=node3, label="<span style=\"color: #FFFFFF;\">trait <span data-unresolved-link=\"\" t=\"n\">Matchable</span></span>", class="trait vertex"];
+node4 [id=node4, label="<span style=\"color: #FFFFFF;\">trait <a href=\"../../cardano/onchain/plutus/v3/ArbitraryInstances.html\" t=\"n\">ArbitraryInstances</a></span>", class="trait vertex"];
+node5 [id=node5, label="<span style=\"color: #FFFFFF;\">trait <a href=\"../../cardano/onchain/plutus/v2/ArbitraryInstances.html\" t=\"n\">ArbitraryInstances</a></span>", class="trait vertex"];
+node6 [id=node6, label="<span style=\"color: #FFFFFF;\">trait <a href=\"../../cardano/onchain/plutus/v1/ArbitraryInstances.html\" t=\"n\">ArbitraryInstances</a></span>", class="trait vertex"];
+node7 [id=node7, label="<span style=\"color: #FFFFFF;\">trait <a href=\"../../uplc/test/ArbitraryInstances.html\" t=\"n\">ArbitraryInstances</a></span>", class="trait vertex"];
+
+
+ node0 -> node1;
+node1 -> node2;
+node1 -> node3;
+node3 -> node2;
+node0 -> node4;
+node4 -> node1;
+node4 -> node5;
+node5 -> node1;
+node5 -> node6;
+node6 -> node1;
+node6 -> node7;
+node7 -> node1;
+node0 -> node7;
+
+}
+</script>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Supertypes
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <div>
+      trait <a href="../../cardano/onchain/plutus/v3/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+     </div>
+     <div>
+      trait <a href="../../cardano/onchain/plutus/v2/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+     </div>
+     <div>
+      trait <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+     </div>
+     <div>
+      trait <a href="../../uplc/test/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+     </div>
+     <div>
+      class <span data-unresolved-link="" t="n">Object</span>
+     </div>
+     <div>
+      trait <span data-unresolved-link="" t="n">Matchable</span>
+     </div>
+     <div>
+      class <span data-unresolved-link="" t="n">Any</span>
+     </div><span class="show-all-code show-content text-button h100">Show all</span>
+    </div>
+   </dd>
+  </dl>
+ </section>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Inherited-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Inherited methods</h4>
+        </div>
+        <div class="documentableElement" id="arbConstantByType-fffff524" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ArbitraryInstances.html#arbConstantByType-fffff524" t="n" class="documentableName ">arbConstantByType</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">t</span>: <a href="../../uplc/DefaultUni.html" t="t">DefaultUni</a>): <span data-unresolved-link="" t="t">Gen</span>[<a href="../../uplc/Constant.html" t="t">Constant</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#arbConstantByType-fffff524">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="genAmount-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ArbitraryInstances.html#genAmount-0" t="n" class="documentableName ">genAmount</a>: <span data-unresolved-link="" t="t">Gen</span>[<span data-unresolved-link="" t="t">BigInt</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Token quantities, bounded to what a <code>Value</code> may legally hold.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Token quantities, bounded to what a <code>Value</code> may legally hold.</p>
+              <p>Same edge-case shape as <code>iArb</code>, but its wide <code>[-2^128, 2^128]</code> branch is narrowed to <code>[-2^64, 2^64]</code>: real ledger quantities fit Int64, and the CIP-153 builtins that <code>Value</code> operations lower to at PV11 reject quantities beyond +-(2^127) and fail when a <code>unionValue</code>/<code>scaleValue</code> result leaves that range (see <code>docs/superpowers/specs/2026-08-18-t7-value-builtins-lowering-design.md</code>). The bound stays well below 2^127 so that summing the up-to-11 generated assets cannot overflow either.</p>
+              <p>The <code>* properties</code> test in <code>ValueTest</code> couples its <code>+-(2^62)</code> scaling-factor bound to this <code>+-(2^64)</code> amount bound (<code>2^64 * 2^62 = 2^126</code>), so widening this bound means narrowing that one in step.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#genAmount-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="genAsset-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ArbitraryInstances.html#genAsset-0" t="n" class="documentableName ">genAsset</a>: <span data-unresolved-link="" t="t">Gen</span>[<a href="../../cardano/onchain/plutus/v1/Value.html" t="t">Value</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#genAsset-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="genAssetName-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ArbitraryInstances.html#genAssetName-0" t="n" class="documentableName ">genAssetName</a>: <span data-unresolved-link="" t="t">Gen</span>[<a href="../../uplc/builtin/ByteString.html" t="t">ByteString</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Generates a random asset name, which is a ByteString of length between 1 and 32 bytes.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Generates a random asset name, which is a ByteString of length between 1 and 32 bytes.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#genAssetName-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="genByteStringOfN-fffffe75" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ArbitraryInstances.html#genByteStringOfN-fffffe75" t="n" class="documentableName ">genByteStringOfN</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">n</span>: <span data-unresolved-link="" t="t">Int</span>): <span data-unresolved-link="" t="t">Gen</span>[<a href="../../uplc/builtin/ByteString.html" t="t">ByteString</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#genByteStringOfN-fffffe75">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="genLovelace-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ArbitraryInstances.html#genLovelace-0" t="n" class="documentableName ">genLovelace</a>: <span data-unresolved-link="" t="t">Gen</span>[<a href="../../cardano/onchain/plutus/v1/Value.html" t="t">Value</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#genLovelace-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="genPolicyId-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ArbitraryInstances.html#genPolicyId-0" t="n" class="documentableName ">genPolicyId</a>: <span data-unresolved-link="" t="t">Gen</span>[<a href="../../uplc/builtin/ByteString.html" t="t">ByteString</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#genPolicyId-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="genToken-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ArbitraryInstances.html#genToken-0" t="n" class="documentableName ">genToken</a>: <span data-unresolved-link="" t="t">Gen</span>[(<a href="../../uplc/builtin/ByteString.html" t="t">ByteString</a>, <span data-unresolved-link="" t="t">BigInt</span>)]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#genToken-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Givens">
+     <div data-togglable="Givens" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Givens" class="h400">Givens</h3>
+      </div>
+      <section id="Inherited-givens">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Inherited givens</h4>
+        </div>
+        <div class="documentableElement" id="TermShrink-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#TermShrink-0" t="n" class="documentableName ">TermShrink</a>: <span data-unresolved-link="" t="t">Shrink</span>[<a href="../../uplc/Term.html" t="t">Term</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#TermShrink-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="TxIdV1-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#TxIdV1-0" t="n" class="documentableName ">TxIdV1</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v1/TxId.html" t="t">TxId</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#TxIdV1-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="arbAssocMap-9a7" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#arbAssocMap-9a7" t="n" class="documentableName ">arbAssocMap</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span> : <a href="../../cardano/onchain/plutus/prelude/Eq.html" t="t">Eq</a>, <span t="k"></span><span data-unresolved-link="" t="t">B</span> : <span data-unresolved-link="" t="t">Arbitrary</span>]: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/prelude/AssocMap.html" t="t">AssocMap</a>[<span data-unresolved-link="" t="t">A</span>, <span data-unresolved-link="" t="t">B</span>]]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#arbAssocMap-9a7">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="arbData-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#arbData-0" t="n" class="documentableName ">arbData</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../uplc/builtin/Data.html" t="t">Data</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#arbData-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="arbList-fffff091" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#arbList-fffff091" t="n" class="documentableName ">arbList</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span> : <span data-unresolved-link="" t="t">Arbitrary</span>]: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/prelude/List.html" t="t">List</a>[<span data-unresolved-link="" t="t">A</span>]]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#arbList-fffff091">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="arbOption-fffff091" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#arbOption-fffff091" t="n" class="documentableName ">arbOption</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span> : <span data-unresolved-link="" t="t">Arbitrary</span>]: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/prelude/Option.html" t="t">Option</a>[<span data-unresolved-link="" t="t">A</span>]]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#arbOption-fffff091">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="arbSortedMap-fffff406" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#arbSortedMap-fffff406" t="n" class="documentableName ">arbSortedMap</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span> : <a href="../../cardano/onchain/plutus/prelude/Ord.html" t="t">Ord</a>, <span t="k"></span><span data-unresolved-link="" t="t">B</span> : <span data-unresolved-link="" t="t">Arbitrary</span>]: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/prelude/SortedMap.html" t="t">SortedMap</a>[<span data-unresolved-link="" t="t">A</span>, <span data-unresolved-link="" t="t">B</span>]]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#arbSortedMap-fffff406">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="arbitraryConstant-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#arbitraryConstant-0" t="n" class="documentableName ">arbitraryConstant</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../uplc/Constant.html" t="t">Constant</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#arbitraryConstant-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="arbitraryDefaultUni-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#arbitraryDefaultUni-0" t="n" class="documentableName ">arbitraryDefaultUni</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../uplc/DefaultUni.html" t="t">DefaultUni</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#arbitraryDefaultUni-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="arbitraryTerm-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#arbitraryTerm-0" t="n" class="documentableName ">arbitraryTerm</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../uplc/Term.html" t="t">Term</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#arbitraryTerm-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="bArb-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#bArb-0" t="n" class="documentableName ">bArb</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../uplc/builtin/Data$$B.html" t="t">B</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#bArb-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="byteStringArb-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#byteStringArb-0" t="n" class="documentableName ">byteStringArb</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../uplc/builtin/ByteString.html" t="t">ByteString</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#byteStringArb-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="g1ElementArbitrary-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#g1ElementArbitrary-0" t="n" class="documentableName ">g1ElementArbitrary</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../uplc/builtin/bls12_381/G1Element.html" t="t">G1Element</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#g1ElementArbitrary-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="g2ElementArbitrary-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#g2ElementArbitrary-0" t="n" class="documentableName ">g2ElementArbitrary</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../uplc/builtin/bls12_381/G2Element.html" t="t">G2Element</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#g2ElementArbitrary-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_Address-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_Address-0" t="n" class="documentableName ">given_Arbitrary_Address</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v1/Address.html" t="t">Address</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#given_Arbitrary_Address-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_Credential-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_Credential-0" t="n" class="documentableName ">given_Arbitrary_Credential</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v1/Credential.html" t="t">Credential</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#given_Arbitrary_Credential-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_Interval-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_Interval-0" t="n" class="documentableName ">given_Arbitrary_Interval</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v1/Interval.html" t="t">Interval</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#given_Arbitrary_Interval-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_IntervalBound-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_IntervalBound-0" t="n" class="documentableName ">given_Arbitrary_IntervalBound</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v1/IntervalBound.html" t="t">IntervalBound</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#given_Arbitrary_IntervalBound-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_IntervalBoundType-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_IntervalBoundType-0" t="n" class="documentableName ">given_Arbitrary_IntervalBoundType</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v1/IntervalBoundType.html" t="t">IntervalBoundType</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#given_Arbitrary_IntervalBoundType-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_OutputDatum-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_OutputDatum-0" t="n" class="documentableName ">given_Arbitrary_OutputDatum</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v2/OutputDatum.html" t="t">OutputDatum</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v2/ArbitraryInstances.html#given_Arbitrary_OutputDatum-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_Program-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_Program-0" t="n" class="documentableName ">given_Arbitrary_Program</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../uplc/Program.html" t="t">Program</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#given_Arbitrary_Program-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_PubKeyHash-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_PubKeyHash-0" t="n" class="documentableName ">given_Arbitrary_PubKeyHash</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v1/PubKeyHash.html" t="t">PubKeyHash</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#given_Arbitrary_PubKeyHash-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_ScriptPurpose-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_ScriptPurpose-0" t="n" class="documentableName ">given_Arbitrary_ScriptPurpose</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v3/ScriptPurpose.html" t="t">ScriptPurpose</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v3/ArbitraryInstances.html#given_Arbitrary_ScriptPurpose-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_StakingCredential-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_StakingCredential-0" t="n" class="documentableName ">given_Arbitrary_StakingCredential</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v1/StakingCredential.html" t="t">StakingCredential</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#given_Arbitrary_StakingCredential-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_TxId-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_TxId-0" t="n" class="documentableName ">given_Arbitrary_TxId</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v3/TxId.html" t="t">TxId</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v3/ArbitraryInstances.html#given_Arbitrary_TxId-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_TxInInfo-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_TxInInfo-0" t="n" class="documentableName ">given_Arbitrary_TxInInfo</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v3/TxInInfo.html" t="t">TxInInfo</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v3/ArbitraryInstances.html#given_Arbitrary_TxInInfo-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_TxInfo-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_TxInfo-0" t="n" class="documentableName ">given_Arbitrary_TxInfo</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v3/TxInfo.html" t="t">TxInfo</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v3/ArbitraryInstances.html#given_Arbitrary_TxInfo-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_TxOut-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_TxOut-0" t="n" class="documentableName ">given_Arbitrary_TxOut</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v2/TxOut.html" t="t">TxOut</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v2/ArbitraryInstances.html#given_Arbitrary_TxOut-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_TxOutRef-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_TxOutRef-0" t="n" class="documentableName ">given_Arbitrary_TxOutRef</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v3/TxOutRef.html" t="t">TxOutRef</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v3/ArbitraryInstances.html#given_Arbitrary_TxOutRef-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Arbitrary_Value-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Arbitrary_Value-0" t="n" class="documentableName ">given_Arbitrary_Value</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../cardano/onchain/plutus/v1/Value.html" t="t">Value</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../cardano/onchain/plutus/v1/ArbitraryInstances.html#given_Arbitrary_Value-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Shrink_Constant-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Shrink_Constant-0" t="n" class="documentableName ">given_Shrink_Constant</a>: <span data-unresolved-link="" t="t">Shrink</span>[<a href="../../uplc/Constant.html" t="t">Constant</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#given_Shrink_Constant-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Shrink_Data-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Shrink_Data-0" t="n" class="documentableName ">given_Shrink_Data</a>: <span data-unresolved-link="" t="t">Shrink</span>[<a href="../../uplc/builtin/Data.html" t="t">Data</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#given_Shrink_Data-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Shrink_Program-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#given_Shrink_Program-0" t="n" class="documentableName ">given_Shrink_Program</a>: <span data-unresolved-link="" t="t">Shrink</span>[<a href="../../uplc/Program.html" t="t">Program</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#given_Shrink_Program-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="iArb-0" data-f-inherited="ArbitraryInstances">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="ArbitraryInstances.html#iArb-0" t="n" class="documentableName ">iArb</a>: <span data-unresolved-link="" t="t">Arbitrary</span>[<a href="../../uplc/builtin/Data$$I.html" t="t">I</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Inherited from:
+              </dt>
+              <dd class="body-medium">
+               <a href="../../uplc/test/ArbitraryInstances.html#iArb-0">ArbitraryInstances</a>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#attributes">Attributes</a></li><li><a href="#members-list">Members list</a><ul><li><a href="#Value-members">Value members</a><ul><li><a href="#Inherited-methods">Inherited methods</a></li></ul></li><li><a href="#Givens">Givens</a><ul><li><a href="#Inherited-givens">Inherited givens</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

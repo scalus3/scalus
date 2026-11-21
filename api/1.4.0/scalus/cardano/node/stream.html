@@ -1,0 +1,2478 @@
+<!DOCTYPE html><html data-pathToRoot="../../../" data-rawLocation="scalus/cardano/node/stream" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>scalus.cardano.node.stream</title><link rel="shortcut icon" type="image/x-icon" href="../../../favicon.ico"></link><script type="text/javascript" src="../../../scripts/theme.js"></script><script type="text/javascript" src="../../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../../styles/nord-light.css"></link><link rel="stylesheet" href="../../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../../styles/searchbar.css"></link><link rel="stylesheet" href="../../../styles/social-links.css"></link><link rel="stylesheet" href="../../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../../styles/fontawesome.css"></link><script type="text/javascript" src="../../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../../styles/apistyles.css"></link><script>var pathToRoot = "../../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../../index.html">Scalus</a>/<a href="../../../scalus.html">scalus</a>/<a href="../../cardano.html">scalus.cardano</a>/<a href="../node.html">scalus.cardano.node</a>/<a href="stream.html">scalus.cardano.node.stream</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon pa"></span></span>
+ <h1 class="h600 single">scalus.cardano.node.stream</h1>
+</div>
+<div class="fqname body-large">
+ <span></span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">package </span></span><a href="stream.html" t="n" class="documentableName ">scalus.cardano.node.stream</a>
+ </div>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Packages">
+     <div data-togglable="packages" class="tab expand">
+      <div class="documentableList expand">
+       <div class="documentableList-expander">
+        <button class="icon-button show-content expand"></button>
+        <h3 class="groupHeader h400">Packages</h3>
+       </div>
+       <div class="documentableElement">
+        <div class="documentableElement-expander">
+         <div class="header monospace mono-medium">
+          <div class="signature">
+           <span class="modifiers"></span><span class="kind"><span t="k">package </span></span><a href="stream/internal.html" t="n" class="documentableName ">scalus.cardano.node.stream.internal</a>
+          </div>
+         </div>
+        </div>
+       </div>
+      </div>
+     </div>
+    </section>
+    <section id="Type-members">
+     <div data-togglable="Type members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Type members" class="h400">Type members</h3>
+      </div>
+      <section id="Classlikes">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Classlikes</h4>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/BlockEvent.html" t="n" class="documentableName ">BlockEvent</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Block stream event.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Block stream event.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/BlockQuery.html" t="n" class="documentableName ">BlockQuery</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Which blocks a subscriber wants to observe.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Which blocks a subscriber wants to observe.</p>
+              <p>Simpler than the other two algebras on purpose: most subscribers want every block, or every block in a range. Content-based selection belongs on <a href="stream/TransactionQuery.html">TransactionQuery</a>, where it can be pushed down.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="stream/BlockchainStreamProvider.html" t="n" class="documentableName ">BlockchainStreamProvider</a><span t="k"> extends </span><a href="stream/BlockchainStreamProviderTF.html" t="t">BlockchainStreamProviderTF</a>[<span data-unresolved-link="" t="t">Future</span>]<span t="k">, </span></span><span class="signature-long"><a href="stream/BlockchainStreamReader.html" t="t">BlockchainStreamReader</a><span t="k">, </span><a href="BlockchainProvider.html" t="t">BlockchainProvider</a></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p><code>Future</code>-based streaming provider, mirroring <a href="BlockchainProvider.html">BlockchainProvider</a>.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p><code>Future</code>-based streaming provider, mirroring <a href="BlockchainProvider.html">BlockchainProvider</a>.</p>
+              <p>This is the layer the in-repo implementations extend: <code>Emulator</code> and <code>BlockfrostProvider</code> are already <code>BlockchainProvider</code>s, so <code>F</code> is fixed to <code>Future</code> while <code>C</code> stays open — a caller gets fs2, ox or pekko streams from them by having the right given in scope, and gets a working stream with no adapter at all by using <code>ScalusAsyncSource</code>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="BlockchainProvider.html" t="n">BlockchainProvider</a>
+                </div>
+                <div>
+                 trait <a href="stream/BlockchainStreamReader.html" t="n">BlockchainStreamReader</a>
+                </div>
+                <div>
+                 trait <a href="BlockchainReader.html" t="n">BlockchainReader</a>
+                </div>
+                <div>
+                 trait <a href="stream/BlockchainStreamProviderTF.html" t="n">BlockchainStreamProviderTF</a>[<span data-unresolved-link="" t="t">Future</span>]
+                </div>
+                <div>
+                 trait <a href="stream/BlockchainStreamReaderTF.html" t="n">BlockchainStreamReaderTF</a>[<span data-unresolved-link="" t="t">Future</span>]
+                </div>
+                <div>
+                 trait <a href="BlockchainProviderTF.html" t="n">BlockchainProviderTF</a>[<span data-unresolved-link="" t="t">Future</span>]
+                </div>
+                <div>
+                 trait <a href="BlockchainReaderTF.html" t="n">BlockchainReaderTF</a>[<span data-unresolved-link="" t="t">Future</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 class <a href="stream/StreamingEmulator.html" t="n">StreamingEmulator</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="stream/BlockchainStreamProviderTF.html" t="n" class="documentableName ">BlockchainStreamProviderTF</a>[<span t="k"></span><span data-unresolved-link="" t="t">F</span>[<span t="t">_</span>]]<span t="k"> extends </span><a href="BlockchainProviderTF.html" t="t">BlockchainProviderTF</a>[<span t="t">F</span>]<span t="k">, </span></span><span class="signature-long"><a href="stream/BlockchainStreamReaderTF.html" t="t">BlockchainStreamReaderTF</a>[<span t="t">F</span>]</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A streaming provider: <a href="stream/BlockchainStreamReaderTF.html">BlockchainStreamReaderTF</a> plus submission.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A streaming provider: <a href="stream/BlockchainStreamReaderTF.html">BlockchainStreamReaderTF</a> plus submission.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="stream/BlockchainStreamReaderTF.html" t="n">BlockchainStreamReaderTF</a>[<span t="t">F</span>]
+                </div>
+                <div>
+                 trait <a href="BlockchainProviderTF.html" t="n">BlockchainProviderTF</a>[<span t="t">F</span>]
+                </div>
+                <div>
+                 trait <a href="BlockchainReaderTF.html" t="n">BlockchainReaderTF</a>[<span t="t">F</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 trait <a href="stream/BlockchainStreamProvider.html" t="n">BlockchainStreamProvider</a>
+                </div>
+                <div>
+                 class <a href="stream/StreamingEmulator.html" t="n">StreamingEmulator</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="stream/BlockchainStreamReader.html" t="n" class="documentableName ">BlockchainStreamReader</a><span t="k"> extends </span><a href="stream/BlockchainStreamReaderTF.html" t="t">BlockchainStreamReaderTF</a>[<span data-unresolved-link="" t="t">Future</span>]<span t="k">, </span></span><span class="signature-long"><a href="BlockchainReader.html" t="t">BlockchainReader</a></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p><code>Future</code>-based streaming reader, mirroring <a href="BlockchainReader.html">BlockchainReader</a>.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p><code>Future</code>-based streaming reader, mirroring <a href="BlockchainReader.html">BlockchainReader</a>.</p>
+              <p>Wanted for read-only surfaces — a scenario runner's post-run reader, an emulator projection — where handing out a provider would imply a submit path that does not exist.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="BlockchainReader.html" t="n">BlockchainReader</a>
+                </div>
+                <div>
+                 trait <a href="stream/BlockchainStreamReaderTF.html" t="n">BlockchainStreamReaderTF</a>[<span data-unresolved-link="" t="t">Future</span>]
+                </div>
+                <div>
+                 trait <a href="BlockchainReaderTF.html" t="n">BlockchainReaderTF</a>[<span data-unresolved-link="" t="t">Future</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 trait <a href="stream/BlockchainStreamProvider.html" t="n">BlockchainStreamProvider</a>
+                </div>
+                <div>
+                 class <a href="stream/StreamingEmulator.html" t="n">StreamingEmulator</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="stream/BlockchainStreamReaderTF.html" t="n" class="documentableName ">BlockchainStreamReaderTF</a>[<span t="k"></span><span data-unresolved-link="" t="t">F</span>[<span t="t">_</span>]]<span t="k"> extends </span><a href="BlockchainReaderTF.html" t="t">BlockchainReaderTF</a>[<span t="t">F</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Read-only streaming view of a blockchain: <a href="BlockchainReaderTF.html">BlockchainReaderTF</a> plus rollback-aware event subscriptions.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Read-only streaming view of a blockchain: <a href="BlockchainReaderTF.html">BlockchainReaderTF</a> plus rollback-aware event subscriptions.</p>
+              <h2><a href="#stream--one-shot-duality" id="stream--one-shot-duality">Stream / one-shot duality</a></h2>
+              <p>Everything that changes over time has both a one-shot read and a subscription, and the two read the same state — a one-shot is semantically <code>subscribeXxx().head</code>. That is what stops two methods disagreeing about the current value. Polling disappears with it: <code>pollForConfirmation(h)</code> becomes <code>subscribeTransactionStatus(h)</code> with no sleep loop and no missed-update window.</p>
+              <h2><a href="#subscriptions-are-live-when-subscribe-returns" id="subscriptions-are-live-when-subscribe-returns">Subscriptions are live when <code>subscribe</code> returns</a></h2>
+              <p>Registration is eager and synchronous. Two consequences, both load-bearing:</p>
+              <ul>
+               <li><code>subscribe(q)</code> followed by <code>submit(tx)</code> on the same thread is race-free — the subscription is registered before <code>subscribe</code> returns, so the submitted transaction's events reach it. This is what makes emulator-driven tests deterministic.</li>
+               <li><strong>The caller owns releasing the subscription.</strong> A subscription that is never consumed still accumulates events. Adapters expose this as a resource (fs2 <code>Resource</code>, pekko <code>KillSwitch</code>, an ox scope); the underlying release is <code>ScalusAsyncSource.cancel()</code>.</li>
+              </ul>
+              <h2><a href="#refusal" id="refusal">Refusal</a></h2>
+              <p>A request the provider cannot serve throws <a href="../infra/UnsupportedSubscriptionException.html">scalus.cardano.infra.UnsupportedSubscriptionException</a> synchronously, from the call that caused it, before anything is registered — exactly when <code>SubscriptionSupport.of(request, streamCapabilities)</code> says <code>Unsupported</code>, or says <code>Unindexed</code> and the request did not set <code>allowUnindexedScan</code>. Callers that want to decide <em>before</em> asking consult the same function.</p>
+              <h2><a href="#choosing-a-stream-type" id="choosing-a-stream-type">Choosing a stream type</a></h2>
+              <p>The stream type is chosen per call, not per provider, so one provider instance can hand fs2 streams to application code while a test pulls raw <a href="stream/ScalusAsyncSource.html">ScalusAsyncSource</a>s from it. <code>C</code> is inferred from the expected type:</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>val tips: Stream[IO, ChainTip]        = provider.subscribeTip()  // needs the fs2 adapter given
+</span><span line-number="2" class=""><span class="tooltip-container"></span>val raw:  ScalusAsyncSource[ChainTip] = provider.subscribeTip()  // no adapter module needed
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+              <p>Where there is no expected type, <code>C</code> is decided by which adapter is in implicit scope — an imported adapter outranks the <a href="stream/ScalusAsyncStreamAdapter$$identity$.html">ScalusAsyncStreamAdapter.identity</a> instance in this companion. Importing an adapter is therefore what makes <code>subscribe</code> return that library's type. Two adapters imported into one file with no expected type is an ambiguity, and the compiler says so; annotate or pass the type argument explicitly.</p>
+             </div>
+             <h2 class="h200">Type parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               F
+              </dt>
+              <dd class="body-medium">
+               <p>effect type for one-shot operations</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="BlockchainReaderTF.html" t="n">BlockchainReaderTF</a>[<span t="t">F</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 trait <a href="stream/BlockchainStreamProviderTF.html" t="n">BlockchainStreamProviderTF</a>[<span t="t">F</span>]
+                </div>
+                <div>
+                 trait <a href="stream/BlockchainStreamProvider.html" t="n">BlockchainStreamProvider</a>
+                </div>
+                <div>
+                 class <a href="stream/StreamingEmulator.html" t="n">StreamingEmulator</a>
+                </div>
+                <div>
+                 trait <a href="stream/BlockchainStreamReader.html" t="n">BlockchainStreamReader</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="stream/ChainPoint.html" t="n" class="documentableName ">ChainPoint</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">slot</span>: <a href="../ledger.html#SlotNo-0" t="t">SlotNo</a>, <span t="k"></span><span data-unresolved-link="" t="n">blockHash</span>: <a href="../ledger.html#BlockHash-0" t="t">BlockHash</a>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A position on the chain, identified by slot and block header hash.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A position on the chain, identified by slot and block header hash.</p>
+              <p>Every event carries one, so subscribers can correlate across streams, deduplicate on replay, and checkpoint their own progress — a persisted <code>ChainPoint</code> is what <code>StartFrom.At</code> resumes from.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/ChainPoint$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="stream/ChainPoint$.html" t="n" class="documentableName ">ChainPoint</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/ChainPoint.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="stream/ChainPoint$.html" t="n">ChainPoint</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="stream/ChainTip$.html" t="n" class="documentableName ">ChainTip</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/ChainTip.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="stream/ChainTip$.html" t="n">ChainTip</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="stream/ChainTip.html" t="n" class="documentableName ">ChainTip</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">point</span>: <a href="stream/ChainPoint.html" t="t">ChainPoint</a>, <span t="k"></span><span data-unresolved-link="" t="n">blockNo</span>: <a href="stream.html#BlockNo-0" t="t">BlockNo</a>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Chain tip: position plus height.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Chain tip: position plus height.</p>
+              <p>Height is what enables local confirmation arithmetic, so a subscriber tracking its own transaction can compute depth without another round trip.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/ChainTip$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/DeltaBufferPolicy.html" t="n" class="documentableName ">DeltaBufferPolicy</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Overflow behaviour for a delta buffer.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Overflow behaviour for a delta buffer.</p>
+              <p>There is no backpressure to be had here, and that is a property of the source rather than of this implementation: a chain produces blocks whether or not anyone is keeping up, so the only decisions available are how much to hold and what to do when that is not enough.</p>
+              <p>Chain-sourced events must never be dropped silently — a missed <code>Spent</code> corrupts the subscriber's view of state permanently, and it has no way to notice. So the two options are "never drop" and "fail loudly":</p>
+              <ul>
+               <li><code>Bounded(n)</code> — on overflow the subscription terminates with <a href="../infra/ScalusBufferOverflowException.html">scalus.cardano.infra.ScalusBufferOverflowException</a>, so the subscriber knows its view is untrustworthy and must resync. Default, see <a href="stream/DeltaBufferPolicy$.html#default-0">DeltaBufferPolicy.default</a>.</li>
+               <li><code>Unbounded</code> — memory is the only bound. For a subscriber that would rather be killed by the OOM killer than resync.</li>
+              </ul>
+              <p>Deliberately not offered: a bounded buffer that drops. It would turn the corruption this policy exists to prevent into the default behaviour, and the subscriber could not detect it.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/DeltaBufferPolicy$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="stream/DeltaBufferPolicy$.html" t="n" class="documentableName ">DeltaBufferPolicy</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/DeltaBufferPolicy.html">enum</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="stream/DeltaBufferPolicy$.html" t="n">DeltaBufferPolicy</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/PushdownKind.html" t="n" class="documentableName ">PushdownKind</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>What a provider can index a subscription by.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>What a provider can index a subscription by.</p>
+              <p>Mirrors the cases of <a href="UtxoSource.html">scalus.cardano.node.UtxoSource</a>: a query whose source reduces to kinds the provider declares here can be served from an index or a server-side filter; anything else needs a scan. <code>UtxoSource.FromPaymentCredential</code> deliberately has no matching case yet, so it is always treated as unindexed — see <code>SubscriptionSupport.indexedSource</code>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/PushdownKind$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="stream/PushdownKind$.html" t="n" class="documentableName ">PushdownKind</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/PushdownKind.html">enum</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="stream/PushdownKind$.html" t="n">PushdownKind</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/ReplaySupport.html" t="n" class="documentableName ">ReplaySupport</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>How far back a provider can start a subscription.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>How far back a provider can start a subscription.</p>
+              <p>Replay is not a yes/no property, for the same reason pushdown is not: on a REST backend an address's history is one paginated endpoint away while the chain's history is unreachable.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="stream/ScalusAsyncSource.html" t="n" class="documentableName ">ScalusAsyncSource</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>The consumer side of a subscription: pull the next event, or stop pulling.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>The consumer side of a subscription: pull the next event, or stop pulling.</p>
+              <p><code>Future</code> is the lingua franca here on purpose. It is in the standard library, it exists on both JVM and JS, and it lets every adapter bridge its own effect — cats-effect <code>IO</code>, direct-style ox, pekko materialization — without any of those concepts leaking into this module.</p>
+              <p>Buffering lives behind this interface rather than in front of it: coalescing latest-value streams and failing bounded delta buffers on overflow are subtle enough that reimplementing them once per stream library would be several chances to get it wrong.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 trait <a href="stream/internal/Mailbox.html" t="n">Mailbox</a>[<span t="t">A</span>]
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="stream/ScalusAsyncStreamAdapter.html" t="n" class="documentableName ">ScalusAsyncStreamAdapter</a>[<span t="k"></span><span data-unresolved-link="" t="t">S</span>[<span t="t">_</span>]]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Typeclass for building a stream type <code>S[_]</code> from a <a href="stream/ScalusAsyncSource.html">ScalusAsyncSource</a>.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Typeclass for building a stream type <code>S[_]</code> from a <a href="stream/ScalusAsyncSource.html">ScalusAsyncSource</a>.</p>
+              <p>One instance per stream library, each a handful of lines. The identity instance below means a caller who does not want to choose a library does not have to.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/ScalusAsyncStreamAdapter$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 object <a href="stream/ScalusAsyncStreamAdapter$$identity$.html" t="n">identity</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="stream/ScalusAsyncStreamAdapter$.html" t="n" class="documentableName ">ScalusAsyncStreamAdapter</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/ScalusAsyncStreamAdapter.html">trait</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="stream/ScalusAsyncStreamAdapter$.html" t="n">ScalusAsyncStreamAdapter</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/ScanSupport.html" t="n" class="documentableName ">ScanSupport</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>What happens to a subscription the provider cannot serve from an index.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>What happens to a subscription the provider cannot serve from an index.</p>
+              <p>The distinction between the first two is not how clever the matching is — it is whether the provider already holds the block's contents. An in-memory ledger, a chain-sync follower and a gRPC stream all see every transaction anyway, so a subscription that matches everything costs them nothing beyond the fan-out they already do. A REST provider whose cheap path is per-address endpoints has to fetch the block and then a UTxO set per transaction in it, which is the difference between a handful of requests a day and a spent quota.</p>
+              <p>The third is a different kind of answer, and it needs to be stated rather than approximated by the second: a provider built entirely out of per-source lookups has no request sequence that would answer "every transaction" at all. Calling that <code>Metered</code> would let a caller consent, via <code>allowUnindexedScan</code>, to something that cannot happen — and the subscription would then be accepted and deliver nothing, forever, with no error. Consenting to an impossibility is worse than being refused.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/StartFrom.html" t="n" class="documentableName ">StartFrom</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Where a subscription starts reading.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Where a subscription starts reading.</p>
+              <p>Support is provider- <em>and</em> query-dependent — see <a href="stream/StreamCapabilities.html">StreamCapabilities</a> and <a href="stream/SubscriptionSupport.html">SubscriptionSupport</a>. A provider that cannot serve the requested start point throws <a href="../infra/UnsupportedSubscriptionException.html">scalus.cardano.infra.UnsupportedSubscriptionException</a> from <code>subscribe</code>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="stream/StreamCapabilities.html" t="n" class="documentableName ">StreamCapabilities</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">kinds</span>: <span data-unresolved-link="" t="t">Set</span>[<a href="stream/SubscriptionKind.html" t="t">SubscriptionKind</a>], <span t="k"></span><span data-unresolved-link="" t="n">pushdown</span>: <span data-unresolved-link="" t="t">Set</span>[<a href="stream/PushdownKind.html" t="t">PushdownKind</a>], <span t="k"></span><span data-unresolved-link="" t="n">scanning</span>: <a href="stream/ScanSupport.html" t="t">ScanSupport</a>, <span t="k"></span><span data-unresolved-link="" t="n">replay</span>: <a href="stream/ReplaySupport.html" t="t">ReplaySupport</a>, <span t="k"></span><span data-unresolved-link="" t="n">rollbackHorizon</span>: <span data-unresolved-link="" t="t">Option</span>[<span data-unresolved-link="" t="t">Int</span>], <span t="k"></span><span data-unresolved-link="" t="n">maxConfirmations</span>: <span data-unresolved-link="" t="t">Option</span>[<span data-unresolved-link="" t="t">Int</span>], <span t="k"></span><span data-unresolved-link="" t="n">idleSignals</span>: <span data-unresolved-link="" t="t">Boolean</span>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Everything a provider declares about its streaming behaviour.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Everything a provider declares about its streaming behaviour.</p>
+              <p>This is the <em>only</em> thing an implementation states. Whether a particular subscription is supported, and whether it is cheap, is derived from this descriptor by <a href="stream/SubscriptionSupport$.html#of-fa9">SubscriptionSupport.of</a> — so a provider cannot refuse something it advertised, or accept something it did not, and callers can decide what to ask for before asking.</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               idleSignals
+              </dt>
+              <dd class="body-medium">
+               <p>whether the provider can emit progress signals for non-matching blocks</p>
+              </dd>
+              <dt class="body-small">
+               kinds
+              </dt>
+              <dd class="body-medium">
+               <p>which subscription kinds are served at all</p>
+              </dd>
+              <dt class="body-small">
+               maxConfirmations
+              </dt>
+              <dd class="body-medium">
+               <p>the largest confirmation depth the provider can gate on, if bounded</p>
+              </dd>
+              <dt class="body-small">
+               pushdown
+              </dt>
+              <dd class="body-medium">
+               <p>query sources that can be served from an index rather than a scan</p>
+              </dd>
+              <dt class="body-small">
+               replay
+              </dt>
+              <dd class="body-medium">
+               <p>how far back a subscription can start</p>
+              </dd>
+              <dt class="body-small">
+               rollbackHorizon
+              </dt>
+              <dd class="body-medium">
+               <p>how deep a reorg the provider can report. <code>None</code> means it never signals rollbacks — which is not the same as "no rollbacks happen", and is exactly why it is declared rather than assumed</p>
+              </dd>
+              <dt class="body-small">
+               scanning
+              </dt>
+              <dd class="body-medium">
+               <p>what a query outside <span data-unresolved-link="">pushdown</span> costs — <code>Free</code> for a provider that already holds every block, <code>Metered</code> for one that would have to go and fetch it</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/StreamCapabilities$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="stream/StreamCapabilities$.html" t="n" class="documentableName ">StreamCapabilities</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/StreamCapabilities.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="stream/StreamCapabilities$.html" t="n">StreamCapabilities</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="stream/StreamingEmulator$.html" t="n" class="documentableName ">StreamingEmulator</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/StreamingEmulator.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="stream/StreamingEmulator$.html" t="n">StreamingEmulator</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="stream/StreamingEmulator.html" t="n" class="documentableName ">StreamingEmulator</a>(<span t="k"></span><span t="k">val </span><span data-unresolved-link="" t="n">emulator</span>: <a href="EmulatorBase.html" t="t">EmulatorBase</a>, <span t="k">val </span><span data-unresolved-link="" t="n">securityParam</span>: <span data-unresolved-link="" t="t">Int</span> = ...)<span t="k"> extends </span><a href="stream/BlockchainStreamProvider.html" t="t">BlockchainStreamProvider</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A streaming view of an <a href="EmulatorBase.html">scalus.cardano.node.EmulatorBase</a>.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A streaming view of an <a href="EmulatorBase.html">scalus.cardano.node.EmulatorBase</a>.</p>
+              <p>Every read delegates to the emulator, so the streaming and one-shot views cannot disagree — there is literally one ledger behind both. Submission additionally drives the subscription hub, so code that subscribes and reacts runs unchanged against a simulated chain.</p>
+              <p><strong>One transaction, one block.</strong> The emulator has no notion of a block, so this wrapper synthesises one per accepted transaction and one per <a href="stream/StreamingEmulator.html#newEmptyBlock-94c">newEmptyBlock</a>. Block <em>identity</em> is synthetic too — derived from the block number — which is why block subscriptions are declared unsupported rather than served with a fabricated header. UTxO and transaction subscriptions, which is what an application actually reacts to, are fully served.</p>
+              <p><strong>Events only follow acceptance.</strong> A block reaches the hub only on <code>Right(hash)</code> from <code>submitSync</code>, that is, only after the emulator's validators and mutators have passed and the new state is committed. A rejected transaction produces no events.</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               securityParam
+              </dt>
+              <dd class="body-medium">
+               <p>settlement depth this emulator claims. <code>0</code> — the default — matches its behaviour: a linear emulator never forks, so nothing ever needs to settle. Raise it to exercise a subscriber's confirmation gating.</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/StreamingEmulator$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="stream/BlockchainStreamProvider.html" t="n">BlockchainStreamProvider</a>
+                </div>
+                <div>
+                 trait <a href="BlockchainProvider.html" t="n">BlockchainProvider</a>
+                </div>
+                <div>
+                 trait <a href="stream/BlockchainStreamReader.html" t="n">BlockchainStreamReader</a>
+                </div>
+                <div>
+                 trait <a href="BlockchainReader.html" t="n">BlockchainReader</a>
+                </div>
+                <div>
+                 trait <a href="stream/BlockchainStreamProviderTF.html" t="n">BlockchainStreamProviderTF</a>[<span data-unresolved-link="" t="t">Future</span>]
+                </div>
+                <div>
+                 trait <a href="stream/BlockchainStreamReaderTF.html" t="n">BlockchainStreamReaderTF</a>[<span data-unresolved-link="" t="t">Future</span>]
+                </div>
+                <div>
+                 trait <a href="BlockchainProviderTF.html" t="n">BlockchainProviderTF</a>[<span data-unresolved-link="" t="t">Future</span>]
+                </div>
+                <div>
+                 trait <a href="BlockchainReaderTF.html" t="n">BlockchainReaderTF</a>[<span data-unresolved-link="" t="t">Future</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="stream/SubscriptionKind$.html" t="n" class="documentableName ">SubscriptionKind</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/SubscriptionKind.html">enum</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="stream/SubscriptionKind$.html" t="n">SubscriptionKind</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/SubscriptionKind.html" t="n" class="documentableName ">SubscriptionKind</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Which subscription kinds a provider serves at all.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Which subscription kinds a provider serves at all.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/SubscriptionKind$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="stream/SubscriptionOptions.html" t="n" class="documentableName ">SubscriptionOptions</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">startFrom</span>: <a href="stream/StartFrom.html" t="t">StartFrom</a> = ..., <span t="k"></span><span data-unresolved-link="" t="n">confirmations</span>: <span data-unresolved-link="" t="t">Int</span> = ..., <span t="k"></span><span data-unresolved-link="" t="n">noRollback</span>: <span data-unresolved-link="" t="t">Boolean</span> = ..., <span t="k"></span><span data-unresolved-link="" t="n">includeExistingUtxos</span>: <span data-unresolved-link="" t="t">Boolean</span> = ..., <span t="k"></span><span data-unresolved-link="" t="n">idleSignals</span>: <span data-unresolved-link="" t="t">Boolean</span> = ..., <span t="k"></span><span data-unresolved-link="" t="n">allowUnindexedScan</span>: <span data-unresolved-link="" t="t">Boolean</span> = ..., <span t="k"></span><span data-unresolved-link="" t="n">bufferPolicy</span>: <a href="stream/DeltaBufferPolicy.html" t="t">DeltaBufferPolicy</a> = ...)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Per-subscription configuration for delta streams (UTxO, transaction, block).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Per-subscription configuration for delta streams (UTxO, transaction, block).</p>
+              <p>Latest-value streams — tip, protocol params, transaction status — take no options: the provider always uses a size-1 coalescing buffer for them, because "the newest value wins" is the only sensible semantics for a single-source-of-truth cell.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/SubscriptionRequest.html" t="n" class="documentableName ">SubscriptionRequest</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A subscription a caller is considering, or is about to open.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A subscription a caller is considering, or is about to open.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/SubscriptionSupport.html" t="n" class="documentableName ">SubscriptionSupport</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>The verdict on a subscription request.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>The verdict on a subscription request.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/SubscriptionSupport$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="stream/SubscriptionSupport$.html" t="n" class="documentableName ">SubscriptionSupport</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/SubscriptionSupport.html">enum</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="stream/SubscriptionSupport$.html" t="n">SubscriptionSupport</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/TransactionEvent.html" t="n" class="documentableName ">TransactionEvent</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Transaction stream event.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Transaction stream event.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="stream/TransactionQuery$.html" t="n" class="documentableName ">TransactionQuery</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/TransactionQuery.html">enum</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="stream/TransactionQuery$.html" t="n">TransactionQuery</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/TransactionQuery.html" t="n" class="documentableName ">TransactionQuery</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Which transactions a subscriber wants to observe.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Which transactions a subscriber wants to observe.</p>
+              <p>The shape deliberately mirrors UTxORPC's <code>TxPredicate</code> (<code>match</code> / <code>not</code> / <code>all_of</code> / <code>any_of</code>), so a UTxORPC-backed provider lowers a query onto the wire predicate instead of translating between two different algebras — and so anything expressible here can be pushed down by the backends that support server-side filtering.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/TransactionQuery$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/UtxoEvent.html" t="n" class="documentableName ">UtxoEvent</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>UTxO lifecycle event.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>UTxO lifecycle event.</p>
+              <p><code>RolledBack</code> is not an error and not an exception: a chain that reorganises is a chain behaving normally, and a subscriber that cannot express "undo everything after this point" has a bug waiting for its first fork. Providers that never signal rollbacks declare <code>rollbackHorizon = None</code> so the difference is visible before subscribing rather than after.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="stream/UtxoEventQuery.html" t="n" class="documentableName ">UtxoEventQuery</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">query</span>: <a href="UtxoQuery.html" t="t">UtxoQuery</a>, <span t="k"></span><span data-unresolved-link="" t="n">types</span>: <span data-unresolved-link="" t="t">Set</span>[<a href="stream/UtxoEventType.html" t="t">UtxoEventType</a>] = ...)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Query for a UTxO event subscription.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Query for a UTxO event subscription.</p>
+              <p>Wraps a <a href="UtxoQuery.html">scalus.cardano.node.UtxoQuery</a> — reusing its source/filter algebra and the inline DSL — and adds an event-type set, so a subscriber can ask for only <code>Created</code> events without a downstream <code>collect</code>.</p>
+              <p>The pagination fields on the inner query (<code>limit</code>, <code>offset</code>, <code>minRequiredTotalAmount</code>) are snapshot concepts and are <strong>ignored</strong> for subscriptions; they stay on <code>UtxoQuery</code> because <code>BlockchainReader.findUtxos</code> does honour them.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="stream/UtxoEventType$.html" t="n" class="documentableName ">UtxoEventType</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/UtxoEventType.html">enum</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="stream/UtxoEventType$.html" t="n">UtxoEventType</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="stream/UtxoEventType.html" t="n" class="documentableName ">UtxoEventType</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Which UTxO event kinds a subscription wants.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Which UTxO event kinds a subscription wants.</p>
+              <p><code>RolledBack</code> and <code>Idle</code> are stream-wide signals rather than per-UTxO events, and are not selectable here — rollback delivery is governed by <code>SubscriptionOptions.noRollback</code>, idle delivery by <code>SubscriptionOptions.idleSignals</code>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="stream/UtxoEventType$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+      <section id="Types">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Types</h4>
+        </div>
+        <div class="documentableElement" id="BlockNo-0">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">type </span></span><a href="stream.html#BlockNo-0" t="n" class="documentableName ">BlockNo</a> = <span data-unresolved-link="" t="t">Long</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Block height — the count of blocks since genesis.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Block height — the count of blocks since genesis.</p>
+              <p>Carried on <a href="stream/ChainTip.html">ChainTip</a> so subscribers can compute confirmations locally (<code>tip.blockNo - event.blockNo</code>) rather than asking the provider. Not carried on the event types, where block <em>identity</em> (<a href="stream/ChainPoint.html">ChainPoint</a>) is what matters.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#members-list">Members list</a><ul><li><a href="#Packages">Packages</a></li><li><a href="#Type-members">Type members</a><ul><li><a href="#Classlikes">Classlikes</a></li><li><a href="#Types">Types</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

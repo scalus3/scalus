@@ -1,0 +1,2212 @@
+<!DOCTYPE html><html data-pathToRoot="../../" data-rawLocation="scalus/serialization/flat" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>scalus.serialization.flat</title><link rel="shortcut icon" type="image/x-icon" href="../../favicon.ico"></link><script type="text/javascript" src="../../scripts/theme.js"></script><script type="text/javascript" src="../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../styles/nord-light.css"></link><link rel="stylesheet" href="../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../styles/searchbar.css"></link><link rel="stylesheet" href="../../styles/social-links.css"></link><link rel="stylesheet" href="../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../styles/fontawesome.css"></link><script type="text/javascript" src="../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../styles/apistyles.css"></link><script>var pathToRoot = "../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../index.html">Scalus</a>/<a href="../../scalus.html">scalus</a>/<a href="../serialization.html">scalus.serialization</a>/<a href="flat.html">scalus.serialization.flat</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon pa"></span></span>
+ <h1 class="h600 single">scalus.serialization.flat</h1>
+</div>
+<div class="fqname body-large">
+ <span></span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">package </span></span><a href="flat.html" t="n" class="documentableName ">scalus.serialization.flat</a>
+ </div>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Type-members">
+     <div data-togglable="Type members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Type members" class="h400">Type members</h3>
+      </div>
+      <section id="Classlikes">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Classlikes</h4>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="flat/ArrayByteFlat.html" t="n" class="documentableName ">ArrayByteFlat</a><span t="k"> extends </span><a href="flat/Flat.html" t="t">Flat</a>[<span data-unresolved-link="" t="t">Array</span>[<span data-unresolved-link="" t="t">Byte</span>]]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Prealigned Arrays of bytes PreAligned a ≡ PreAligned {preFiller :: Filler, preValue :: a}</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Prealigned Arrays of bytes PreAligned a ≡ PreAligned {preFiller :: Filler, preValue :: a}</p>
+              <p>Filler ≡ FillerBit Filler | FillerEnd</p>
+              <p>Array v = A0 | A1 v (Array v) | A2 v v (Array v) ... | A255 ... (Array v)</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="flat/Flat.html" t="n">Flat</a>[<span data-unresolved-link="" t="t">Array</span>[<span data-unresolved-link="" t="t">Byte</span>]]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/DataFlatInstance$.html" t="n" class="documentableName ">DataFlatInstance</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Flat serialization instance for Data type.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Flat serialization instance for Data type.</p>
+              <p>This is kept separate from FlatInstances.scala because Data uses scalus.cardano.onchain.plutus.prelude.List, which is not available in the compiler plugin. The compiler plugin doesn't need to serialize Data values directly - it only needs the SIR/SIRType serialization from FlatInstances.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/DataFlatInstance$.html" t="n">DataFlatInstance</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="flat/DecoderState.html" t="n" class="documentableName ">DecoderState</a>(<span t="k"></span><span t="k">val </span><span data-unresolved-link="" t="n">buffer</span>: <a href="flat.html#Uint8Array-0" t="t">Uint8Array</a>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Mutable bit-level cursor over a flat-encoded byte array. Mirrors <a href="flat/EncoderState.html">EncoderState</a>: bits are read most-significant first within each byte.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Mutable bit-level cursor over a flat-encoded byte array. Mirrors <a href="flat/EncoderState.html">EncoderState</a>: bits are read most-significant first within each byte.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="flat/EncoderState.html" t="n" class="documentableName ">EncoderState</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">bufferSize</span>: <span data-unresolved-link="" t="t">Int</span>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Mutable bit-level output buffer for flat encoding. Bits are accumulated into <code>currentByte</code> (most-significant first) and flushed to <code>buffer</code> one byte at a time. The caller must pre-size <code>bufferSize</code> from <code>Flat.bitSize</code> — the buffer does not grow.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Mutable bit-level output buffer for flat encoding. Bits are accumulated into <code>currentByte</code> (most-significant first) and flushed to <code>buffer</code> one byte at a time. The caller must pre-size <code>bufferSize</code> from <code>Flat.bitSize</code> — the buffer does not grow.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Throws
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <span data-unresolved-link="">IllegalArgumentException</span>
+                 <p>if <code>bufferSize</code> is negative. A buffer that is merely too small is not detected here: the overrun surfaces as an <code>ArrayIndexOutOfBoundsException</code> while encoding, which means the <code>Flat</code> instance's <code>bitSize</code> under-estimates.</p>
+                </div>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="flat/Flat.html" t="n" class="documentableName ">Flat</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Type class for the flat binary encoding (a bit-oriented serialization format, see https://hackage.haskell.org/package/flat and the Plutus Core specification, Appendix D). UPLC programs and SIR modules are serialized with instances of this trait.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Type class for the flat binary encoding (a bit-oriented serialization format, see <a href="https://hackage.haskell.org/package/flat">https://hackage.haskell.org/package/flat</a> and the Plutus Core specification, Appendix D). UPLC programs and SIR modules are serialized with instances of this trait.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 object <a href="../cardano/ledger/Word64$$given_Flat_Word64$.html" t="n">given_Flat_Word64</a>
+                </div>
+                <div>
+                 class <a href="flat/ArrayByteFlat.html" t="n">ArrayByteFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/DataFlatInstance$$given_Flat_Data$.html" t="n">given_Flat_Data</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRLetFlagsFlat$.html" t="n">SIRLetFlagsFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRPositionFlat$.html" t="n">SIRPositionFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$given_Flat_Data$.html" t="n">given_Flat_Data</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$given_Flat_Option$.html" t="n">given_Flat_Option</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$given_Flat_SIRVarStorage$.html" t="n">given_Flat_SIRVarStorage</a>
+                </div>
+                <div>
+                 trait <a href="flat/HashConsedFlat.html" t="n">HashConsedFlat</a>[<span t="t">A</span>]
+                </div>
+                <div>
+                 object <a href="../compiler/sir/ToExprHSSIRFlat$.html" t="n">ToExprHSSIRFlat</a>
+                </div>
+                <div>
+                 object <a href="../compiler/sir/ToExprHSSIRTypeFlat$.html" t="n">ToExprHSSIRTypeFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$given_HashConsedFlat_Module$.html" t="n">given_HashConsedFlat_Module</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$given_HashConsedFlat_TypeVar$.html" t="n">given_HashConsedFlat_TypeVar</a>
+                </div>
+                <div>
+                 object <a href="flat/PlainIntFlat$.html" t="n">PlainIntFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/given_Flat_BigInt$.html" t="n">given_Flat_BigInt</a>
+                </div>
+                <div>
+                 object <a href="flat/given_Flat_Boolean$.html" t="n">given_Flat_Boolean</a>
+                </div>
+                <div>
+                 object <a href="flat/given_Flat_Int$.html" t="n">given_Flat_Int</a>
+                </div>
+                <div>
+                 object <a href="flat/given_Flat_Long$.html" t="n">given_Flat_Long</a>
+                </div>
+                <div>
+                 object <a href="flat/given_Flat_Natural$.html" t="n">given_Flat_Natural</a>
+                </div>
+                <div>
+                 object <a href="flat/given_Flat_String$.html" t="n">given_Flat_String</a>
+                </div>
+                <div>
+                 object <a href="flat/given_Flat_Unit$.html" t="n">given_Flat_Unit</a>
+                </div>
+                <div>
+                 object <a href="../uplc/builtin/ByteStringFlatInstance$given_Flat_ByteString$.html" t="n">given_Flat_ByteString</a>
+                </div>
+                <div>
+                 object <a href="../uplc/builtin/DataApi$given_Flat_Data$.html" t="n">given_Flat_Data</a>
+                </div>
+                <div>
+                 object <a href="../uplc/DeBruijnedProgram$$given_Flat_DeBruijnedProgram$.html" t="n">given_Flat_DeBruijnedProgram</a>
+                </div>
+                <div>
+                 object <a href="../uplc/DefaultFun$$given_Flat_DefaultFun$.html" t="n">given_Flat_DefaultFun</a>
+                </div>
+                <div>
+                 object <a href="../uplc/Term$$given_Flat_Term$.html" t="n">given_Flat_Term</a>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/FlatCodec$.html" t="n" class="documentableName ">FlatCodec</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Java-facing facade over the flat codec, and the home of the scalar helper implementations — the top-level functions of this package (<code>zigZag</code>, <code>word7Bytes</code>, ...) delegate here.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Java-facing facade over the flat codec, and the home of the scalar helper implementations — the top-level functions of this package (<code>zigZag</code>, <code>word7Bytes</code>, ...) delegate here.</p>
+              <p>A plain object without a companion class gets static forwarders in its mirror class, so Java calls <code>FlatCodec.encodeLong(v)</code> directly on every platform — no <code>MODULE$</code>, no <code>summon</code>. Signatures use only <code>byte[]</code>/primitive/<code>String</code> types plus explicit <a href="flat/Flat.html">Flat</a> instances (see <a href="flat/Flats$.html">Flats</a>) so Java never has to name a Scala collection or summon a given.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/FlatCodec$.html" t="n">FlatCodec</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="flat/FlatDecodingError.html" t="n" class="documentableName ">FlatDecodingError</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">message</span>: <span data-unresolved-link="" t="t">String</span>, <span t="k"></span><span data-unresolved-link="" t="n">cause</span>: <span data-unresolved-link="" t="t">Throwable</span>)<span t="k"> extends </span><span data-unresolved-link="" t="t">RuntimeException</span></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>The input is not a valid Flat encoding of the expected type: truncated, or carrying a tag the format does not define.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>The input is not a valid Flat encoding of the expected type: truncated, or carrying a tag the format does not define.</p>
+              <p>Decoding is the one part of this API that takes untrusted input, so this is part of its contract. Catch it to tell "these bytes are not a program" from "Scalus has a bug" - any other exception out of <a href="flat/Flat.html#decode-4a2">Flat.decode</a> means the latter. It is thrown by <a href="flat/DecoderState.html">DecoderState</a> when the buffer runs out and by the individual decoders when they meet an undefined tag.</p>
+              <p>Not sealed on purpose: a caller may want to distinguish a truncated buffer from an invalid tag, and a decoder for its own format may want a more specific subtype.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">RuntimeException</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Exception</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Throwable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/FlatInstances$.html" t="n" class="documentableName ">FlatInstances</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/FlatInstances$.html" t="n">FlatInstances</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/Flats$.html" t="n" class="documentableName ">Flats</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Named accessors for the primitive <code>Flat</code> instances, since Java cannot <code>summon</code>.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Named accessors for the primitive <code>Flat</code> instances, since Java cannot <code>summon</code>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/Flats$.html" t="n">Flats</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/HashConsed$.html" t="n" class="documentableName ">HashConsed</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Objects are hash-consed during restoring from file. Note, that identityHashCode can be different on the different VM-s, so it is not safe to reky on it. value-based hash-code now is not determenistics on recuresive data structures with self-references. So, we use identityHashCode on VN which store file and restore internal references on other VN.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Objects are hash-consed during restoring from file. Note, that identityHashCode can be different on the different VM-s, so it is not safe to reky on it. value-based hash-code now is not determenistics on recuresive data structures with self-references. So, we use identityHashCode on VN which store file and restore internal references on other VN.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/HashConsed$.html" t="n">HashConsed</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="flat/HashConsedDecoderState.html" t="n" class="documentableName ">HashConsedDecoderState</a>(<span t="k"></span><span t="k">val </span><span data-unresolved-link="" t="n">decode</span>: <a href="flat/DecoderState.html" t="t">DecoderState</a>, <span t="k">val </span><span data-unresolved-link="" t="n">hashConsed</span>: <a href="flat/HashConsed$$State.html" t="t">State</a>, <span t="k">val </span><span data-unresolved-link="" t="n">debug</span>: <span data-unresolved-link="" t="t">Boolean</span> = ...)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="flat/HashConsedEncoderState.html" t="n" class="documentableName ">HashConsedEncoderState</a>(<span t="k"></span><span t="k">val </span><span data-unresolved-link="" t="n">encode</span>: <a href="flat/EncoderState.html" t="t">EncoderState</a>, <span t="k">val </span><span data-unresolved-link="" t="n">hashConsed</span>: <a href="flat/HashConsed$$State.html" t="t">State</a>, <span t="k">val </span><span data-unresolved-link="" t="n">debug</span>: <span data-unresolved-link="" t="t">Boolean</span> = ...)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="flat/HashConsedEncoderState$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/HashConsedEncoderState$.html" t="n" class="documentableName ">HashConsedEncoderState</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="flat/HashConsedEncoderState.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/HashConsedEncoderState$.html" t="n">HashConsedEncoderState</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="flat/HashConsedFlat.html" t="n" class="documentableName ">HashConsedFlat</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span>]<span t="k"> extends </span><a href="flat/Flat.html" t="t">Flat</a>[<span t="t">A</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="flat/HashConsedFlat$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="flat/Flat.html" t="n">Flat</a>[<span t="t">A</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 object <a href="../compiler/sir/ToExprHSSIRFlat$.html" t="n">ToExprHSSIRFlat</a>
+                </div>
+                <div>
+                 object <a href="../compiler/sir/ToExprHSSIRTypeFlat$.html" t="n">ToExprHSSIRTypeFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$given_HashConsedFlat_Module$.html" t="n">given_HashConsedFlat_Module</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$given_HashConsedFlat_TypeVar$.html" t="n">given_HashConsedFlat_TypeVar</a>
+                </div>
+                <div>
+                 object <a href="flat/PlainIntFlat$.html" t="n">PlainIntFlat</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/HashConsedFlat$.html" t="n" class="documentableName ">HashConsedFlat</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="flat/HashConsedFlat.html">trait</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/HashConsedFlat$.html" t="n">HashConsedFlat</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="flat/HashConsedMutRefReprFlat.html" t="n" class="documentableName ">HashConsedMutRefReprFlat</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>, <span t="k"></span><span data-unresolved-link="" t="t">SA</span><span t="k"> &lt;: </span><a href="flat/HashConsedRef.html" t="t">HashConsedRef</a>[<span t="t">A</span>]]<span t="k"> extends </span><a href="flat/HashConsedReprFlat.html" t="t">HashConsedReprFlat</a>[<span t="t">A</span>, <span t="t">SA</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="flat/HashConsedReprFlat.html" t="n">HashConsedReprFlat</a>[<span t="t">A</span>, <span t="t">SA</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 object <a href="flat/FlatInstances$$ConstrDeclFlat$.html" t="n">ConstrDeclFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$DataDeclFlat$.html" t="n">DataDeclFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRTypeCaseClassFlat$.html" t="n">SIRTypeCaseClassFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRTypeNonCaseModuleFlat$.html" t="n">SIRTypeNonCaseModuleFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRTypeSumCaseClassFlat$.html" t="n">SIRTypeSumCaseClassFlat</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="flat/HashConsedRef.html" t="n" class="documentableName ">HashConsedRef</a>[<span t="k">+</span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>When we read from the HashConsedRead.State, we can have forward references, which will be resolved after the whole structure is readed. Here, HashConsedRef can hold object ro Ref or object of some intermediate representation, which holds other refs.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>When we read from the HashConsedRead.State, we can have forward references, which will be resolved after the whole structure is readed. Here, HashConsedRef can hold object ro Ref or object of some intermediate representation, which holds other refs.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="flat/HashConsedRef$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 class <a href="flat/FlatInstances$$SIRTypeHashConsedRef.html" t="n">SIRTypeHashConsedRef</a>
+                </div>
+                <div>
+                 class <a href="flat/HashConsed$$CachedTaggedRef.html" t="n">CachedTaggedRef</a>[<span t="t">A</span>]
+                </div>
+                <div>
+                 class <a href="flat/HashConsed$$ConstRef.html" t="n">ConstRef</a>[<span t="t">A</span>]
+                </div>
+                <div>
+                 class <a href="flat/HashConsed$$ForwardRef.html" t="n">ForwardRef</a>[<span t="t">A</span>]
+                </div>
+                <div>
+                 class <a href="flat/HashConsed$$MutRef.html" t="n">MutRef</a>[<span t="t">A</span>]
+                </div>
+                <div>
+                 class <a href="flat/HashConsedReprFlat$$ListRepl.html" t="n">ListRepl</a>[<span t="t">A</span>, <span t="t">SA</span>]
+                </div>
+                <div>
+                 class <a href="flat/HashConsedReprFlat$$StringMapRep.html" t="n">StringMapRep</a>[<span t="t">A</span>, <span t="t">SA</span>]
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/HashConsedRef$.html" t="n" class="documentableName ">HashConsedRef</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="flat/HashConsedRef.html">trait</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/HashConsedRef$.html" t="n">HashConsedRef</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/HashConsedReprFlat$.html" t="n" class="documentableName ">HashConsedReprFlat</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="flat/HashConsedReprFlat.html">trait</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/HashConsedReprFlat$.html" t="n">HashConsedReprFlat</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="flat/HashConsedReprFlat.html" t="n" class="documentableName ">HashConsedReprFlat</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>, <span t="k"></span><span data-unresolved-link="" t="t">SA</span><span t="k"> &lt;: </span><a href="flat/HashConsedRef.html" t="t">HashConsedRef</a>[<span t="t">A</span>]]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="flat/HashConsedReprFlat$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 object <a href="flat/FlatInstances$$AnnotationsDeclFlat$.html" t="n">AnnotationsDeclFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$BindingFlat$.html" t="n">BindingFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$ModuleHashSetReprFlat$.html" t="n">ModuleHashSetReprFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRCaseHashConsedFlat$.html" t="n">SIRCaseHashConsedFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRConstHashConsedFlat$.html" t="n">SIRConstHashConsedFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRDeclHashConsedFlat$.html" t="n">SIRDeclHashConsedFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRHashConsedFlat$.html" t="n">SIRHashConsedFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRLetHashConsedFlat$.html" t="n">SIRLetHashConsedFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRTypeHashConsedFlat$.html" t="n">SIRTypeHashConsedFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRTypeTypeProxyFlat$.html" t="n">SIRTypeTypeProxyFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRVarHashConsedFlat$.html" t="n">SIRVarHashConsedFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$TypeBindingFlat$.html" t="n">TypeBindingFlat</a>
+                </div>
+                <div>
+                 trait <a href="flat/HashConsedMutRefReprFlat.html" t="n">HashConsedMutRefReprFlat</a>[<span t="t">A</span>, <span t="t">SA</span>]
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$ConstrDeclFlat$.html" t="n">ConstrDeclFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$DataDeclFlat$.html" t="n">DataDeclFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRTypeCaseClassFlat$.html" t="n">SIRTypeCaseClassFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRTypeNonCaseModuleFlat$.html" t="n">SIRTypeNonCaseModuleFlat</a>
+                </div>
+                <div>
+                 object <a href="flat/FlatInstances$$SIRTypeSumCaseClassFlat$.html" t="n">SIRTypeSumCaseClassFlat</a>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="flat/Natural.html" t="n" class="documentableName ">Natural</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">n</span>: <span data-unresolved-link="" t="t">BigInt</span>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A non-negative integer, encoded as an unsigned varint (no zigzag), matching flat's <code>Natural</code>.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A non-negative integer, encoded as an unsigned varint (no zigzag), matching flat's <code>Natural</code>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/PlainIntFlat$.html" t="n" class="documentableName ">PlainIntFlat</a><span t="k"> extends </span><a href="flat/HashConsedFlat.html" t="t">HashConsedFlat</a>[<span data-unresolved-link="" t="t">Int</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="flat/HashConsedFlat.html" t="n">HashConsedFlat</a>[<span data-unresolved-link="" t="t">Int</span>]
+                </div>
+                <div>
+                 trait <a href="flat/Flat.html" t="n">Flat</a>[<span data-unresolved-link="" t="t">Int</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/PlainIntFlat$.html" t="n">PlainIntFlat</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/given_Flat_BigInt$.html" t="n" class="documentableName ">given_Flat_BigInt</a><span t="k"> extends </span><a href="flat/Flat.html" t="t">Flat</a>[<span data-unresolved-link="" t="t">BigInt</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="flat/Flat.html" t="n">Flat</a>[<span data-unresolved-link="" t="t">BigInt</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/given_Flat_BigInt$.html" t="n">given_Flat_BigInt</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/given_Flat_Boolean$.html" t="n" class="documentableName ">given_Flat_Boolean</a><span t="k"> extends </span><a href="flat/Flat.html" t="t">Flat</a>[<span data-unresolved-link="" t="t">Boolean</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="flat/Flat.html" t="n">Flat</a>[<span data-unresolved-link="" t="t">Boolean</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/given_Flat_Boolean$.html" t="n">given_Flat_Boolean</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/given_Flat_Int$.html" t="n" class="documentableName ">given_Flat_Int</a><span t="k"> extends </span><a href="flat/Flat.html" t="t">Flat</a>[<span data-unresolved-link="" t="t">Int</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="flat/Flat.html" t="n">Flat</a>[<span data-unresolved-link="" t="t">Int</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/given_Flat_Int$.html" t="n">given_Flat_Int</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/given_Flat_Long$.html" t="n" class="documentableName ">given_Flat_Long</a><span t="k"> extends </span><a href="flat/Flat.html" t="t">Flat</a>[<span data-unresolved-link="" t="t">Long</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="flat/Flat.html" t="n">Flat</a>[<span data-unresolved-link="" t="t">Long</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/given_Flat_Long$.html" t="n">given_Flat_Long</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/given_Flat_Natural$.html" t="n" class="documentableName ">given_Flat_Natural</a><span t="k"> extends </span><a href="flat/Flat.html" t="t">Flat</a>[<a href="flat/Natural.html" t="t">Natural</a>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="flat/Flat.html" t="n">Flat</a>[<a href="flat/Natural.html" t="t">Natural</a>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/given_Flat_Natural$.html" t="n">given_Flat_Natural</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/given_Flat_String$.html" t="n" class="documentableName ">given_Flat_String</a><span t="k"> extends </span><a href="flat/Flat.html" t="t">Flat</a>[<span data-unresolved-link="" t="t">String</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="flat/Flat.html" t="n">Flat</a>[<span data-unresolved-link="" t="t">String</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/given_Flat_String$.html" t="n">given_Flat_String</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="flat/given_Flat_Unit$.html" t="n" class="documentableName ">given_Flat_Unit</a><span t="k"> extends </span><a href="flat/Flat.html" t="t">Flat</a>[<span data-unresolved-link="" t="t">Unit</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="flat/Flat.html" t="n">Flat</a>[<span data-unresolved-link="" t="t">Unit</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="flat/given_Flat_Unit$.html" t="n">given_Flat_Unit</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+      <section id="Types">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Types</h4>
+        </div>
+        <div class="documentableElement" id="HSRIdentityHashMap-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">type </span></span><a href="flat.html#HSRIdentityHashMap-0" t="n" class="documentableName ">HSRIdentityHashMap</a> = <span data-unresolved-link="" t="t">IdentityHashMap</span>[<a href="flat/HashConsedRef.html" t="t">HashConsedRef</a>[<span t="k">_</span>], <a href="flat/HashConsedRef.html" t="t">HashConsedRef</a>[<span t="k">_</span>]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="HashConsedReprRefFlat-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">type </span></span><a href="flat.html#HashConsedReprRefFlat-0" t="n" class="documentableName ">HashConsedReprRefFlat</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>] = <a href="flat/HashConsedReprFlat.html" t="t">HashConsedReprFlat</a>[<span data-unresolved-link="" t="t">A</span>, <a href="flat/HashConsedRef.html" t="t">HashConsedRef</a>[<span data-unresolved-link="" t="t">A</span>]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="Uint8Array-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">type </span></span><a href="flat.html#Uint8Array-0" t="n" class="documentableName ">Uint8Array</a> = <span data-unresolved-link="" t="t">Array</span>[<span data-unresolved-link="" t="t">Byte</span>]
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Concrete-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete methods</h4>
+        </div>
+        <div class="documentableElement" id="byteAsBitString-735">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#byteAsBitString-735" t="n" class="documentableName ">byteAsBitString</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">b</span>: <span data-unresolved-link="" t="t">Byte</span>): <span data-unresolved-link="" t="t">String</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Renders a byte as its 8-character binary string, e.g. <code>0x0b</code> → <code>"00001011"</code>. Debug aid for <a href="flat/EncoderState.html#toString-0">EncoderState.toString</a>/<a href="flat/DecoderState.html#toString-0">DecoderState.toString</a>.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Renders a byte as its 8-character binary string, e.g. <code>0x0b</code> → <code>"00001011"</code>. Debug aid for <a href="flat/EncoderState.html#toString-0">EncoderState.toString</a>/<a href="flat/DecoderState.html#toString-0">DecoderState.toString</a>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="decode-fffff7ee">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#decode-fffff7ee" t="n" class="documentableName ">decode</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span> : <a href="flat/Flat.html" t="t">Flat</a>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">dec</span>: <a href="flat/DecoderState.html" t="t">DecoderState</a>): <span data-unresolved-link="" t="t">A</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="encode-62">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#encode-62" t="n" class="documentableName ">encode</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span> : <a href="flat/Flat.html" t="t">Flat</a>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">a</span>: <span t="t">A</span>, <span t="k"></span><span data-unresolved-link="" t="n">enc</span>: <a href="flat/EncoderState.html" t="t">EncoderState</a>): <span data-unresolved-link="" t="t">Unit</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="iterableFlat-1ea">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#iterableFlat-1ea" t="n" class="documentableName ">iterableFlat</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span> : <a href="flat/Flat.html" t="t">Flat</a>, <span t="k"></span><span data-unresolved-link="" t="t">C</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">Iterable</span>[<span t="t">A</span>]](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">factory</span>: <span data-unresolved-link="" t="t">Factory</span>[<span t="t">A</span>, <span t="t">C</span>]): <a href="flat/Flat.html" t="t">Flat</a>[<span data-unresolved-link="" t="t">C</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Flat encoding for collections as flat lists: each element is prefixed by a <code>1</code> bit, terminated by a <code>0</code> bit (<code>List a = Nil | Cons a (List a)</code> with one tag bit per node).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Flat encoding for collections as flat lists: each element is prefixed by a <code>1</code> bit, terminated by a <code>0</code> bit (<code>List a = Nil | Cons a (List a)</code> with one tag bit per node).</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="word7Bytes-876">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#word7Bytes-876" t="n" class="documentableName ">word7Bytes</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">n</span>: <span data-unresolved-link="" t="t">Long</span>): <span data-unresolved-link="" t="t">Array</span>[<span data-unresolved-link="" t="t">Byte</span>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Encodes <code>n</code> (treated as an unsigned 64-bit value) as a variable-length byte array: 7 payload bits per byte, least-significant group first, high bit set on every byte except the last. This is the byte layout of flat's <code>data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList</code>.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Encodes <code>n</code> (treated as an unsigned 64-bit value) as a variable-length byte array: 7 payload bits per byte, least-significant group first, high bit set on every byte except the last. This is the byte layout of flat's <code>data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList</code>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="word7BytesCount-fffff563">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#word7BytesCount-fffff563" t="n" class="documentableName ">word7BytesCount</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">n</span>: <span data-unresolved-link="" t="t">Long</span>): <span data-unresolved-link="" t="t">Int</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Number of bytes in the variable-length 7-bit encoding of <code>n</code>, treating <code>n</code> as an unsigned 64-bit value.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Number of bytes in the variable-length 7-bit encoding of <code>n</code>, treating <code>n</code> as an unsigned 64-bit value.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="zagZig-fffffbe0">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#zagZig-fffffbe0" t="n" class="documentableName ">zagZig</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">u</span>: <span data-unresolved-link="" t="t">Int</span>): <span data-unresolved-link="" t="t">Int</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Inverse of <a href="flat.html#zigZag-fffffbe0">zigZag(x:Int)*</a>.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Inverse of <a href="flat.html#zigZag-fffffbe0">zigZag(x:Int)*</a>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="zigZag-fffffbe0">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#zigZag-fffffbe0" t="n" class="documentableName ">zigZag</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">x</span>: <span data-unresolved-link="" t="t">Int</span>): <span data-unresolved-link="" t="t">Int</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>ZigZag encoding: maps signed values to unsigned so small magnitudes of either sign get short varint encodings (0 → 0, -1 → 1, 1 → 2, -2 → 3, 2 → 4, ...). Total over the whole Int/Long range: the doubling overflow is intentional and is inverted by <span data-unresolved-link="">zagZig</span>. https://gist.github.com/mfuerstenau/ba870a29e16536fdbaba</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>ZigZag encoding: maps signed values to unsigned so small magnitudes of either sign get short varint encodings (0 → 0, -1 → 1, 1 → 2, -2 → 3, 2 → 4, ...). Total over the whole Int/Long range: the doubling overflow is intentional and is inverted by <span data-unresolved-link="">zagZig</span>. <a href="https://gist.github.com/mfuerstenau/ba870a29e16536fdbaba">https://gist.github.com/mfuerstenau/ba870a29e16536fdbaba</a></p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Givens">
+     <div data-togglable="Givens" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Givens" class="h400">Givens</h3>
+      </div>
+      <section id="Givens">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Givens</h4>
+        </div>
+        <div class="documentableElement" id="given_Flat_Array-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="flat.html#given_Flat_Array-0" t="n" class="documentableName ">given_Flat_Array</a>: <a href="flat/Flat.html" t="t">Flat</a>[<span data-unresolved-link="" t="t">Array</span>[<span data-unresolved-link="" t="t">Byte</span>]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Flat_BigInt-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="flat.html#given_Flat_BigInt-0" t="n" class="documentableName ">given_Flat_BigInt</a>: <a href="flat/given_Flat_BigInt$.html" t="t">given_Flat_BigInt</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Flat_Boolean-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="flat.html#given_Flat_Boolean-0" t="n" class="documentableName ">given_Flat_Boolean</a>: <a href="flat/given_Flat_Boolean$.html" t="t">given_Flat_Boolean</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Flat_Int-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="flat.html#given_Flat_Int-0" t="n" class="documentableName ">given_Flat_Int</a>: <a href="flat/given_Flat_Int$.html" t="t">given_Flat_Int</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Flat_Long-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="flat.html#given_Flat_Long-0" t="n" class="documentableName ">given_Flat_Long</a>: <a href="flat/given_Flat_Long$.html" t="t">given_Flat_Long</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Flat_Natural-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="flat.html#given_Flat_Natural-0" t="n" class="documentableName ">given_Flat_Natural</a>: <a href="flat/given_Flat_Natural$.html" t="t">given_Flat_Natural</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Flat_String-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="flat.html#given_Flat_String-0" t="n" class="documentableName ">given_Flat_String</a>: <a href="flat/given_Flat_String$.html" t="t">given_Flat_String</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="given_Flat_Unit-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="flat.html#given_Flat_Unit-0" t="n" class="documentableName ">given_Flat_Unit</a>: <a href="flat/given_Flat_Unit$.html" t="t">given_Flat_Unit</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="indexedSeqFlat-727">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="flat.html#indexedSeqFlat-727" t="n" class="documentableName ">indexedSeqFlat</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span> : <a href="flat/Flat.html" t="t">Flat</a>]: <a href="flat/Flat.html" t="t">Flat</a>[<span data-unresolved-link="" t="t">IndexedSeq</span>[<span data-unresolved-link="" t="t">A</span>]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="listFlat-727">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="flat.html#listFlat-727" t="n" class="documentableName ">listFlat</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span> : <a href="flat/Flat.html" t="t">Flat</a>]: <a href="flat/Flat.html" t="t">Flat</a>[<span data-unresolved-link="" t="t">List</span>[<span data-unresolved-link="" t="t">A</span>]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="pairFlat-fffff3e2">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">given </span></span><a href="flat.html#pairFlat-fffff3e2" t="n" class="documentableName ">pairFlat</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span> : <a href="flat/Flat.html" t="t">Flat</a>, <span t="k"></span><span data-unresolved-link="" t="t">B</span> : <a href="flat/Flat.html" t="t">Flat</a>]: <span data-unresolved-link="" t="t">pairFlat</span>[<span data-unresolved-link="" t="t">A</span>, <span data-unresolved-link="" t="t">B</span>]
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Extensions">
+     <div data-togglable="Extensions" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Extensions" class="h400">Extensions</h3>
+      </div>
+      <section id="Extensions">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Extensions</h4>
+        </div>
+        <div>
+         <span class="groupHeader"><span t="k">extension </span>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">s</span>: <a href="flat/HashConsed$$State.html" t="t">State</a>)</span>
+         <div class="documentableElement" id="allocKey-fffff1fa">
+          <div class="documentableElement-expander">
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#allocKey-fffff1fa" t="n" class="documentableName ">allocKey</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">a</span>: <span data-unresolved-link="" t="t">AnyRef</span>, <span t="k"></span><span data-unresolved-link="" t="n">tag</span>: <a href="flat/HashConsed$.html#Tag-0" t="t">Tag</a>): <span data-unresolved-link="" t="t">Int</span>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="finishCallbacks-fffff3c5">
+          <div class="documentableElement-expander">
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#finishCallbacks-fffff3c5" t="n" class="documentableName ">finishCallbacks</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">debug</span>: <span data-unresolved-link="" t="t">Boolean</span> = ...): <span data-unresolved-link="" t="t">Unit</span>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="lookup-8e4">
+          <div class="documentableElement-expander">
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#lookup-8e4" t="n" class="documentableName ">lookup</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">ihc</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">tag</span>: <a href="flat/HashConsed$.html#Tag-0" t="t">Tag</a>): <span data-unresolved-link="" t="t">Option</span>[<span data-unresolved-link="" t="t">Either</span>[<a href="flat/HashConsed$$ForwardRefAcceptor.html" t="t">ForwardRefAcceptor</a>, <a href="flat/HashConsedRef.html" t="t">HashConsedRef</a>[<span t="k">_</span>]]]
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="lookupValue-8e4">
+          <div class="documentableElement-expander">
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#lookupValue-8e4" t="n" class="documentableName ">lookupValue</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">ihc</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">tag</span>: <a href="flat/HashConsed$.html#Tag-0" t="t">Tag</a>): <span data-unresolved-link="" t="t">Option</span>[<a href="flat/HashConsedRef.html" t="t">HashConsedRef</a>[<span t="k">_</span>]]
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="putForwardRef-156">
+          <div class="documentableElement-expander">
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#putForwardRef-156" t="n" class="documentableName ">putForwardRef</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">ihc</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">tag</span>: <a href="flat/HashConsed$.html#Tag-0" t="t">Tag</a>, <span t="k"></span><span data-unresolved-link="" t="n">action</span>: <span data-unresolved-link="" t="t">AnyRef</span><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Unit</span>): <span data-unresolved-link="" t="t">Unit</span>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="putForwardValueAcceptor-fffff673">
+          <div class="documentableElement-expander">
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#putForwardValueAcceptor-fffff673" t="n" class="documentableName ">putForwardValueAcceptor</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">ihc</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">tag</span>: <a href="flat/HashConsed$.html#Tag-0" t="t">Tag</a>, <span t="k"></span><span data-unresolved-link="" t="n">acceptor</span>: <span t="t">A</span><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Unit</span>): <span data-unresolved-link="" t="t">Unit</span>
+            </div>
+           </div>
+          </div>
+         </div>
+         <div class="documentableElement" id="setRef-fffffcb5">
+          <div class="documentableElement-expander">
+           <div class="header monospace mono-medium">
+            <div class="signature">
+             <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="flat.html#setRef-fffffcb5" t="n" class="documentableName ">setRef</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">ihc</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">tag</span>: <a href="flat/HashConsed$.html#Tag-0" t="t">Tag</a>, <span t="k"></span><span data-unresolved-link="" t="n">a</span>: <a href="flat/HashConsedRef.html" t="t">HashConsedRef</a>[<span t="t">A</span>]): <span data-unresolved-link="" t="t">Unit</span>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#members-list">Members list</a><ul><li><a href="#Type-members">Type members</a><ul><li><a href="#Classlikes">Classlikes</a></li><li><a href="#Types">Types</a></li></ul></li><li><a href="#Value-members">Value members</a><ul><li><a href="#Concrete-methods">Concrete methods</a></li></ul></li><li><a href="#Givens">Givens</a><ul><li><a href="#Givens">Givens</a></li></ul></li><li><a href="#Extensions">Extensions</a><ul><li><a href="#Extensions">Extensions</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

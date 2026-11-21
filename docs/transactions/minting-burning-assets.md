@@ -1,0 +1,237 @@
+Source: https://scalus.org/docs/transactions/minting-burning-assets
+
+# Minting and Burning Native Tokens on Cardano
+
+This guide covers how to create (mint) and destroy (burn) native tokens on Cardano using TxBuilder.
+
+## Understanding Cardano Minting Policies
+
+A minting policy is a Plutus script that controls when tokens can be created or destroyed. The policy ID (the script hash) becomes part of the token identifier.
+
+  Minting creates tokens but doesn't automatically send them anywhere. You must explicitly add outputs to receive the newly minted tokens.
+
+## Minting Native Tokens
+
+To mint tokens, use the `mint()` method with your minting policy script:
+
+```scala copy
+import scalus.uplc.builtin.ByteString.hex
+import scalus.cardano.ledger.{AssetName, PolicyId}
+
+val mintingPolicy: Script.PlutusV3 = // ... your minting policy script
+val policyId = mintingPolicy.scriptHash
+val assetName = AssetName(hex"4d795368696e79546f6b656e")  // "MyShinyToken" in hex
+val redeemer = MintRedeemer(...)
+
+val assets = Map(
+  assetName -> 1000L  // Mint 1000 tokens
+)
+
+TxBuilder(env)
+  .spend(utxo)
+  .mint(mintingPolicy, assets, redeemer)
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+```
+
+This mints 1000 tokens and sends them to the recipient along with 2 ADA.
+
+## Minting Multiple Native Token Types
+
+Mint different tokens under the same policy:
+
+```scala copy
+val tokenA = AssetName(hex"546f6b656e41")  // "TokenA"
+val tokenB = AssetName(hex"546f6b656e42")  // "TokenB"
+
+val assets = SortedMap(
+  tokenA -> 500L,
+  tokenB -> 300L
+)
+
+TxBuilder(env)
+  .spend(utxo)
+  .mint(mintingPolicy, assets, redeemer)
+  .payTo(
+    recipient,
+    Value(
+      Coin.ada(2),
+      MultiAsset(SortedMap(policyId -> assets))
+    )
+  )
+  .build(changeTo = changeAddress)
+```
+
+## Burning Native Tokens
+
+To burn tokens, use negative amounts:
+
+```scala copy
+val assets = Map(
+  assetName -> -100L  // Burn 100 tokens
+)
+
+TxBuilder(env)
+  .spend(utxoWithTokens)  // Must contain the tokens being burned
+  .mint(mintingPolicy, assets, redeemer)
+  .payTo(recipient, Value.ada(5))
+  .build(changeTo = changeAddress)
+```
+
+The tokens are removed from circulation and the UTxO containing them is consumed.
+
+## Using Reference Scripts
+
+If your minting policy is stored as a reference script, use `mint()` with the policy ID:
+
+```scala copy
+val policyId = mintingPolicy.scriptHash
+
+TxBuilder(env)
+  .spend(utxo)
+  .references(mintingPolicyReferenceUtxo)
+  .mint(policyId, assets, redeemer)
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+```
+
+This avoids including the script in the transaction, reducing transaction size.
+
+## Minting with Required Signers
+
+If your minting policy requires specific signatures:
+
+```scala copy
+val assets = Map(assetName -> 1000L)
+
+TxBuilder(env)
+  .spend(utxo)
+  .mint(mintingPolicy, assets, redeemer)
+  .requireSignature(pubKeyHash)
+  .payTo(recipient, Value.asset(mintingPolicy.scriptHash, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+  .sign(signer)  // Must provide required signature
+```
+
+## How to Mint NFTs on Cardano
+
+Mint a unique NFT (1 token, typically with amount = 1):
+
+```scala copy
+val nftName = AssetName(hex"4d794e4654")  // "MyNFT"
+val nftAssets = Map(nftName -> 1L)
+
+TxBuilder(env)
+  .spend(utxo)
+  .mint(mintingPolicy, nftAssets, redeemer)
+  .payTo(
+    recipient,
+    Value.asset(mintingPolicy.scriptHash, nftName, 1L, Coin.ada(2))
+  )
+  .build(changeTo = changeAddress)
+```
+
+The minting policy typically ensures uniqueness by checking for a specific UTxO or enforcing a one-time mint.
+
+## Minting and Burning in One Transaction
+
+You can mint and burn in the same transaction:
+
+```scala copy
+val assets = Map(
+  tokenA -> 500L,   // Mint 500 of tokenA
+  tokenB -> -100L   // Burn 100 of tokenB
+)
+
+TxBuilder(env)
+  .spend(utxoWithTokenB)  // Must contain tokenB for burning
+  .mint(mintingPolicy, assets, redeemer)
+  .payTo(
+    recipient,
+    Value.asset(mintingPolicy.scriptHash, tokenA, 500L, Coin.ada(2))
+  )
+  .build(changeTo = changeAddress)
+```
+
+## Multiple Policies
+
+Mint tokens under different policies by chaining multiple `mint()` calls:
+
+```scala copy
+TxBuilder(env)
+  .spend(utxo)
+  .mint(policy1, assets1, redeemer1)
+  .mint(policy2, assets2, redeemer2)
+  .payTo(recipient, combinedValue)
+  .build(changeTo = changeAddress)
+```
+
+Each policy is evaluated independently with its own redeemer.
+
+## Delayed Redeemers for Minting
+
+When the redeemer depends on the final transaction structure (e.g., for self-referential scripts), use a delayed redeemer:
+
+```scala copy
+TxBuilder(env)
+  .spend(utxo)
+  .mint(mintingPolicy, assets, (tx: Transaction) => computeRedeemer(tx))
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+```
+
+The redeemer function receives the assembled transaction and computes the appropriate redeemer data.
+
+## Unified Mint API with Script Witness
+
+For consistency with other script operations (staking, governance), you can use the unified `mint()` API with explicit script witnesses:
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+// With attached script
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .mint(policyId, assets, attached(mintingPolicy, redeemer))
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+
+// With reference script
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .references(mintingPolicyRefUtxo)
+  .mint(policyId, assets, reference(redeemer))
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+
+// With delayed redeemer
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .mint(policyId, assets, attached(mintingPolicy, tx => computeRedeemer(tx)))
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+```
+
+  The unified API always uses `policyId` as the first parameter, with the witness determining whether the script is attached or referenced.
+
+### Native Script Minting
+
+For native script minting policies:
+
+```scala copy
+import scalus.cardano.txbuilder.NativeScriptWitness.*
+
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .mint(policyId, assets, attached(nativeScript))
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+```
+
+## Next Steps
+
+- **[Validator Interactions](/docs/transactions/validator-interactions)** - Work with spending validators and minting policies
+- **[Advanced Features](/docs/transactions/advanced-features)** - Learn about reference scripts and advanced patterns

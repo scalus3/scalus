@@ -1,0 +1,113 @@
+Source: https://scalus.org/docs/advanced-data-structures/bilinear-accumulators
+
+# Bilinear Accumulators
+
+Bilinear accumulators represent a set as a single elliptic curve point. Unlike Merkle trees and tries (which use hash chains), accumulators use **polynomial commitments** and **pairings** on the BLS12-381 curve.
+
+**Best for:** Large sets where constant proof size matters — many proofs per transaction, tight tx size limits approaching the 16KB maximum.
+
+## How It Works
+
+The high-level intuition:
+
+- A set &#123;a₁, a₂, …, aₙ&#125; is encoded as a polynomial P(x) = (x + a₁)(x + a₂)…(x + aₙ).
+- This polynomial is **committed** to a single elliptic curve point using a polynomial commitment scheme (specifically, [KZG commitments](https://dankradfeist.de/ethereum/2020/06/16/kate-polynomial-commitments.html)).
+- A commitment is computed from the polynomial coefficients and a trusted setup: given P(x) = c₀ + c₁x + … + cₙxⁿ and CRS points &#91;g, τ·g, τ²·g, …&#93;, the commitment is `c₀·g + c₁·(τ·g) + … + cₙ·(τⁿ·g) = P(τ)·g` — a single group element (48 or 96 bytes) that uniquely represents the polynomial (and thus the set).
+- Properties of the polynomial (like whether it has certain roots, i.e., whether elements are in the set) can then be proven with small proofs verified using **pairings**.
+
+The accumulator value is a single group element — constant size regardless of set size.
+
+## Trusted Setup (CRS)
+
+The accumulator requires a **Common Reference String** (CRS): a list of curve points &#91;g, τ·g, τ²·g, …, τᵈ·g&#93; where τ is a secret that must be destroyed after setup. Anyone who knows τ can forge proofs, so the setup must be performed by a trusted party or via a multi-party ceremony where at least one participant deletes their share. The maximum set size is bounded by the degree d.
+
+## Proofs
+
+- **Membership:** to prove S ⊆ U, compute quotient Q = P<sub>U</sub> / P<sub>S</sub> and commit it. The verifier checks a pairing equation confirming that P<sub>S</sub> divides P<sub>U</sub>.
+- **Non-membership:** to prove D ∩ U = ∅, use extended GCD to find S, T such that S·P<sub>U</sub> + T·P<sub>D</sub> = 1 (possible only when the polynomials share no roots). The proof is (S, T) committed to curve points.
+
+## When to Use
+
+Accumulators shine when proof size is critical — each proof is ~48–96 bytes (1–2 compressed curve points), regardless of set size. The trade-off is ~35× more CPU for on-chain verification compared to tries. Use them when you need many proofs per transaction or are hitting transaction size limits.
+
+## Scalus API
+
+Any trusted setup ceremony can produce a CRS. Scalus provides:
+
+- `BilinearAccumulatorProver.trustedSetup(tau, maxDegree)` to run your own ceremony — generate τ, create the CRS, then delete τ
+- `Setup.fromPoints(g1Powers, g2Powers)` to load CRS points from an external ceremony
+- The `scalus-ethereum-kzg-ceremony` module bundles the [Ethereum KZG ceremony](https://ceremony.ethereum.org/) as a ready-made production CRS via `EthereumKzgCeremony.loadSetup()`
+
+### G1 vs G2 Variants
+
+Scalus provides two variants depending on which curve group holds the accumulator point. BLS12-381 has two groups: G1 (48-byte points, cheaper arithmetic) and G2 (96-byte points).
+
+| | **G2 Accumulator** | **G1 Accumulator** |
+|---|---|---|
+| Accumulator on | G2 | G1 |
+| Off-chain prover needs | G2 powers | G1 powers |
+| On-chain verifier needs | G1 powers | G2 powers |
+| Proof on | G2 | G1 |
+| On-chain cost | Cheaper (G1 MSM) | Slightly more expensive (G2 MSM) |
+
+Both use 2 pairings for verification. The G2 variant would be cheaper on-chain (G1 MSM instead of G2 MSM) but the off-chain prover requires many G2 powers — the Ethereum KZG ceremony has 32,768 G1 powers but only 65 G2 powers, so only the G1 variant is practical with it.
+
+## Background Reading
+
+- **KZG polynomial commitments** — Dankrad Feist's [KZG Polynomial Commitments](https://dankradfeist.de/ethereum/2020/06/16/kate-polynomial-commitments.html) explains the construction from scratch.
+- **Elliptic curve pairings** — Vitalik Buterin's [Exploring Elliptic Curve Pairings](https://medium.com/@VitalikButerin/exploring-elliptic-curve-pairings-c73c1f6b6b0) gives an accessible introduction.
+- **Bilinear accumulators** — The original construction is from [Nguyen (2005)](https://link.springer.com/chapter/10.1007/978-3-540-30580-4_19). For a more accessible treatment, see [Boneh, Bünz, Fisch: Batching Techniques for Accumulators](https://eprint.iacr.org/2018/1188), Section 3.
+
+## Example: Accumulator-Based Set Validator
+
+The [SetBenchAccValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchAccValidator.scala) demonstrates membership verification using the G1 accumulator with the Ethereum KZG ceremony as the trusted setup.
+
+**On-chain** — verify membership and update the accumulator:
+
+```scala
+import scalus.cardano.onchain.plutus.crypto.accumulator.G1Accumulator
+import scalus.cardano.onchain.plutus.prelude.bls12_381.G2
+
+// Decompress the accumulator and proof from datum/redeemer
+val acc = bls12_381_G1_uncompress(state.root)
+val proof = bls12_381_G1_uncompress(action.compressedProof)
+
+// Load CRS (G2 powers from the trusted setup)
+val g2_0 = G2.uncompress(SetBenchCRS.g2_0)
+val g2_1 = G2.uncompress(SetBenchCRS.g2_1)
+val crs = List(g2_0, g2_1)
+
+// Verify the element is in the set
+require(
+  G1Accumulator.verifyMembership(crs, acc, List(action.element), proof),
+  "Membership proof failed"
+)
+
+// After deletion, the membership proof IS the new accumulator
+val newRoot = bls12_381_G1_compress(proof)
+```
+
+**Off-chain** — build the accumulator and generate proofs:
+
+```scala
+import scalus.crypto.accumulator.EthereumKzgCeremony
+import scalus.crypto.accumulator.BilinearAccumulatorProver.*
+
+// Load the Ethereum KZG ceremony as trusted setup
+val ceremony = EthereumKzgCeremony.loadCeremony()
+val setup = Setup.fromPoints(ceremony.g1Monomial.toVector, ceremony.g2Monomial.toVector)
+
+// Create accumulator from a set of elements (as BigInt field elements)
+val elements: Vector[BigInt] = keys.map(k => byteStringToInteger(true, blake2b_256(k)))
+val acc = setup.accumulate(elements)
+
+// Generate a membership proof for a single element
+val proof = setup.proveMembership(elements, targetElement)
+```
+
+See also: [CollectionMembershipBudgetTest](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/test/scala/scalus/examples/setbench/CollectionMembershipBudgetTest.scala) — budget analysis comparing accumulator vs MPF variants at different collection sizes.
+
+## Related
+
+- [Merkle Patricia Forestry](/docs/advanced-data-structures/merkle-patricia-forestry) — hash-based alternative with ~35× less CPU but larger proofs
+- [Benchmarking Authenticated Collections](https://lantr.io/blog/scalus-authenticated-collections-benchmarks/) — fee breakdown showing how the ~35× CPU difference translates to actual transaction costs

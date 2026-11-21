@@ -1,0 +1,456 @@
+Source: https://scalus.org/docs/language-guide/control-flow
+
+# Control Flow
+
+Scalus provides control flow constructs for directing program execution in smart contracts. These constructs—if-then-else and pattern matching—are sufficient for most validator logic and compile efficiently to Plutus Core.
+
+## If-Then-Else
+
+The `if-then-else` expression is the primary conditional construct.
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.{*, given}
+
+compile {
+  val balance = BigInt(1000)
+  val threshold = BigInt(500)
+
+  // Basic if-then-else
+  val status = if balance >= threshold then "sufficient" else "insufficient"
+
+  // Nested conditionals
+  val category =
+    if balance == BigInt(0) then "empty"
+    else if balance < BigInt(100) then "low"
+    else if balance < BigInt(1000) then "medium"
+    else "high"
+
+  // Multi-line blocks
+  val result = if balance > threshold then
+    val fee = BigInt(10)
+    balance - fee
+  else
+    balance
+
+  // Expression result
+  val doubled = if balance > BigInt(0) then balance * 2 else BigInt(0)
+}
+```
+
+**Key Points:**
+- Both branches must return the same type
+- Can be used as an expression (returns a value)
+- Supports nested conditions
+
+## Pattern Matching
+
+Pattern matching is a powerful feature for deconstructing and analyzing data structures.
+
+### Basic Pattern Matching
+
+```scala
+enum State:
+  case Empty
+  case Active(balance: BigInt)
+  case Locked(balance: BigInt, until: BigInt)
+
+compile {
+  val state: State = State.Active(BigInt(1000))
+
+  // Match on enum variants
+  state match
+    case State.Empty =>
+      BigInt(0)
+    case State.Active(balance) =>
+      balance
+    case State.Locked(balance, until) =>
+      if until < currentTime then balance else BigInt(0)
+
+  // All cases must be covered or use wildcard
+  state match
+    case State.Active(balance) => balance
+    case _ => BigInt(0)  // Wildcard catches all other cases
+}
+```
+
+### Nested Patterns
+
+You can pattern match on nested structures:
+
+```scala
+case class Token(policy: ByteString, name: ByteString)
+case class Balance(token: Token, amount: BigInt)
+
+enum Wallet:
+  case Empty
+  case Single(balance: Balance)
+  case Multiple(balances: List[Balance])
+
+compile {
+  val wallet: Wallet = Wallet.Single(
+    Balance(Token(hex"abc", hex"def"), BigInt(1000))
+  )
+
+  // Nested pattern matching
+  val totalAmount = wallet match
+    case Wallet.Empty =>
+      BigInt(0)
+    case Wallet.Single(Balance(Token(policy, _), amount)) =>
+      amount  // Extract nested fields
+    case Wallet.Multiple(balances) =>
+      balances.map(_.amount).foldLeft(BigInt(0))(_ + _)
+}
+```
+
+### Pattern Bindings
+
+Use `@` to bind a pattern to a variable while also destructuring it:
+
+```scala
+case class Account(owner: ByteString, balance: BigInt)
+
+compile {
+  val state = State.Active(Account(hex"abc", BigInt(1000)))
+
+  state match
+    case State.Active(acc @ Account(owner, balance)) =>
+      // Both `acc` and individual fields available
+      if balance > BigInt(500) then acc.balance else BigInt(0)
+    case _ =>
+      BigInt(0)
+}
+```
+
+### List Patterns
+
+```scala
+compile {
+  val numbers = List(1, 2, 3, 4, 5)
+
+  numbers match
+    case Nil =>
+      "empty list"
+    case head :: Nil =>
+      s"single element: $head"
+    case first :: second :: rest =>
+      s"at least two elements: $first and $second"
+    case _ =>
+      "other"
+}
+```
+
+### Tuple Patterns
+
+```scala
+compile {
+  val pair = (BigInt(10), hex"abc")
+
+  pair match
+    case (amount, hash) =>
+      if amount > BigInt(0) then hash else hex""
+}
+```
+
+### Guard Clauses
+
+Guards add conditions to patterns using `if`:
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.*
+
+compile {
+  def categorize(opt: Option[BigInt]): String =
+    opt match
+      case Option.Some(v) if v > BigInt(100) => "large"
+      case Option.Some(v) if v > BigInt(0) => "positive"
+      case Option.Some(v) if v < BigInt(0) => "negative"
+      case Option.Some(_) => "zero"
+      case Option.None => "none"
+
+  // Complex guards with multiple conditions
+  def processItem(list: List[BigInt]): String =
+    list match
+      case List.Cons(h, t) if h > BigInt(0) && t.length > 0 => "positive with tail"
+      case List.Cons(h, _) if h > BigInt(0) => "positive no tail"
+      case List.Cons(_, t) if t.length > 0 => "has tail"
+      case _ => "other"
+}
+```
+
+### Pattern Matching with Constants
+
+Pattern matching on boolean and string constants is supported:
+
+```scala
+compile {
+  // Boolean patterns
+  val flag = true
+  flag match
+    case true => "yes"
+    case false => "no"
+
+  // String patterns
+  val cmd = "start"
+  cmd match
+    case "start" => BigInt(1)
+    case "stop" => BigInt(0)
+    case _ => BigInt(-1)
+}
+```
+
+  Integer constant patterns like `case BigInt(0) =>` are not yet supported. Use guards instead: `case n if n == BigInt(0) =>`.
+
+## Exhaustiveness Checking
+
+Scala's compiler ensures all cases are covered:
+
+```scala
+enum Color:
+  case Red
+  case Green
+  case Blue
+
+compile {
+  val color: Color = Color.Red
+
+  // Compiler ensures all cases are handled
+  color match
+    case Color.Red => "red"
+    case Color.Green => "green"
+    case Color.Blue => "blue"
+    // No wildcard needed - all cases covered
+
+  // Or use wildcard for remaining cases
+  color match
+    case Color.Red => "red"
+    case _ => "not red"
+}
+```
+
+## Error Handling
+
+### Using throw
+
+`throw` terminates execution immediately, compiling to Plutus ERROR:
+
+```scala
+compile {
+  def validateAmount(amount: BigInt): BigInt =
+    if amount <= BigInt(0) then
+      throw new Exception("Amount must be positive")
+    else
+      amount
+
+  val validated = validateAmount(BigInt(100))  // OK
+  // validateAmount(BigInt(-1))  // Throws error
+}
+```
+
+**Error Messages:**
+- Error messages can be traced using `sir.toUplc(generateErrorTraces = true)`
+- Useful for debugging offchain
+- Keep messages concise to reduce script size
+
+### Using Option
+
+```scala
+compile {
+  def safeDivide(a: BigInt, b: BigInt): Option[BigInt] =
+    if b == BigInt(0) then None
+    else Some(a / b)
+
+  safeDivide(BigInt(10), BigInt(2)) match
+    case Some(result) => result
+    case None => BigInt(0)
+}
+```
+
+### Using Either
+
+```scala
+compile {
+  def validateTransfer(from: Account, amount: BigInt): Either[String, Account] =
+    if amount <= BigInt(0) then
+      Left("Invalid amount")
+    else if from.balance < amount then
+      Left("Insufficient balance")
+    else
+      Right(Account(from.owner, from.balance - amount))
+
+  validateTransfer(account, BigInt(500)) match
+    case Right(newAccount) => newAccount.balance
+    case Left(error) => throw new Exception(error)
+}
+```
+
+## Loops (Not Supported - Use Recursion)
+
+Scalus doesn't support `while` or `for` loops. Use recursion or higher-order functions instead:
+
+### Recursion Instead of Loops
+
+```scala
+compile {
+  // Sum using recursion
+  def sum(list: List[BigInt]): BigInt =
+    list match
+      case Nil => BigInt(0)
+      case head :: tail => head + sum(tail)
+
+  // Factorial using recursion
+  def factorial(n: BigInt): BigInt =
+    if n <= BigInt(1) then BigInt(1)
+    else n * factorial(n - 1)
+
+  // Find element using recursion
+  def find(list: List[BigInt], target: BigInt): Boolean =
+    list match
+      case Nil => false
+      case head :: tail =>
+        if head == target then true
+        else find(tail, target)
+}
+```
+
+### Higher-Order Functions Instead of Loops
+
+```scala
+compile {
+  val numbers = List(1, 2, 3, 4, 5)
+
+  // Sum - instead of for loop
+  val sum = numbers.foldLeft(BigInt(0))(_ + _)
+
+  // Filter - instead of filtering loop
+  val evens = numbers.filter(_ % 2 == 0)
+
+  // Transform - instead of transformation loop
+  val doubled = numbers.map(_ * 2)
+
+  // Count - instead of counting loop
+  val countLarge = numbers.filter(_ > 3).length
+
+  // All/Any - instead of validation loop
+  val allPositive = numbers.forall(_ > 0)
+  val anyLarge = numbers.exists(_ > 10)
+}
+```
+
+## Early Returns (Not Supported)
+
+Scalus doesn't support early returns. Use pattern matching or conditionals instead:
+
+### Instead of Early Return
+
+```scala
+// NOT SUPPORTED
+def process(value: BigInt): BigInt = {
+  if value < 0 then return 0  // Not supported
+  if value > 100 then return 100  // Not supported
+  value * 2
+}
+```
+
+### Use Pattern Matching or Nested Ifs
+
+```scala
+compile {
+  def process(value: BigInt): BigInt =
+    if value < BigInt(0) then BigInt(0)
+    else if value > BigInt(100) then BigInt(100)
+    else value * 2
+
+  // Or use match with guards
+  def processWithMatch(value: BigInt): BigInt =
+    value match
+      case v if v < BigInt(0) => BigInt(0)
+      case v if v > BigInt(100) => BigInt(100)
+      case v => v * 2
+}
+```
+
+## Best Practices
+
+1. **Prefer pattern matching over nested ifs** - More readable and safer
+2. **Always handle all cases** - Use wildcard for catch-all
+3. **Keep conditions simple** - Complex logic should be extracted to functions
+4. **Use meaningful patterns** - Destructure to give names to values
+5. **Avoid deep nesting** - Extract to helper functions
+6. **Use guards for filtering** - `case Some(v) if v > 0 => ...` is cleaner than nested ifs
+7. **Use recursion judiciously** - Be aware of stack depth
+8. **Leverage type system** - Let compiler check exhaustiveness
+
+## Common Patterns
+
+### Validation Pattern
+
+```scala
+compile {
+  def validate(input: BigInt): Either[String, BigInt] =
+    if input < BigInt(0) then
+      Left("Negative value")
+    else if input > BigInt(1000000) then
+      Left("Value too large")
+    else
+      Right(input)
+
+  validate(BigInt(500)) match
+    case Right(value) => value
+    case Left(error) => throw new Exception(error)
+}
+```
+
+### State Machine Pattern
+
+```scala
+enum State:
+  case Initial
+  case Processing(step: BigInt)
+  case Complete(result: BigInt)
+  case Failed(reason: String)
+
+compile {
+  def transition(state: State, input: BigInt): State =
+    state match
+      case State.Initial =>
+        if input > BigInt(0) then State.Processing(BigInt(1))
+        else State.Failed("Invalid input")
+
+      case State.Processing(step) =>
+        if step >= BigInt(10) then State.Complete(step * input)
+        else State.Processing(step + 1)
+
+      case State.Complete(_) | State.Failed(_) =>
+        state  // Terminal states
+}
+```
+
+### Safe Unwrapping Pattern
+
+```scala
+compile {
+  def getBalance(maybeAccount: Option[Account]): BigInt =
+    maybeAccount match
+      case Some(account) => account.balance
+      case None => BigInt(0)
+
+  // Or use getOrElse
+  val balance = maybeAccount.map(_.balance).getOrElse(BigInt(0))
+}
+```
+
+### List Processing Pattern
+
+```scala
+compile {
+  def processAll(items: List[BigInt]): BigInt =
+    items match
+      case Nil => BigInt(0)
+      case head :: tail =>
+        val processed = head * 2
+        processed + processAll(tail)
+
+  // Or use fold
+  val result = items.foldLeft(BigInt(0))((acc, item) => acc + item * 2)
+}
+```

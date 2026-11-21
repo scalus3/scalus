@@ -1,0 +1,274 @@
+Source: https://scalus.org/docs/transactions/building-first-transaction
+
+# How to Build Your First Cardano Transaction
+
+This guide walks you through building a simple Cardano transaction using Scalus TxBuilder. You'll learn the fundamental workflow: setting up the environment, building, and signing a transaction.
+
+## Set Up the `CardanoInfo`
+
+`CardanoInfo` encapsulates everything TxBuilder needs to construct valid transactions:
+- **Protocol parameters** for fee calculation, execution limits, and deposits
+- **Network** identifier (Mainnet or Testnet) for address validation
+- **Slot configuration** for time-based validity constraints
+
+### Pre-built Configurations
+
+Scalus provides ready-to-use configurations with embedded protocol parameters:
+
+```scala copy
+import scalus.cardano.ledger.*
+import scalus.cardano.txbuilder.*
+
+// Mainnet (production)
+val cardanoInfo = CardanoInfo.mainnet
+
+// Preprod testnet
+val preprodInfo = CardanoInfo.preprod
+
+// Preview testnet
+val previewInfo = CardanoInfo.preview
+```
+
+### Custom Configuration (Yaci DevKit Example)
+
+For local development with Yaci DevKit or other custom environments, load protocol parameters from JSON and configure the slot timing:
+
+```scala copy
+// Load params from Blockfrost API or cardano-cli
+val params = ProtocolParams.fromBlockfrostJson(blockfrostJsonString)
+// Or: ProtocolParams.fromCardanoCliJson(cliJsonString)
+
+// Yaci DevKit uses slot length of 1 second and start time of 0
+val yaciSlotConfig = SlotConfig(
+  zeroTime = 0L,
+  zeroSlot = 0L,
+  slotLength = 1000
+)
+
+val yaciDevKit = CardanoInfo(
+  protocolParams = params,
+  network = Network.Testnet,
+  slotConfig = yaciSlotConfig
+)
+```
+
+  The pre-built configurations use embedded protocol parameters that are updated periodically. For production use, consider querying current parameters from a node or API.
+
+## Working with Addresses
+
+Scalus provides convenient string interpolators for parsing Cardano bech32 addresses:
+
+```scala copy
+import scalus.cardano.address.Address.{addr, stake}
+import scalus.cardano.address.StakeAddress
+
+// Parse any Cardano address (Shelley, Stake, or Byron)
+val recipient = addr"addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
+val testnet = addr"addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgs3xyj0d"
+
+// Parse stake addresses specifically (returns StakeAddress type)
+val stakeAddr: StakeAddress = stake"stake1uyehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gh6ffgw"
+```
+
+These interpolators validate the address format at runtime and throw an exception for invalid addresses.
+
+    The `addr` interpolator returns `Address` (the base trait), while `stake` returns `StakeAddress` specifically. Use `stake` when you need the more specific type.
+
+## Connect to the Blockchain and Query UTXOs
+
+To interact with the Cardano blockchain, you need a `BlockchainProvider`. Connect to a Blockfrost-compatible API and query UTXOs to spend:
+
+```scala copy
+import scalus.cardano.node.BlockfrostProvider
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
+
+// Connect to preprod testnet (get API key at blockfrost.io)
+val provider = BlockfrostProvider.preprod("your-blockfrost-api-key").await(30.seconds)
+
+// Query UTXOs at your address
+val myAddress = addr"addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer..."
+val utxos = provider.findUtxos(myAddress).await(30.seconds).getOrElse(Map.empty)
+```
+
+See [Blockchain Providers](/docs/dapp-development/blockchain-providers) for more details on providers and advanced UTXO queries.
+
+## Build the Transaction
+
+Use TxBuilder's fluent API to specify inputs, outputs, and change handling:
+
+```scala copy
+import scalus.cardano.address.Address.addr
+import scalus.cardano.ledger.Value
+
+// Your UTxOs and addresses
+val myUtxo: Utxo = // ... UTxO to spend
+val recipientAddress = addr"addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer..."
+val changeAddress = addr"addr1qy..."
+
+val builder = TxBuilder(cardanoInfo)
+  .spend(myUtxo)                          // Add input
+  .payTo(recipientAddress, Value.ada(10)) // Send 10 ADA
+  .build(changeTo = changeAddress)        // Finalize transaction with change
+```
+
+The `build()` method:
+- Calculates the transaction fee based on size
+- Creates a change output with the remaining value
+- Validates that the transaction is balanced
+- Returns a new builder with the finalized transaction
+
+    `Value.ada(10)` creates a Value with 10 million lovelace (10 ADA) and no extra tokens.
+
+## Sign the Transaction
+
+Add signatures to authorize spending the inputs. You can create a `TransactionSigner` in two ways:
+
+**From a mnemonic phrase and derivation path:**
+
+```scala copy
+import scalus.cardano.wallet.BloxbeanAccount
+
+val mnemonic = "test " * 23 + "sauce"  // 24-word test mnemonic
+val derivationPath = "m/1852'/1815'/0'/0/0"  // Standard Cardano derivation path for the first ADA wallet
+
+val signer = BloxbeanAccount(network, mnemonic, derivationPath).signerForUtxos
+```
+
+**From a specific keypair:**
+
+```scala copy
+val keyPair: KeyPair = // ... your keypair
+val signer = TransactionSigner(Set(keyPair))
+```
+
+Then sign the transaction:
+
+```scala copy
+val signedBuilder = builder.sign(signer)
+val transaction = signedBuilder.transaction
+```
+
+The `sign()` method adds the signature to the transaction's witness set. You can chain multiple `sign()` calls if multiple signatures are needed.
+
+## Submit the Transaction
+
+Finally, submit the signed transaction to the Cardano network:
+
+```scala copy
+import scalus.cardano.node.BlockchainProvider
+import scalus.utils.await
+import scala.concurrent.duration.*
+
+val provider: BlockchainProvider = // ... blockfrost, emulator, etc.
+
+provider.submit(transaction).await(30.seconds) match {
+  case Right(txHash) =>
+    println(s"Transaction submitted: ${txHash.toHex}")
+  case Left(error) =>
+    println(s"Submission failed: $error")
+}
+```
+
+## Complete Example
+
+Here's the full workflow in one place:
+
+```scala copy
+import scalus.cardano.ledger.*
+import scalus.cardano.txbuilder.*
+import scalus.cardano.address.Address
+import scalus.cardano.node.BlockchainProvider
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
+
+// Setup - use given CardanoInfo for cleaner txBuilder calls
+given CardanoInfo = CardanoInfo.mainnet
+val myUtxo: Utxo = // ...
+val recipientAddress: Address = // ...
+val changeAddress: Address = // ...
+val signer: TransactionSigner = // ...
+val provider: BlockchainProvider = // ...
+
+// Build, sign, and submit using txBuilder with context parameter
+val transaction = txBuilder
+  .spend(myUtxo)
+  .payTo(recipientAddress, Value.ada(10))
+  .build(changeTo = changeAddress)
+  .sign(signer)
+  .transaction
+
+provider.submit(transaction).await(30.seconds)
+```
+
+## Using Automatic Completion
+
+For simpler cases, use `complete()` to let TxBuilder handle input selection automatically:
+
+```scala copy
+val transaction = TxBuilder(cardanoInfo)
+  .payTo(recipientAddress, Value.ada(10))
+  .complete(provider, sponsorAddress)  // Automatic input selection and balancing
+  .await(30.seconds)
+  .sign(signer)
+  .transaction
+```
+
+The `complete()` method:
+- Queries the provider for UTxOs at the sponsor address
+- Selects inputs to cover the payment and fees
+- Adds collateral if the transaction includes script execution
+- Creates change outputs to return excess value
+- Balances the transaction (no need to call `.build()` afterward)
+
+## Cross-Platform Async Completion
+
+The `complete()` method returns a `Future[TxBuilder]` and works on both JVM and JavaScript platforms:
+
+```scala copy
+import scala.concurrent.ExecutionContext.Implicits.global
+
+val futureTransaction: Future[Transaction] = TxBuilder(cardanoInfo)
+  .payTo(recipientAddress, Value.ada(10))
+  .complete(asyncProvider, sponsorAddress)
+  .map(_.sign(signer).transaction)
+```
+
+This is the recommended approach for cross-platform code and async workflows.
+
+### Completion with Pre-fetched UTXOs
+
+If you already have UTXOs available in memory (e.g., from a previous query or a custom source), you can use the synchronous `complete()` overload that accepts UTXOs directly:
+
+```scala copy
+// Pre-fetched or cached UTXOs from any source
+val availableUtxos: Utxos = Map(
+  Input(txHash, 0) -> Output(sponsorAddress, Value.ada(100)),
+  Input(txHash, 1) -> Output(sponsorAddress, Value.ada(50))
+)
+
+// Synchronous - no Future, no async provider query
+val transaction = TxBuilder(cardanoInfo)
+  .payTo(recipientAddress, Value.ada(10))
+  .complete(availableUtxos, sponsorAddress)  // Immediate completion
+  .sign(signer)
+  .transaction
+```
+
+This variant is useful when:
+- You've already queried UTXOs and want to avoid redundant network calls
+- You're building transactions in a batch with shared UTXO state
+- You're working with a custom UTXO source (e.g., in-memory ledger state)
+
+The behavior is identical to the provider-based `complete()` - it selects inputs, adds collateral if needed, and balances the transaction.
+
+## Next Steps
+
+- **[First Contract Transaction](/docs/transactions/first-contract-transaction)** - Lock funds and spend from a script address using a compiled validator
+- **[Payment Methods](/docs/transactions/payment-methods)** - Different ways to send ADA and tokens
+- **[Spending UTxOs](/docs/transactions/spending-utxos)** - Manual input selection and spending from scripts
+- **[Minting & Burning](/docs/transactions/minting-burning-assets)** - Create and destroy native tokens
+- **[Staking & Rewards](/docs/transactions/staking-rewards)** - Register stake keys, delegate to pools, and withdraw rewards
+- **[Governance](/docs/transactions/governance)** - Participate in Cardano governance through DRep delegation

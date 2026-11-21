@@ -1,0 +1,1690 @@
+<!DOCTYPE html><html data-pathToRoot="../../" data-rawLocation="scalus/uplc/transform" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>scalus.uplc.transform</title><link rel="shortcut icon" type="image/x-icon" href="../../favicon.ico"></link><script type="text/javascript" src="../../scripts/theme.js"></script><script type="text/javascript" src="../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../styles/nord-light.css"></link><link rel="stylesheet" href="../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../styles/searchbar.css"></link><link rel="stylesheet" href="../../styles/social-links.css"></link><link rel="stylesheet" href="../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../styles/fontawesome.css"></link><script type="text/javascript" src="../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../styles/apistyles.css"></link><script>var pathToRoot = "../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../index.html">Scalus</a>/<a href="../../scalus.html">scalus</a>/<a href="../uplc.html">scalus.uplc</a>/<a href="transform.html">scalus.uplc.transform</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon pa"></span></span>
+ <h1 class="h600 single">scalus.uplc.transform</h1>
+</div>
+<div class="fqname body-large">
+ <span></span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">package </span></span><a href="transform.html" t="n" class="documentableName ">scalus.uplc.transform</a>
+ </div>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Type-members">
+     <div data-togglable="Type members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Type members" class="h400">Type members</h3>
+      </div>
+      <section id="Classlikes">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Classlikes</h4>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="transform/CaseConstrApply.html" t="n" class="documentableName ">CaseConstrApply</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">logger</span>: <a href="eval/Logger.html" t="t">Logger</a> = ...)<span t="k"> extends </span><a href="transform/Optimizer.html" t="t">Optimizer</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Replace nested Apply with Case/Constr</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Replace nested Apply with Case/Constr</p>
+              <p>For example, replace <code>(apply (apply (apply f a) b) c)</code> with <code>(case (constr 0 [a, b, c]) f)</code>. This is more memory/cpu efficient than nested Apply at least in Plutus V3 Plomin HF, protocol version 10.</p>
+              <p>With current machine costs, Apply costs 100 memory and 16000 cpu, same for Case/Constr. Hence (case (constr 0 [a, b, c]) f) costs 200 memory and 32000 cpu, while <code>(apply (apply (apply f a) b) c)</code> costs 300 memory and 48000 cpu.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/CaseConstrApply$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="transform/Optimizer.html" t="n">Optimizer</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/CaseConstrApply$.html" t="n" class="documentableName ">CaseConstrApply</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/CaseConstrApply.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/CaseConstrApply$.html" t="n">CaseConstrApply</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/CommonContextExtraction$.html" t="n" class="documentableName ">CommonContextExtraction</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/CommonContextExtraction.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/CommonContextExtraction$.html" t="n">CommonContextExtraction</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="transform/CommonContextExtraction.html" t="n" class="documentableName ">CommonContextExtraction</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">logger</span>: <a href="eval/Logger.html" t="t">Logger</a> = ...)<span t="k"> extends </span><a href="transform/Optimizer.html" t="t">Optimizer</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Common Context Extraction (CCE) for UPLC terms.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Common Context Extraction (CCE) for UPLC terms.</p>
+              <p>Generalizes CSE by extracting common <em>contexts</em> (subtrees differing in exactly one position) into shared lambda-abstractions. While CSE handles identical subexpressions, CCE handles cases where repeated structures differ in a single "hole" at '''any''' child position:</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>// Right-spine (original):
+</span><span line-number="2" class=""><span class="tooltip-container"></span>headList(tailList(sndPair(unConstrData(x)))) + headList(tailList(sndPair(unConstrData(y))))
+</span><span line-number="3" class=""><span class="tooltip-container"></span>→ let f = \a -&gt; headList(tailList(sndPair(unConstrData(a)))) in f(x) + f(y)
+</span><span line-number="4" class=""><span class="tooltip-container"></span>
+</span><span line-number="5" class=""><span class="tooltip-container"></span>// Left-spine (new): f(x, z) + f(y, z)
+</span><span line-number="6" class=""><span class="tooltip-container"></span>→ let g = \a -&gt; f(a, z) in g(x) + g(y)
+</span><span line-number="7" class=""><span class="tooltip-container"></span>
+</span><span line-number="8" class=""><span class="tooltip-container"></span>// Case scrutinee (new): case x of [...] and case y of [...]
+</span><span line-number="9" class=""><span class="tooltip-container"></span>→ let h = \a -&gt; case a of [...] in h(x) + h(y)
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+              <p>This reduces on-chain script <strong>code size</strong> (CBOR bytes), which directly affects transaction fees.</p>
+              <p>==Algorithm==</p>
+              <ol>
+               <li>'''Collect pass''': Traverse the term. For each non-leaf node, generate all single-hole decompositions via <span data-unresolved-link="">CommonContextExtraction.decompose</span>. Record templates with <code>termBits &gt;= [[CommonContextExtraction.MinTemplateBits]]</code> along with their paths. Track path IDs at evaluation boundaries (LamAbs, Delay, Case), same as CSE.</li>
+               <li>'''Group &amp; filter pass''': Group by TemplateKey. For each group: 
+                <ul>
+                 <li>Require &gt;= 2 <strong>distinct</strong> leaves (identical leaves are handled by CSE)</li>
+                 <li>Profitability check: <span data-unresolved-link="">CommonContextExtraction.extractionSavingBits</span> &gt; 0</li>
+                 <li>Compute bind path as longest common prefix of occurrence paths</li>
+                 <li>Scope safety: free vars of template (excluding HOLE) in scope at bind path</li>
+                 <li>Shadowing safety: no re-binding between bind and occurrence paths</li>
+                 <li>Conditional boundary safety: no hoisting shape-partial builtins across Case/Delay</li>
+                </ul></li>
+               <li>'''Substitute pass''': For each candidate (largest template first): 
+                <ul>
+                 <li>Re-count in (possibly modified) term via <span data-unresolved-link="">CommonContextExtraction.matchTemplate</span></li>
+                 <li>Create fresh name <code>__cce_[_N]</code> (e.g. <code>__cce_HeadList</code>, <code>__cce_SndPair_1</code>)</li>
+                 <li>Replace each matching occurrence with <code>Apply(Var(lambdaName), leaf)</code></li>
+                 <li>Insert at bind path: <code>Apply(LamAbs(lambdaName, body), LamAbs(param, templateBody))</code></li>
+                </ul></li>
+              </ol>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               logger
+              </dt>
+              <dd class="body-medium">
+               <p>Logger for tracking CCE operations</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               See also
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <p><a href="transform/CommonSubexpressionElimination.html">CommonSubexpressionElimination</a> for the CSE pass that handles identical subexpressions</p>
+                </div>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/CommonContextExtraction$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="transform/Optimizer.html" t="n">Optimizer</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="transform/CommonSubexpressionElimination.html" t="n" class="documentableName ">CommonSubexpressionElimination</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">logger</span>: <a href="eval/Logger.html" t="t">Logger</a> = ...)<span t="k"> extends </span><a href="transform/Optimizer.html" t="t">Optimizer</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Share repeated expressions by introducing a strict UPLC binding, using Plutus 1.63.0.0's ancestor-or-self rule. In the examples below, <code>let x = e in body</code> means <code>[(lam x body) e]</code>; <code>e</code> is evaluated before <code>body</code>, even when the uses of <code>x</code> are delayed. For example, <code>let x = Error in Delay(x)</code> fails immediately, whereas <code>Delay(Error)</code> is a value.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Share repeated expressions by introducing a strict UPLC binding, using Plutus 1.63.0.0's ancestor-or-self rule. In the examples below, <code>let x = e in body</code> means <code>[(lam x body) e]</code>; <code>e</code> is evaluated before <code>body</code>, even when the uses of <code>x</code> are delayed. For example, <code>let x = Error in Delay(x)</code> fails immediately, whereas <code>Delay(Error)</code> is a value.</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>// When sharing pays, keep one copy of e and replace its uses with variables:
+</span><span line-number="2" class=""><span class="tooltip-container"></span>Constr(0, [e, e])  =&gt;  let x = e in Constr(0, [x, x])
+</span><span line-number="3" class=""><span class="tooltip-container"></span>
+</span><span line-number="4" class=""><span class="tooltip-container"></span>// An existing strict occurrence can also supply a deferred use:
+</span><span line-number="5" class=""><span class="tooltip-container"></span>Constr(0, [e, Delay(e)])  =&gt;  let x = e in Constr(0, [x, Delay(x)])
+</span><span line-number="6" class=""><span class="tooltip-container"></span>
+</span><span line-number="7" class=""><span class="tooltip-container"></span>// No strict occurrence outside the delays: do not move e out of them.
+</span><span line-number="8" class=""><span class="tooltip-container"></span>Constr(0, [Delay(e), Delay(e)])
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+              <p>==Safety: where may the binding go?== Lambda bodies, delayed bodies and individual Case branches are separate evaluation regions. Other children inherit their parent's region, including the body of an immediately applied lambda (a strict let). A group must contain an occurrence in its outermost region; occurrences in descendant regions can join it. Sibling regions alone cannot justify an outer binding. Otherwise extracting, for example, a failing <code>e</code> from an unused delay would make a successful program fail. The same placement rule applies to every candidate, including constants:</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>LamAbs(a, Constr(0, [e(a), e(a)]))
+</span><span line-number="2" class=""><span class="tooltip-container"></span> =&gt; LamAbs(a, let x = e(a) in Constr(0, [x, x]))  // stay inside the lambda
+</span><span line-number="3" class=""><span class="tooltip-container"></span>
+</span><span line-number="4" class=""><span class="tooltip-container"></span>let a = e in Constr(0, [a, e])
+</span><span line-number="5" class=""><span class="tooltip-container"></span> =&gt; let x = e in (let a = x in Constr(0, [a, x])) // applied lambda is strict
+</span><span line-number="6" class=""><span class="tooltip-container"></span>
+</span><span line-number="7" class=""><span class="tooltip-container"></span>Case(tag, [e, e, 0])  // no outer occurrence of e; selecting branch 2 must not run e
+</span><span line-number="8" class=""><span class="tooltip-container"></span>Constr(0, [Delay(largeConstant), Delay(largeConstant)])
+</span><span line-number="9" class=""><span class="tooltip-container"></span> // No special constant-hoisting exception: the two constant uses stay in separate regions.
+</span><span line-number="10" class=""><span class="tooltip-container"></span> // Sharing the whole Delay values is allowed; that does not evaluate their bodies.
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+              <p>Like Plutus CSE, this preserves results and success/failure, not trace multiplicity, trace order, failure messages or exact budgets. A region is not an evaluation-order barrier: sharing may move work earlier within it. For example, with <code>e = trace("B", 1)</code> and <code>a = trace("A", 0)</code>, sharing e in <code>Constr(0, [a, e, e])</code> can change logs from <code>["A", "B", "B"]</code> to <code>["B", "A"]</code> while returning the same constructor. If a and e both fail, moving e first can change which failure is reported, but still fails. Even sharing a constant adds Apply/LamAbs/Var work, so exact budgets are not preserved.</p>
+              <p>No builtin-totality or name-prefix assumptions are needed: <code>divideInteger n d</code> can be a candidate even when d might be zero, provided placement is safe and sharing pays. Renaming n to <code>__partial_n</code> does not change that decision.</p>
+              <p>==Profitability: should we introduce the binding?== Safe placement alone is insufficient. <span data-unresolved-link="">SharingCost</span> prices estimated reference-script bits saved minus the extra binding's execution fee for values. Repeated computations such as <code>f(xs)</code> are also shared when that estimate is negative: the callee's avoided work is unknown, so this is a runtime-sharing preference, not a prediction of lower total fees. Each round takes the greatest eligible estimate, then recollects on the changed tree. For example, three uses of a 54-bit constant save <code>(3 - 1) * 54 - 3 * 12 - 8 = 64</code> estimated bits: remove two copies, insert three variables, and pay the Apply/LamAbs tags. The default fee estimate subtracts about 20.77 lovelace of binding work from 120 lovelace of reference-size savings. Two uses of an 18-bit integer constant instead save <code>18 - 24 - 8 = -14</code> bits and are rejected. See <code>docs/design/cse-placement.md</code> for the contract and pricing assumptions.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/CommonSubexpressionElimination$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="transform/Optimizer.html" t="n">Optimizer</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/CommonSubexpressionElimination$.html" t="n" class="documentableName ">CommonSubexpressionElimination</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/CommonSubexpressionElimination.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/CommonSubexpressionElimination$.html" t="n">CommonSubexpressionElimination</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/EtaReduce$.html" t="n" class="documentableName ">EtaReduce</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/EtaReduce.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/EtaReduce$.html" t="n">EtaReduce</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="transform/EtaReduce.html" t="n" class="documentableName ">EtaReduce</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">logger</span>: <a href="eval/Logger.html" t="t">Logger</a> = ...)<span t="k"> extends </span><a href="transform/Optimizer.html" t="t">Optimizer</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Performs eta-reduction on a term.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Performs eta-reduction on a term.</p>
+              <p>Eta-reduction is the process of removing redundant lambda abstractions from a term. For example, the term <code>λx. f x</code> can be eta-reduced to <code>f</code> but only if</p>
+              <ul>
+               <li><code>x</code> is not free in <code>f</code></li>
+               <li><code>f</code> is a pure expression</li>
+              </ul>
+              <p>Purity checking is handled by <a href="transform/TermAnalysis$.html#isPure-7ed">TermAnalysis.isPure</a>. A term is pure if it does not contain any side effects, such as <code>Error</code>, <code>Force</code> of non-delayed terms, or saturated builtin applications. See <a href="transform/TermAnalysis$.html#isPure-7ed">TermAnalysis.isPure</a> for comprehensive documentation on purity semantics.</p>
+              <p>On top of the syntactic purity check, the pass tracks a value-arity environment for <code>[(lam x body) rhs]</code> let-bindings: when <code>rhs</code> provably evaluates to a lambda of arity <code>n</code> (counting the self-application fixpoint encoding <code>[(lam f [f f]) (lam f (lam a ... body))]</code> produced for recursive functions), a partial application <code>x a1 ... ak</code> with <code>k &amp;lt; n</code> pure arguments is itself a pure expression, so multi-argument eta-wrappers like <code>λa. λb. f a b</code> reduce to <code>f</code>. This removes the wrapper the compiler emits around a multi-parameter recursive entry point (<code>[(lam f (lam a (lam b [f a b]))) fix]</code> becomes <code>[(lam f f) fix]</code>, which the Inliner then collapses to <code>fix</code>). The same wrapper in the case-constr application encoding — <code>(lam a (lam b (case (constr 0 a b) f)))</code> as produced by <a href="transform/CaseConstrApply.html">CaseConstrApply</a> — reduces too, see <code>caseConstrEtaRedex</code>.</p>
+              <p>'''Precondition: named terms only.''' Every analysis here — the <code>arities</code> environment, the capture checks via <a href="transform/TermAnalysis$.html#freeVars-fffff541">TermAnalysis.freeVars</a>, and the field matching in <code>caseConstrEtaRedex</code> — identifies variables by NAME and ignores <code>NamedDeBruijn.index</code>, so scope is whatever the binder nesting says it is. That is the representation the compiler pipeline produces: <code>UplcPipeline</code> hands optimizers a named term and de Bruijn indices are only assigned later, at <code>Program.deBruijnedProgram</code>. Do not run this pass on an already-de-Bruijned term (one whose <code>Var</code> indices are meaningful — the CEK requires that form, see <code>lookupVarName</code>, which rejects index 0): there, two distinct binders may share a name, and name-based scoping would conflate them.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               See also
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <p><a href="https://en.wikipedia.org/wiki/Lambda_calculus#%CE%B7-reduction">Eta reduction</a></p>
+                </div>
+                <div>
+                 <p><a href="transform/TermAnalysis$.html#isPure-7ed">TermAnalysis.isPure</a> for purity semantics</p>
+                </div>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/EtaReduce$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="transform/Optimizer.html" t="n">Optimizer</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/ForcedBuiltinsExtractor$.html" t="n" class="documentableName ">ForcedBuiltinsExtractor</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/ForcedBuiltinsExtractor.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/ForcedBuiltinsExtractor$.html" t="n">ForcedBuiltinsExtractor</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="transform/ForcedBuiltinsExtractor.html" t="n" class="documentableName ">ForcedBuiltinsExtractor</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">logger</span>: <a href="eval/Logger.html" t="t">Logger</a> = ..., <span t="k"></span><span data-unresolved-link="" t="n">exceptBuiltins</span>: <span data-unresolved-link="" t="t">Set</span>[<a href="DefaultFun.html" t="t">DefaultFun</a>] = ...)<span t="k"> extends </span><a href="transform/Optimizer.html" t="t">Optimizer</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Extract forced builtins to top level</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Extract forced builtins to top level</p>
+              <p>For example, replace <code>(force (force (builtin fstPair)))</code> with (lam FstPair (FstPair (pair true false)) (! (! __FstPair))). This is more memory/cpu efficient than nested Force at least in Plutus V3 Plomin HF, protocol version 10.</p>
+              <p>With current machine costs, Force costs 100 memory and 16000 cpu, same for Builtin. Hence (lam FstPair (FstPair (pair true false)) (! (! __FstPair))) costs 200 memory and 32000 cpu, while <code>(force (force (builtin fstPair)))</code> costs 300 memory and 48000 cpu.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/ForcedBuiltinsExtractor$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="transform/Optimizer.html" t="n">Optimizer</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/Inliner$.html" t="n" class="documentableName ">Inliner</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Companion object providing convenient factory methods for the Inliner.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Companion object providing convenient factory methods for the Inliner.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/Inliner.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/Inliner$.html" t="n">Inliner</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="transform/Inliner.html" t="n" class="documentableName ">Inliner</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">logger</span>: <a href="eval/Logger.html" t="t">Logger</a> = ...)<span t="k"> extends </span><a href="transform/Optimizer.html" t="t">Optimizer</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Optimizer that performs function inlining, beta-reduction, and dead code elimination.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Optimizer that performs function inlining, beta-reduction, and dead code elimination.</p>
+              <p>The Inliner performs several transformations:</p>
+              <ul>
+               <li>'''Beta-reduction''': Replaces function application with direct substitution when safe</li>
+               <li>'''Identity function inlining''': Eliminates identity functions like <code>λx.x</code></li>
+               <li>'''Dead code elimination''': Removes unused lambda parameters when the argument is pure</li>
+               <li>'''Profitable value inlining''': Inlines variables, constants, and builtins when duplication is profitable</li>
+               <li>'''Force/Delay elimination''': Simplifies <code>Force(Delay(t))</code> to <code>t</code></li>
+               <li>'''Partial evaluation''': Evaluates closed subexpressions at compile time via the CEK machine (e.g., <code>addInteger 2 3</code> → <code>5</code>, <code>(λx. addInteger x 1) 2</code> → <code>3</code>)</li>
+              </ul>
+              <p>==Inlining Strategy==</p>
+              <p>The inliner uses occurrence counting and purity analysis to decide what is safe to inline:</p>
+              <ul>
+               <li>Variables, builtins, and constants are duplicated only when sharing is unprofitable</li>
+               <li>Other values are only inlined if used once</li>
+               <li>Pure unused arguments are eliminated entirely</li>
+              </ul>
+              <p>==Example==</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>// Input: (λx. λy. x) 42 100
+</span><span line-number="2" class=""><span class="tooltip-container"></span>// After inlining identity and dead code elimination:
+</span><span line-number="3" class=""><span class="tooltip-container"></span>// Output: 42
+</span><span line-number="4" class=""><span class="tooltip-container"></span>
+</span><span line-number="5" class=""><span class="tooltip-container"></span>val inliner = new Inliner()
+</span><span line-number="6" class=""><span class="tooltip-container"></span>val optimized = inliner(term)
+</span><span line-number="7" class=""><span class="tooltip-container"></span>// Check what was optimized
+</span><span line-number="8" class=""><span class="tooltip-container"></span>println(inliner.logs.mkString("\n"))
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+              <p>==Implementation Details==</p>
+              <p>The inliner performs capture-avoiding substitution to prevent variable capture during beta-reduction.</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               logger
+              </dt>
+              <dd class="body-medium">
+               <p>Logger for tracking inlining operations (defaults to new Log())</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               See also
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <p><a href="transform/TermAnalysis$.html#isPure-7ed">TermAnalysis.isPure</a> for purity analysis used in dead code elimination</p>
+                </div>
+                <div>
+                 <p><a href="transform/Optimizer.html">Optimizer</a> for the base optimizer trait</p>
+                </div>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/Inliner$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="transform/Optimizer.html" t="n">Optimizer</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="transform/LetChainRegroup.html" t="n" class="documentableName ">LetChainRegroup</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">logger</span>: <a href="eval/Logger.html" t="t">Logger</a> = ..., <span t="k"></span><span data-unresolved-link="" t="n">minRunSize</span>: <span data-unresolved-link="" t="t">Int</span> = ...)<span t="k"> extends </span><a href="transform/Optimizer.html" t="t">Optimizer</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Re-associates a chain of nested lets into multi-argument applications.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Re-associates a chain of nested lets into multi-argument applications.</p>
+              <p>A let is <code>[(lam x body) rhs]</code>, so a chain of them nests to the right. Bindings that do not depend on each other can be applied as one argument list instead:</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>// before: three nested lets — 3 Apply + 3 LamAbs = 6 machine steps
+</span><span line-number="2" class=""><span class="tooltip-container"></span>[(lam a [(lam b [(lam c body) ec]) eb]) ea]
+</span><span line-number="3" class=""><span class="tooltip-container"></span>
+</span><span line-number="4" class=""><span class="tooltip-container"></span>// after: one three-argument application — same step count on its own...
+</span><span line-number="5" class=""><span class="tooltip-container"></span>[[[(lam a (lam b (lam c body))) ea] eb] ec]
+</span><span line-number="6" class=""><span class="tooltip-container"></span>
+</span><span line-number="7" class=""><span class="tooltip-container"></span>// ...but [[CaseConstrApply]] then encodes it as Case + Constr + 3 LamAbs = 5 steps
+</span><span line-number="8" class=""><span class="tooltip-container"></span>(case (constr 0 [ea, eb, ec]) [(lam a (lam b (lam c body)))])
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+              <p>A group of <code>N</code> bindings therefore saves <code>N - 2</code> machine steps per execution of the chain. This pass only re-associates — the <code>case</code>/<code>constr</code> encoding is left to <a href="transform/CaseConstrApply.html">CaseConstrApply</a>, which already fires on any application chain with 3+ arguments and must stay the single place that decision is made (<code>Case</code>/<code>Constr</code> are illegal before Plutus V3).</p>
+              <p>==Why the threshold is five, not three==</p>
+              <p>Steps are not the whole fee: the encoding also changes the script's size, and the two pull in opposite directions below <code>N = 7</code>.</p>
+              <p>In the flat encoding an application chain is pure tags, <code>4N</code> bits. The case-constr form pays fixed framing first — <code>Case</code> tag 4, <code>Constr</code> tag 4, constructor index 8, field-list framing <code>N+1</code> (one bit per field plus a terminator), branch-list framing 2 — so <code>19 + N</code> bits. The difference is therefore</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>Δbits = (19 + N) - 4N = 19 - 3N
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+              <p>which is '''larger''' below <code>N = 7</code> and smaller from <code>N = 7</code> up (verified against the encoder for N = 1..12). On mainnet a script byte costs 15 lovelace of reference-script fee in every transaction using the script, while a machine step costs 6.92 lovelace (<code>100 mem * 0.0577 + 16,000 cpu * 0.0000721</code>) per ''execution''. So the break-even depends on how often the chain runs: for a script executed once per transaction it sits just under <code>N = 4</code>; at <code>N = 3</code> the grouping loses about 12 lovelace, and only turns positive from roughly three executions per transaction.</p>
+              <p><a href="transform/LetChainRegroup$.html#MinRunSize-0">LetChainRegroup.MinRunSize</a> is 5 rather than 4 because the theoretical <code>N = 4</code> margin (+0.72 lovelace) does not survive measurement: flat is bit-packed, so a group's 7 theoretical bits round up to a whole byte in the encoded script. Measured over the ten example validators: a threshold of 4 nets +511 lovelace for +19 bytes and still makes one of them worse, while 5 nets +533 for no extra bytes at all and makes none worse.</p>
+              <p>All of this is conservative for chains that run more than once per transaction (inside a loop, or a script spending several inputs), where the step saving multiplies but the bytes are paid once.</p>
+              <p>==Grouping rule==</p>
+              <p>The chain is split into '''maximal contiguous runs'''. A binding joins the current run when</p>
+              <ul>
+               <li>its right-hand side does not mention any binder already in the run, and</li>
+               <li>its name does not repeat a binder already in the run.</li>
+              </ul>
+              <p>Bindings are never reordered. Aiken's <code>split_body_lambda</code> moves bindings between groups to grow them, which changes the order effects happen in; Scalus preserves source evaluation order.</p>
+              <p>==Why no purity guard is needed==</p>
+              <p>The CEK machine evaluates <code>[f a]</code> function-first, then argument. So <code>[[[F ea] eb] ec]</code> evaluates <code>F</code> (a lambda — effect-free), then <code>ea</code>, then the beta-reduction yields the next lambda (effect-free), then <code>eb</code>, then <code>ec</code> — exactly the order of the nested form. Under the subsequent <code>case (constr 0 [...])</code> encoding the fields are also evaluated left to right. A right-hand side that errors, traces or diverges therefore does so at the same point relative to the others in both forms, so this pass applies to effectful bindings (a <code>require(...)</code> lowers to a binding with no uses) as readily as to values.</p>
+              <p>Moving a right-hand side out of the scope of the earlier binders cannot capture or free a name either: in the input it sits under those binders, so a free occurrence of one of them refers to the let, which is exactly what the dependency test rejects.</p>
+              <p>That argument covers ordering '''within''' the chain. It does not by itself cover a chain in the function position of an enclosing <code>Apply</code>, where <a href="transform/CaseConstrApply.html">CaseConstrApply</a> would otherwise merge the enclosing arguments into the same <code>constr</code> and hoist them ahead of the chain body; <code>rebuild</code> leaves the outermost run nested in that case, which keeps the two forms identical. See <span data-unresolved-link="">rebuild</span>.</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               logger
+              </dt>
+              <dd class="body-medium">
+               <p>Logger for tracking regrouping operations</p>
+              </dd>
+              <dt class="body-small">
+               minRunSize
+              </dt>
+              <dd class="body-medium">
+               <p>smallest run worth grouping; see the threshold discussion above</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               See also
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <p><a href="transform/CaseConstrApply.html">CaseConstrApply</a> for the pass that turns the resulting chains into <code>case</code>/<code>constr</code></p>
+                </div>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/LetChainRegroup$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="transform/Optimizer.html" t="n">Optimizer</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/LetChainRegroup$.html" t="n" class="documentableName ">LetChainRegroup</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/LetChainRegroup.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/LetChainRegroup$.html" t="n">LetChainRegroup</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/NoopOptimizer$.html" t="n" class="documentableName ">NoopOptimizer</a><span t="k"> extends </span><a href="transform/Optimizer.html" t="t">Optimizer</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>No-op optimizer that returns the term unchanged without any optimizations.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>No-op optimizer that returns the term unchanged without any optimizations.</p>
+              <p>This is useful as a default when optimization is disabled or as a placeholder in testing.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="transform/Optimizer.html" t="n">Optimizer</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/NoopOptimizer$.html" t="n">NoopOptimizer</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="transform/Optimizer.html" t="n" class="documentableName ">Optimizer</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Base trait for UPLC term optimizers.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Base trait for UPLC term optimizers.</p>
+              <p>An optimizer transforms a UPLC (Untyped Plutus Core) term into an equivalent but more efficient term. Optimizers can perform various transformations such as:</p>
+              <ul>
+               <li>Dead code elimination</li>
+               <li>Function inlining and beta-reduction</li>
+               <li>Eta-reduction (removing redundant lambda abstractions)</li>
+               <li>Constant folding</li>
+               <li>Conversion of lazy evaluation to strict evaluation when safe</li>
+              </ul>
+              <p>==Usage==</p>
+              <p>Optimizers are typically used in optimization pipelines (see <a href="transform/V1V2Optimizer.html">V1V2Optimizer</a> and <a href="transform/V3Optimizer.html">V3Optimizer</a>) where multiple optimization passes are applied sequentially:</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>val optimizer = new StrictIf()
+</span><span line-number="2" class=""><span class="tooltip-container"></span>val optimizedTerm = optimizer(term)
+</span><span line-number="3" class=""><span class="tooltip-container"></span>println(s"Optimizations applied: ${optimizer.logs.mkString(", ")}")
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+              <p>==Implementation Notes==</p>
+              <p>Optimizer implementations should:</p>
+              <ul>
+               <li>Accept a <a href="eval/Logger.html">scalus.uplc.eval.Logger</a> as constructor parameter for logging optimizations</li>
+               <li>Be deterministic: applying the same optimizer to the same term should always produce the same result</li>
+               <li>Preserve semantics: the optimized term must be equivalent to the original term</li>
+               <li>Log all applied optimizations for debugging and analysis</li>
+              </ul>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               See also
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <p><a href="transform/StrictIf.html">StrictIf</a> for lazy-to-strict if-then-else conversion</p>
+                </div>
+                <div>
+                 <p><a href="transform/EtaReduce.html">EtaReduce</a> for eta-reduction optimization</p>
+                </div>
+                <div>
+                 <p><a href="transform/Inliner.html">Inliner</a> for function inlining and dead code elimination</p>
+                </div>
+                <div>
+                 <p><a href="transform/ForcedBuiltinsExtractor.html">ForcedBuiltinsExtractor</a> for extracting forced builtins to top level</p>
+                </div>
+                <div>
+                 <p><a href="transform/CaseConstrApply.html">CaseConstrApply</a> for optimizing nested Apply with Case/Constr (Plutus V3)</p>
+                </div>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 class <a href="transform/CaseConstrApply.html" t="n">CaseConstrApply</a>
+                </div>
+                <div>
+                 class <a href="transform/CommonContextExtraction.html" t="n">CommonContextExtraction</a>
+                </div>
+                <div>
+                 class <a href="transform/CommonSubexpressionElimination.html" t="n">CommonSubexpressionElimination</a>
+                </div>
+                <div>
+                 class <a href="transform/EtaReduce.html" t="n">EtaReduce</a>
+                </div>
+                <div>
+                 class <a href="transform/ForcedBuiltinsExtractor.html" t="n">ForcedBuiltinsExtractor</a>
+                </div>
+                <div>
+                 class <a href="transform/Inliner.html" t="n">Inliner</a>
+                </div>
+                <div>
+                 class <a href="transform/LetChainRegroup.html" t="n">LetChainRegroup</a>
+                </div>
+                <div>
+                 object <a href="transform/NoopOptimizer$.html" t="n">NoopOptimizer</a>
+                </div>
+                <div>
+                 class <a href="transform/StrictIf.html" t="n">StrictIf</a>
+                </div>
+                <div>
+                 class <a href="transform/V1V2Optimizer.html" t="n">V1V2Optimizer</a>
+                </div>
+                <div>
+                 class <a href="transform/V3Optimizer.html" t="n">V3Optimizer</a>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/PartialEvaluator$.html" t="n" class="documentableName ">PartialEvaluator</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Compile-time partial evaluator for UPLC terms.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Compile-time partial evaluator for UPLC terms.</p>
+              <p>Evaluates closed subexpressions (no free variables) at compile time using the CEK machine and replaces them with their result. This covers saturated builtin applications, lambda applications with constant arguments, case/constr elimination on known constructors, and any composition of the above.</p>
+              <p>==Safety==</p>
+              <p>A budget cap prevents expensive computations from slowing the compiler. Failed evaluations (runtime errors, budget exceeded) leave the original term unchanged, preserving semantics.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               See also
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <p><a href="transform/Inliner.html">Inliner</a> which calls this after inlining and beta-reduction</p>
+                </div>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/PartialEvaluator$.html" t="n">PartialEvaluator</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/PrepareForSerialization$.html" t="n" class="documentableName ">PrepareForSerialization</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Prepares a UPLC term for flat serialization by replacing BLS12-381 constants that cannot be directly flat-encoded with equivalent runtime expressions.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Prepares a UPLC term for flat serialization by replacing BLS12-381 constants that cannot be directly flat-encoded with equivalent runtime expressions.</p>
+              <p>Standalone BLS constants become uncompress(compressed_bytes):</p>
+              <ul>
+               <li><code>Const(BLS12_381_G1_Element(v))</code> → <code>Apply(Builtin(Bls12_381_G1_uncompress), Const(ByteString(compress(v))))</code></li>
+              </ul>
+              <p>List constants containing BLS elements are unrolled into MkCons chains:</p>
+              <ul>
+               <li><code>Const(List(G1, [v1, v2]))</code> → <code>MkCons(uncompress(compress(v1)), MkCons(uncompress(compress(v2)), Const(List(G1, []))))</code> The empty <code>List[G1Element]</code> at the end is flat-serializable because the stub Flat instance for BLS types is never invoked for empty lists.</li>
+              </ul>
+              <p>Applied automatically before flat encoding in <a href="DeBruijnedProgram.html#flatEncoded-0">DeBruijnedProgram.flatEncoded</a>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/PrepareForSerialization$.html" t="n">PrepareForSerialization</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="transform/StrictIf.html" t="n" class="documentableName ">StrictIf</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">logger</span>: <a href="eval/Logger.html" t="t">Logger</a> = ...)<span t="k"> extends </span><a href="transform/Optimizer.html" t="t">Optimizer</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Optimizes if-then-else expressions by converting lazy branches to strict evaluation when safe.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Optimizes if-then-else expressions by converting lazy branches to strict evaluation when safe.</p>
+              <p>==Background==</p>
+              <p>UPLC (Untyped Plutus Core) uses strict evaluation: all function arguments are evaluated before the function is applied. However, for conditional expressions using <code>IfThenElse</code>, we need lazy evaluation to avoid evaluating both branches.</p>
+              <p>The standard compilation generates:</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>Force(Apply(Apply(Apply(Force(Builtin(IfThenElse)), condition), Delay(thenBranch)), Delay(elseBranch)))
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+              <p>This pattern has a cost:</p>
+              <ul>
+               <li>2 <code>Delay</code> nodes to suspend branch evaluation</li>
+               <li>1 <code>Force</code> node to evaluate the selected branch</li>
+               <li>Total: '''3 extra term node evaluations per if-then-else'''</li>
+              </ul>
+              <p>==The Optimization==</p>
+              <p>When both branches are "simple values" that evaluate to exactly 1 term, we can safely evaluate them strictly, removing the Delay/Force overhead:</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>Apply(Apply(Apply(Force(Builtin(IfThenElse)), condition), thenBranch), elseBranch)
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+              <p>This saves 3 term node evaluations, improving performance without changing semantics.</p>
+              <p>==Simple Values (Single-Term Evaluation)==</p>
+              <p>A term is considered "simple" if it evaluates to exactly 1 term:</p>
+              <ul>
+               <li><code>Var</code>: Variable lookup (1 term)</li>
+               <li><code>Const</code>: Constant value (1 term)</li>
+               <li><code>LamAbs</code>: Lambda abstraction - not executed until applied (1 term)</li>
+               <li><code>Builtin</code>: Builtin function reference - not executed until applied (1 term)</li>
+               <li><code>Delay</code>: Suspended computation - not executed (1 term)</li>
+               <li><code>Constr(_, Nil)</code>: Empty constructor (1 term)</li>
+              </ul>
+              <p>Terms that are NOT simple (multi-term evaluation):</p>
+              <ul>
+               <li><code>Apply</code>: Requires evaluating function + argument (3+ terms)</li>
+               <li><code>Force</code>: Requires evaluating the forced term (2+ terms)</li>
+               <li><code>Case</code>: Requires evaluating scrutinee + pattern matching (2+ terms)</li>
+               <li><code>Constr(_, args)</code> with args: Requires evaluating each argument (1 + n terms)</li>
+               <li><code>Error</code>: Will fail immediately</li>
+              </ul>
+              <p>==Example==</p>
+              <div class="snippet mono-small-block">
+               <pre><code class="language-"><span line-number="1" class=""><span class="tooltip-container"></span>// Original: if condition then 42 else 100
+</span><span line-number="2" class=""><span class="tooltip-container"></span>Force(Apply(Apply(Apply(Force(Builtin(IfThenElse)), condition), Delay(Const(42))), Delay(Const(100))))
+</span><span line-number="3" class=""><span class="tooltip-container"></span>// Cost: 5 term evaluations (Force + Apply + Apply + Apply + Force + 2 Delay + selected Const)
+</span><span line-number="4" class=""><span class="tooltip-container"></span>
+</span><span line-number="5" class=""><span class="tooltip-container"></span>// Optimized: both branches are constants (simple values)
+</span><span line-number="6" class=""><span class="tooltip-container"></span>Apply(Apply(Apply(Force(Builtin(IfThenElse)), condition), Const(42)), Const(100))
+</span><span line-number="7" class=""><span class="tooltip-container"></span>// Cost: 2 term evaluations (Force + Apply + Apply + Apply + selected Const)
+</span><span line-number="8" class=""><span class="tooltip-container"></span>// Savings: 3 term evaluations (2 Delay + 1 Force)
+</span></code></pre>
+               <div class="buttons"></div>
+              </div>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               See also
+              </dt>
+              <dd class="body-medium">
+               <div>
+                <div>
+                 <p><a href="transform/EtaReduce.html">scalus.uplc.transform.EtaReduce</a> for another UPLC optimization</p>
+                </div>
+                <div>
+                 <p><a href="transform/Inliner.html">scalus.uplc.transform.Inliner</a> for beta-reduction and dead code elimination</p>
+                </div>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/StrictIf$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="transform/Optimizer.html" t="n">Optimizer</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/StrictIf$.html" t="n" class="documentableName ">StrictIf</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="transform/StrictIf.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/StrictIf$.html" t="n">StrictIf</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="transform/TermAnalysis$.html" t="n" class="documentableName ">TermAnalysis</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Static analysis utilities for UPLC terms.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Static analysis utilities for UPLC terms.</p>
+              <p>Provides analysis methods for determining properties of UPLC terms that are useful for optimization and transformation passes.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="transform/TermAnalysis$.html" t="n">TermAnalysis</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="transform/V1V2Optimizer.html" t="n" class="documentableName ">V1V2Optimizer</a><span t="k"> extends </span><a href="transform/Optimizer.html" t="t">Optimizer</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="transform/Optimizer.html" t="n">Optimizer</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="transform/V3Optimizer.html" t="n" class="documentableName ">V3Optimizer</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">cseIterations</span>: <span data-unresolved-link="" t="t">Int</span> = ..., <span t="k"></span><span data-unresolved-link="" t="n">cceEnabled</span>: <span data-unresolved-link="" t="t">Boolean</span> = ..., <span t="k"></span><span data-unresolved-link="" t="n">letChainRegroup</span>: <span data-unresolved-link="" t="t">Boolean</span> = ...)<span t="k"> extends </span><a href="transform/Optimizer.html" t="t">Optimizer</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="transform/Optimizer.html" t="n">Optimizer</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#members-list">Members list</a><ul><li><a href="#Type-members">Type members</a><ul><li><a href="#Classlikes">Classlikes</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>
