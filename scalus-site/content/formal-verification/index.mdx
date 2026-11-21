@@ -7,12 +7,15 @@ description: Formally verify Cardano smart contracts in Scala. Prove properties 
 
 import { Callout } from 'nextra/components'
 
-# Formal Verification
+# Formal Verification of Cardano Smart Contracts
 
-Formal verification lets you prove properties of a smart contract. With the Scalus verification
-framework you write logical statements in Scala, and they are proved with
-[Lean-Blaster](https://github.com/input-output-hk/Lean-blaster) on top of the **compiled UPLC**,
-the program the ledger runs.
+A test checks a smart contract on the inputs you give it. Formal verification proves that a
+property holds for every input. With Scalus you state the property in Scala, next to your tests.
+
+Scalus proves it on the compiled code: the Untyped Plutus Core (UPLC) program that the Cardano
+ledger runs, rather than the Scala source. The proof runs in the Lean 4 theorem prover, where
+[Blaster](https://github.com/input-output-hk/Lean-blaster) turns it into a problem for the
+[Z3](https://github.com/Z3Prover/z3) SMT solver.
 
 <Callout type="warning">
   **Experimental.** `scalus-verification` and its API may still change. Scalus 1.5.0 has the
