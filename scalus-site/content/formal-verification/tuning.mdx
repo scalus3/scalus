@@ -105,7 +105,7 @@ private val refundRejectedUnlessTheCommitterSignsLimited = verifier.statement(
 ```
 
 The rules that the validator decides by the time, before it reads the signatories, need no limit:
-see [Your First Proof](/docs/verification/first-proof#why-no-limit-is-needed-here).
+see [Your First Proof](/docs/formal-verification/first-proof#why-no-limit-is-needed-here).
 
 ## How a Script Context Reaches Lean
 
@@ -212,9 +212,9 @@ check(VerificationRequest(statement, UplcBlaster(Budget.Auto, lean, 20.minutes))
 
 Tag a test of a statement that Lean does not finish with `Unfinished`. Such a test waits for its
 time limit, and the solver can take gigabytes meanwhile. `verify` leaves these tests out, and so
-should `test` (see [sbt Commands](/docs/verification/sbt-commands#tests-that-lean-does-not-finish)).
+should `test` (see [sbt Commands](/docs/formal-verification/sbt-commands#tests-that-lean-does-not-finish)).
 They stay in the suite as the record of what is not proved yet, and `testOnly` runs them on purpose.
 
 To see what Lean is given for a check that does not finish, keep the checks
 (`SCALUS_LEAN_KEEP_CHECKS`) and run one by hand: see
-[Looking at a Check](/docs/verification/lean-workspace#looking-at-a-check).
+[Looking at a Check](/docs/formal-verification/lean-workspace#looking-at-a-check).

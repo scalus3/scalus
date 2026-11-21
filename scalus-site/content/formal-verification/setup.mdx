@@ -105,7 +105,7 @@ You have these files automatically: whatever runs first, `sbt verify`, `sbt test
 `sbt leanInit`, creates the workspace where it is missing. Creating it needs neither Lean nor the
 network, and it is created with the `lake-manifest.json` that the first build would write. So
 **committing it is up to you.** A checkout without it creates the same workspace, and a run
-without Lean still takes the [kept results](/docs/verification/lean-workspace#what-persists-the-kept-results).
+without Lean still takes the [kept results](/docs/formal-verification/lean-workspace#what-persists-the-kept-results).
 Commit it when you change it, for example to add Lean of your own. Never commit `.lake/` or
 `.scalus/`: their `.gitignore` files already leave them out.
 
@@ -118,7 +118,7 @@ leanWorkspace := baseDirectory.value / "src" / "test" / "lean" / "Htlc"
 
 The workspace also has two empty directories, `MyContracts/Generated` and `MyContracts/Proofs`.
 They are for statements exported to Lean and proofs written by hand: see
-[Mixing UPLC and Lean Proofs](/docs/verification/advanced/lean-proofs).
+[Mixing UPLC and Lean Proofs](/docs/formal-verification/advanced/lean-proofs).
 
 Once the workspace exists, the plugin tells the project's tests where it is, through a resource
 on their class path. A suite never names its workspace, and all the suites of a project share it.
@@ -137,4 +137,4 @@ on their class path. A suite never names its workspace, and all the suites of a 
   each suite: override `leanWorkspace` of `LeanProofsSuite` with `LeanProofs.ready(directory)`.
 </Callout>
 
-Next: [write your first proof](/docs/verification/first-proof).
+Next: [write your first proof](/docs/formal-verification/first-proof).

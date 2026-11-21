@@ -230,7 +230,7 @@ gen_verification_section() {
 ## Formal verification
 
 The `*VerificationTest` suites prove properties of the compiled validator with
-Lean 4, Blaster and Z3 (see https://scalus.org/docs/verification). They need
+Lean 4, Blaster and Z3 (see https://scalus.org/docs/formal-verification). They need
 [elan](https://github.com/leanprover/elan) and Z3 5.4.0 or later on the `PATH`.
 
 ```sh

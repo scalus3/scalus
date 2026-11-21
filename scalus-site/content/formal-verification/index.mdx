@@ -1,7 +1,7 @@
 ---
 asIndexPage: true
 title: Formal Verification of Cardano Smart Contracts - Prove Validator Properties with Lean
-sidebarTitle: Verification
+sidebarTitle: Formal Verification
 description: Prove properties of Scalus validators for every input. Statements are written in Scala and proved against the compiled UPLC with Lean 4, Blaster and the Z3 SMT solver.
 ---
 
@@ -10,7 +10,7 @@ import { Callout } from 'nextra/components'
 # Formal Verification
 
 Formal verification lets you prove properties of a smart contract. With the Scalus verification
-framework you write logical statements in Scala, and they are proved with IOHK's
+framework you write logical statements in Scala, and they are proved with
 [Lean-Blaster](https://github.com/input-output-hk/Lean-blaster) on top of the **compiled UPLC**,
 the program the ledger runs.
 
@@ -117,7 +117,7 @@ false proof.
 - **The solver is trusted.** Blaster admits a goal that Z3 finds valid. It does not rebuild the
   proof for Lean's kernel, so the trusted base includes Blaster's translation and Z3.
 - **Not every statement can be proved with Blaster.** There are different techniques for tuning a
-  statement and its check: see [Tuning Your Proof](/docs/verification/tuning).
+  statement and its check: see [Tuning Your Proof](/docs/formal-verification/tuning).
 - **Some byte-string builtins.** For a byte string that is a variable, Blaster does not translate
   the builtins that build or take apart a byte string by its bytes (`sliceByteString`,
   `indexByteString`, `consByteString`, `integerToByteString`) or the bitwise builtins
@@ -131,13 +131,13 @@ false proof.
 
 | Page                                                | What it covers                                                                     |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| [Setup](/docs/verification/setup)                   | Lean, Z3, the dependencies and the sbt plugin                                      |
-| [Your First Proof](/docs/verification/first-proof)  | A rule of an HTLC validator, proved for every script context, with a negative control |
-| [Tuning Your Proof](/docs/verification/tuning)      | The budget of steps, limits on the data, how a script context reaches Lean, time limits |
-| [Lean Workspace](/docs/verification/lean-workspace) | Where the checks run, and the kept results                                         |
-| [sbt Commands](/docs/verification/sbt-commands)     | `verify`, the `lean*` tasks, the environment variables, CI                         |
-| [Examples](/docs/verification/examples)             | The HTLC and linear vesting proofs in the Scalus repository                        |
-| [Mixing UPLC and Lean Proofs](/docs/verification/advanced/lean-proofs) | Advanced: statements as Lean modules, and proofs written by hand |
+| [Setup](/docs/formal-verification/setup)                   | Lean, Z3, the dependencies and the sbt plugin                                      |
+| [Your First Proof](/docs/formal-verification/first-proof)  | A rule of an HTLC validator, proved for every script context, with a negative control |
+| [Tuning Your Proof](/docs/formal-verification/tuning)      | The budget of steps, limits on the data, how a script context reaches Lean, time limits |
+| [Lean Workspace](/docs/formal-verification/lean-workspace) | Where the checks run, and the kept results                                         |
+| [sbt Commands](/docs/formal-verification/sbt-commands)     | `verify`, the `lean*` tasks, the environment variables, CI                         |
+| [Examples](/docs/formal-verification/examples)             | The HTLC and linear vesting proofs in the Scalus repository                        |
+| [Mixing UPLC and Lean Proofs](/docs/formal-verification/advanced/lean-proofs) | Advanced: statements as Lean modules, and proofs written by hand |
 
 The design and its details are in the Scalus repository:
 [the verification overview](https://github.com/scalus3/scalus/blob/master/docs/design/verification-overview.md),

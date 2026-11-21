@@ -27,7 +27,7 @@ The tasks that write a Lean workspace run one at a time.
 test is an error, so a typo cannot pass a run that checked nothing; `leanExport` and `ualExport`
 take the names as `testOnly` does.
 `leanExport`, `leanProve` and `ualExport` are for a workspace with Lean of your own: see
-[Mixing UPLC and Lean Proofs](/docs/verification/advanced/lean-proofs).
+[Mixing UPLC and Lean Proofs](/docs/formal-verification/advanced/lean-proofs).
 
 ## `verify`
 
@@ -45,7 +45,7 @@ sbt contracts/verify                               # one project of a multi-proj
    that cannot be checked here fails the task, where a plain `sbt test` would cancel its test. The
    tests tagged `Unfinished` are left out.
 
-Only in the [advanced use](/docs/verification/advanced/lean-proofs), where you keep Lean proofs of
+Only in the [advanced use](/docs/formal-verification/advanced/lean-proofs), where you keep Lean proofs of
 your own under `<Package>/Proofs` of a workspace, does `verify` also build them
 (`lake build <Package>Proofs`), so that a proof that no longer holds fails the run. It builds them
 in every Lean workspace of the project that has such files: the Lake packages in `src/test/lean`,
@@ -93,7 +93,7 @@ sbt "testOnly *VestingProofsTest -- -n scalus.verify.uplcblaster.Unfinished"
 
 | Variable                  | Effect                                                                                                    |
 | ------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `SCALUS_KEPT_RESULTS`     | how kept results are used: `use`, `recalculate`, `frozen`, or `off`. The default depends on the run: see [kept results](/docs/verification/lean-workspace#what-persists-the-kept-results) |
+| `SCALUS_KEPT_RESULTS`     | how kept results are used: `use`, `recalculate`, `frozen`, or `off`. The default depends on the run: see [kept results](/docs/formal-verification/lean-workspace#what-persists-the-kept-results) |
 | `SCALUS_REQUIRE_LEAN`     | set: a statement that cannot be checked fails, and every statement is proved again                        |
 | `SCALUS_LEAN_KEEP_CHECKS` | a directory: every check that runs is also written there, to read or to run by hand                        |
 | `SCALUS_LEAN_EXPORT`      | set: what `leanExport` does, without sbt                                                                  |

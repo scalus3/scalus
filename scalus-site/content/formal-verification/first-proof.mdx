@@ -10,7 +10,7 @@ import { Callout } from 'nextra/components'
 
 This page proves a rule of a real contract, the HTLC validator of the Scalus examples, for **every
 script context the ledger can pass it**: any number of inputs, outputs and signatures, any validity
-range, any datum. It assumes the [setup](/docs/verification/setup) is done. The suite it builds is
+range, any datum. It assumes the [setup](/docs/formal-verification/setup) is done. The suite it builds is
 part of
 [`HtlcVerificationTest`](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala)
 in the Scalus repository.
@@ -151,11 +151,11 @@ sbt "verify *HtlcProofsTest"
 
 `verify` builds the Lean workspace, then runs the suite with Lean required: a statement that cannot
 be checked fails the run. Without a test name, it runs every suite of proofs in the project. See
-[sbt Commands](/docs/verification/sbt-commands).
+[sbt Commands](/docs/formal-verification/sbt-commands).
 
 `budget = 4000` is the number of steps Lean's machine may run each program of the statement.
 `check(statement)` without a budget searches for one, and keeps the one it finds with the result.
-[Tuning Your Proof](/docs/verification/tuning) explains the budget, and what to do when a check
+[Tuning Your Proof](/docs/formal-verification/tuning) explains the budget, and what to do when a check
 does not finish.
 
 ## Why No Limit Is Needed Here
@@ -166,7 +166,7 @@ the statement for every context.
 
 The rule "nobody but the committer can refund" is different: the validator searches the
 signatories to decide it, and the search is as long as the list. Such a statement may need its data
-limited, as [Tuning Your Proof](/docs/verification/tuning#limit-the-data) shows.
+limited, as [Tuning Your Proof](/docs/formal-verification/tuning#limit-the-data) shows.
 
 ## A Function, Too
 
@@ -237,4 +237,4 @@ and `verifier.guarantees(function)` declares one statement for each clause. A `L
 whose tests all passed fails if a stated clause is neither proved nor declared open
 (`verifier.open(statement, reason)`).
 
-Next: [tune a proof that does not finish](/docs/verification/tuning).
+Next: [tune a proof that does not finish](/docs/formal-verification/tuning).

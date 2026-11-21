@@ -13,8 +13,8 @@ the two ways to use a Lean workspace:
 
 | Example                           | Suite                                                                                                                                                         | Workspace                                                     |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| [HTLC](#htlc)                     | [`HtlcVerificationTest`](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala)          | [temporary checks](/docs/verification/lean-workspace#temporary-checks) |
-| [Linear vesting](#linear-vesting) | [`VestingVerificationTest`](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala) | [a persistent Lean project](/docs/verification/advanced/lean-proofs) |
+| [HTLC](#htlc)                     | [`HtlcVerificationTest`](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala)          | [temporary checks](/docs/formal-verification/lean-workspace#temporary-checks) |
+| [Linear vesting](#linear-vesting) | [`VestingVerificationTest`](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala) | [a persistent Lean project](/docs/formal-verification/advanced/lean-proofs) |
 
 The other two are
 [`PaymentSplitterVerificationTest`](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala)
@@ -70,14 +70,14 @@ forAllData[ScriptContext](ctx =>
 the transaction spends the output with its datum, is balanced, pays a fee, has a validity range
 that is not empty and the redeemer for the spend. Lean evaluates the rules; no program runs for
 them. With `isValid` as a premise, the context reaches Lean as a value of the library's type
-([How a Script Context Reaches Lean](/docs/verification/tuning#how-a-script-context-reaches-lean)).
+([How a Script Context Reaches Lean](/docs/formal-verification/tuning#how-a-script-context-reaches-lean)).
 
 **Proved of every script context**, with no limit on its inputs, outputs or signatures:
 
 - what the validator rejects before it reads the transaction: a spend of an output without a
   datum, any purpose but spending, a redeemer of neither action;
 - a refund is rejected unless its validity range starts at the timeout or later
-  ([Your First Proof](/docs/verification/first-proof) builds this one);
+  ([Your First Proof](/docs/formal-verification/first-proof) builds this one);
 - a reveal is rejected unless its validity range ends by the timeout;
 - an accepted reveal ends before any accepted refund begins, so there is no time at which both are
   valid.
@@ -89,7 +89,7 @@ for every context.
 searching the signatories are stated of every context too, but Lean does not finish them there:
 those tests are tagged `Unfinished`. Each is stated again of the contexts of at most two
 signatures, with `_limited` in its name, where Lean proves it
-([Tuning Your Proof](/docs/verification/tuning#limit-the-data) shows how):
+([Tuning Your Proof](/docs/formal-verification/tuning#limit-the-data) shows how):
 
 - nobody but the committer refunds, and from the timeout on the committer can;
 - nobody but the receiver reveals, a reveal of what is not a preimage is rejected, and up to the
@@ -107,7 +107,7 @@ The suite states what is **not** proved, in its header:
   proof holds whatever the function is, and says nothing about how hard a preimage is to find.
 - **Where the funds go.** The validator asks for a signature and constrains no output.
 - **The published script's bytes.** The validator is compiled with the tactic's options, not
-  those of `HtlcContract`: see [limitations](/docs/verification#limitations).
+  those of `HtlcContract`: see [limitations](/docs/formal-verification#limitations).
 
 **Its workspace is temporary.** The suite names no workspace and writes nothing into one. Each
 check is generated, run in a temporary directory, and removed. What persists is
@@ -134,7 +134,7 @@ statements, from the most general to the most specific:
 Statements that Lean does not finish are tagged `Unfinished` and left out of `verify`: the third
 guarantee, that what is not vested stays locked, and the statements on contexts of any size.
 
-**Its workspace is persistent**, as [Mixing UPLC and Lean Proofs](/docs/verification/advanced/lean-proofs)
+**Its workspace is persistent**, as [Mixing UPLC and Lean Proofs](/docs/formal-verification/advanced/lean-proofs)
 describes. The suite overrides `leanWorkspace` with
 [`scalus-examples/jvm/src/test/lean/LinearVesting`](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/test/lean/LinearVesting),
 a Lean project committed with the example:

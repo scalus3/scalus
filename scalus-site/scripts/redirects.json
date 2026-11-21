@@ -58,5 +58,13 @@
   { "from": "/docs/dapp-development/deploy", "to": "/docs/dapp-development/sbt-plugin#deploying-contracts" },
   { "from": "/docs/smart-contracts/blueprint", "to": "/docs/dapp-development/sbt-plugin#blueprint-generation" },
   { "from": "/docs/smart-contracts/deploy", "to": "/docs/dapp-development/sbt-plugin#deploying-contracts" },
-  { "from": "/docs/testing/profiling", "to": "/docs/smart-contract-optimisations/profiling" }
+  { "from": "/docs/testing/profiling", "to": "/docs/smart-contract-optimisations/profiling" },
+  { "from": "/docs/verification", "to": "/docs/formal-verification" },
+  { "from": "/docs/verification/setup", "to": "/docs/formal-verification/setup" },
+  { "from": "/docs/verification/first-proof", "to": "/docs/formal-verification/first-proof" },
+  { "from": "/docs/verification/tuning", "to": "/docs/formal-verification/tuning" },
+  { "from": "/docs/verification/lean-workspace", "to": "/docs/formal-verification/lean-workspace" },
+  { "from": "/docs/verification/sbt-commands", "to": "/docs/formal-verification/sbt-commands" },
+  { "from": "/docs/verification/examples", "to": "/docs/formal-verification/examples" },
+  { "from": "/docs/verification/advanced/lean-proofs", "to": "/docs/formal-verification/advanced/lean-proofs" }
 ]

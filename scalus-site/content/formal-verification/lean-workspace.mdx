@@ -11,15 +11,15 @@ import { Callout } from 'nextra/components'
 Every check runs in a Lean workspace: a Lake package that requires Scalus's Lean library, with
 Blaster, PlutusCore and IOG's CardanoLedgerApi, whose ledger rules `isValid` states. The workspace decides which Lean runs and what a check can import. The
 first suite of proofs that runs creates it where it is missing, as `src/test/lean/<Project>`
-(see [Setup](/docs/verification/setup#the-lean-workspace)).
+(see [Setup](/docs/formal-verification/setup#the-lean-workspace)).
 
 The workspace holds no Lean of yours. Every check is generated, run and thrown away, and what
 persists is the file of kept results beside each suite. The
-[HTLC example](/docs/verification/examples#htlc) works this way.
+[HTLC example](/docs/formal-verification/examples#htlc) works this way.
 
 <Callout type="info">
   To keep Lean of your own beside the checks, such as statements to read or proofs written by hand,
-  see [Mixing UPLC and Lean Proofs](/docs/verification/advanced/lean-proofs).
+  see [Mixing UPLC and Lean Proofs](/docs/formal-verification/advanced/lean-proofs).
 </Callout>
 
 ## Temporary Checks
