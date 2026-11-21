@@ -37,7 +37,7 @@ jobs:
         run: |
           prefix="deps-${{ runner.os }}-${{ runner.arch }}-ci-js-$(date -u +%Y-%m)-"
           echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
-          echo "key=$prefix${{ hashFiles('build.sbt', 'project/*.sbt', 'project/build.properties') }}" >> "$GITHUB_OUTPUT"
+          echo "key=${prefix}${{ hashFiles('build.sbt', 'project/*.sbt', 'project/build.properties') }}" >> "$GITHUB_OUTPUT"
           mkdir -p ~/.cache/coursier ~/.sbt/boot
       - name: Restore the dependency cache
         id: deps-restore
