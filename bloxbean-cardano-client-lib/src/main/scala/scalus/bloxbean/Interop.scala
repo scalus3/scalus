@@ -413,13 +413,22 @@ object Interop {
         )
     }
 
+    // Ledger Coin translation retains the ADA entry even when its quantity is zero,
+    // as LedgerToPlutusTranslation.getValue does.
+    private def adaEntry(coin: BigInteger) =
+        ByteString.empty -> prelude.List.singleton(
+          ByteString.empty -> BigInt(coin ?? BigInteger.ZERO)
+        )
+
     def getValue(value: Value): v1.Value = {
-        val ma = getValue(value.getMultiAssets)
-        if value.getCoin != null then
-            val lovelace = v1.Value.lovelace(value.getCoin)
-            lovelace + ma
-        else ma
+        val ma = getValue(value.getMultiAssets ?? util.List.of()).toSortedMap.toList.map {
+            case (policyId, assets) => policyId -> assets.toList
+        }
+        v1.Value.unsafeFromList(prelude.List.Cons(adaEntry(value.getCoin), ma))
     }
+
+    private def getFee(fee: BigInteger): v1.Value =
+        v1.Value.unsafeFromList(prelude.List.singleton(adaEntry(fee)))
 
     def getValue(value: util.List[MultiAsset]): v1.Value = {
         // get sorted multi assets
@@ -736,7 +745,7 @@ object Interop {
           // outputs as in the transaction
           outputs = prelude.List
               .from(body.getOutputs.asScala.map(getTxOutV1)),
-          fee = v1.Value.lovelace(body.getFee ?? BigInteger.ZERO),
+          fee = getFee(body.getFee),
           // sorted mint values
           mint = getMintValue(body.getMint ?? util.List.of()),
           // certificates as is
@@ -789,7 +798,7 @@ object Interop {
           ),
           outputs = prelude.List
               .from(body.getOutputs.asScala.map(getTxOutV2)),
-          fee = v1.Value.lovelace(body.getFee ?? BigInteger.ZERO),
+          fee = getFee(body.getFee),
           mint = getMintValue(body.getMint ?? util.List.of()),
           dcert = prelude.List.from(certs.asScala.map(getDCert)),
           // Already in Plutus order (see getWithdrawals); preserve rather than re-sorting.
