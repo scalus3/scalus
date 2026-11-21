@@ -456,11 +456,14 @@ The spike measures:
 - On x86_64 Linux, the CI shells MUST take `uplc` from the static binary of the plutus release
   that the `plutus` input pins. `[ci.shell.uplc-release]`
 - The saving job MUST root only its dev shell, not the flake inputs. `[ci.nix.root-shell-only]`
-- The key of a Nix store entry MUST end the shell name with `_`, so that no prefix of one shell
+- The key of a Nix store entry MUST end the shell name with `.`, so that no prefix of one shell
   matches another shell. `[ci.nix.key-terminator]`
+- A cache key prefix MUST NOT contain `_` or `%`. `[ci.nix.no-like-wildcards]`
 
-*Implementation status of the rules above: built on the work branch, 2026-11-21, not yet run
-on CI.* `[ci.nix.root-shell-only]` replaces the flake-input part of `[ci.nix.gc-roots]`.
+*Implementation status of the rules above: built on the work branch, 2026-11-21.*
+`[ci.nix.no-like-wildcards]`: the GitHub cache API filters keys with SQL LIKE. In branch run
+44943388219, the purge prefix `nix-Linux-X64-ci_` of the `ci` saver matched the `ci-native_`
+and `ci-lean_` entries, and the job deleted them. `[ci.nix.root-shell-only]` replaces the flake-input part of `[ci.nix.gc-roots]`.
 
 ### Decision: Run the browser test with the runner's Google Chrome
 
@@ -486,8 +489,8 @@ Options:
 - One entry per shell, each saved by the one job that uses it: each restore holds only its shell.
 Chosen: one entry per shell, by the developer on 2026-11-21. CI-JVM 3.3.9 saves `ci`, CI-Native
 saves `ci-native`, Lean-Proofs saves `ci-lean`.
-Consequences: Adds `[ci.shell.per-job]`, `[ci.shell.uplc-release]`, `[ci.nix.root-shell-only]`
-and `[ci.nix.key-terminator]`.
+Consequences: Adds `[ci.shell.per-job]`, `[ci.shell.uplc-release]`, `[ci.nix.root-shell-only]`,
+`[ci.nix.key-terminator]` and `[ci.nix.no-like-wildcards]`.
 
 *Spike results, 2026-11-21.* Closures are nar sizes of the Linux outPaths, read from
 cache.nixos.org and cache.iog.io with `nix path-info --store <cache> -rS`, so no Linux builder is
