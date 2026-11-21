@@ -23,8 +23,8 @@ SCALUS_VERSION="$(sed -n 's/^val scalusStableVersion = "\(.*\)"$/\1/p' "$SCRIPT_
 SCALUS_VERSION="${SCALUS_VERSION:-1.5.0}"
 
 # Ejected projects target sbt 2.1.0 (where `test` is cached and `testFull` runs
-# uncached, like sbt 1.x `test`). Pinned independently of the monorepo, which
-# still builds on sbt 1.x — so we must NOT read it from project/build.properties.
+# uncached, like sbt 1.x `test`). Pinned on its own, not read from the monorepo's
+# project/build.properties: a build-tool bump here must not change ejected projects.
 SBT_VERSION="2.1.0"
 SCALA_VERSION="3.3.9"
 
@@ -300,9 +300,9 @@ SCALUS_PROFILE=1 sbt test
 ## CIP-57 blueprints
 
 \`sbt package\` embeds a CIP-57 blueprint JSON for every Contract in the JAR at
-\`META-INF/scalus/blueprints/<Contract>.json\`. Run \`sbt blueprint\` to generate
+\`META-INF/scalus/blueprints/<package>/<Contract>.json\`. Run \`sbt blueprint\` to generate
 without packaging — output goes to
-\`target/scala-$SCALA_VERSION/resource_managed/main/META-INF/scalus/blueprints/<Contract>.json\`.
+\`target/out/jvm/scala-$SCALA_VERSION/$name/resource_managed/main/META-INF/scalus/blueprints/<package>/<Contract>.json\`.
 Skip generation during \`package\` with \`blueprint / skip := true\` or \`SCALUS_SKIP_BLUEPRINT=1\`.
 
 ## Deploy as a reference script

@@ -2,7 +2,7 @@
 
 ## Pre-requisites
 
-- Java 11+, sbt 1.x
+- JDK 17+, sbt 2.1
 - Cardano `uplc` CLI tool and Nix
 
 ## Env setup with Nix
