@@ -1905,18 +1905,20 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             lovelaceValid && assetsValid
         }
 
-        // Use ScalaCheck directly (not checkEval) since toLedgerValue is offchain-only
+        // Use ScalaCheck directly (not checkEval) since toLedgerValue is offchain-only.
+        // ScalaTest's forAll discards a Boolean result, so the body must assert.
         forAll { (value: Value) =>
-            // Only test values that can be converted to ledger.Value
-            // (i.e., all amounts must be within Long range)
-            if isValidForLedger(value) then
-                val ledgerValue = value.toLedgerValue
-                val roundtripped = LedgerToPlutusTranslation.getValue(ledgerValue)
-                roundtripped == value
-            else
-                // For values outside Long range, just verify the property passes
-                // (we can't test roundtrip for invalid values)
-                true
+            // Only values with all amounts in Long range convert to ledger.Value
+            whenever(isValidForLedger(value)) {
+                val roundtripped = LedgerToPlutusTranslation.getValue(value.toLedgerValue)
+                // The ledger translation always has the ADA entry first, even at zero lovelace
+                val adaEntry =
+                    (Value.adaPolicyId, List.singleton((Value.adaTokenName, value.getLovelace)))
+                val nativeEntries = value.toSortedMap.toList
+                    .filter(_._1 != Value.adaPolicyId)
+                    .map((policyId, tokens) => (policyId, tokens.toList))
+                assert(roundtripped == Value.unsafeFromList(List.Cons(adaEntry, nativeEntries)))
+            }
         }
     }
 
