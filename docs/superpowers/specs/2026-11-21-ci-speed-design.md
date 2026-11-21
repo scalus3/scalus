@@ -459,11 +459,16 @@ The spike measures:
 - The key of a Nix store entry MUST end the shell name with `.`, so that no prefix of one shell
   matches another shell. `[ci.nix.key-terminator]`
 - A cache key prefix MUST NOT contain `_` or `%`. `[ci.nix.no-like-wildcards]`
+- The saving job MUST save the Nix store in a step right after the shell is built, before the
+  build and the tests. `[ci.nix.save-before-build]`
 
 *Implementation status of the rules above: built on the work branch, 2026-11-21.*
 `[ci.nix.no-like-wildcards]`: the GitHub cache API filters keys with SQL LIKE. In branch run
 44943388219, the purge prefix `nix-Linux-X64-ci_` of the `ci` saver matched the `ci-native_`
-and `ci-lean_` entries, and the job deleted them. `[ci.nix.root-shell-only]` replaces the flake-input part of `[ci.nix.gc-roots]`.
+and `ci-lean_` entries, and the job deleted them.
+`[ci.nix.save-before-build]`: the post step of `cache-nix-action` is skipped when the job fails.
+In branch run 44945312274 a proof failed, so the 32-minute source build of `blasterZ3` was not
+saved, and the next run builds it again. `[ci.nix.root-shell-only]` replaces the flake-input part of `[ci.nix.gc-roots]`.
 
 ### Decision: Run the browser test with the runner's Google Chrome
 
