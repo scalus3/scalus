@@ -42,6 +42,9 @@
   free variable inside `constr` or `case`. Like Plutus, PlutusV1 and PlutusV2 accept the result and
   PlutusV3 fails with `InvalidReturnValue`. `DeBruijn.fromDeBruijnTerm` now names such a variable
   `free<k>` instead of throwing (#474).
+- Script contexts keep the ADA entry of an output value and of a V1/V2 fee when it holds zero
+  lovelace, as the ledger does: such a value is now `{"": {"": 0}}`, where it was empty. This
+  applies to `LedgerToPlutusTranslation` and to the Bloxbean `Interop` translator (#468).
 - sbt plugin: `blueprint` now regenerates when only a dependency changes. Before, a Scalus upgrade
   that left the contract classes unchanged kept the old `plutus.json`, with the old script hash.
 
