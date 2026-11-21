@@ -46,29 +46,28 @@ jobs:
         if: matrix.name == '3.3.9'
         uses: nix-community/cache-nix-action@v7
         with:
-          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci-${{ hashFiles('flake.nix', 'flake.lock') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci-
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci_${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci_
           save: ${{ env.SAVE_CACHES }}
           gc-max-store-size-linux: 0
           purge: ${{ env.SAVE_CACHES }}
-          purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-ci-
+          purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-ci_
           purge-created: 0
           purge-primary-key: never
       - name: Restore the Nix store
         if: matrix.name != '3.3.9'
         uses: nix-community/cache-nix-action/restore@v7
         with:
-          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci-${{ hashFiles('flake.nix', 'flake.lock') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci-
-      # The GC roots of the save above: the `ci` shell and every flake input, so the next run
-      # evaluates the flake without downloading its inputs again ([ci.nix.gc-roots]).
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci_${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci_
+      # The GC root of the save above: the `ci` shell only. Not the flake inputs: `nix flake
+      # archive` fetches all of them, haskell.nix and hackage included (4.3 GB, 3.3 min), where
+      # the evaluation of `ci` needs only nixpkgs and the plutus source ([ci.nix.gc-roots]).
       - name: Keep the dev shell from garbage collection
         if: matrix.name == '3.3.9' && env.SAVE_CACHES == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/gcroots"
           nix develop .#ci --accept-flake-config --profile "$RUNNER_TEMP/gcroots/ci" --command true
-          nix flake archive --accept-flake-config --json | jq -r '.. | .path? // empty' | sort -u |
-            while read -r p; do nix-store --add-root "$RUNNER_TEMP/gcroots/${p##*/}" --realise "$p" >/dev/null; done
           echo "closure of the ci shell: $(nix path-info -S "$RUNNER_TEMP/gcroots/ci" | awk '{printf "%.0f MB", $2/1048576}')"
           du -sh /nix/store
       # The coursier downloads and the sbt 2 launcher, one entry per job ([ci.deps.*]). sbt 2 does

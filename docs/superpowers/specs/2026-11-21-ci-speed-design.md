@@ -437,6 +437,44 @@ The spike measures:
 
 - The developer MUST NOT remove the `uplc` binary from the `ci` shell while a test runs it.
   `[ci.shell.keep-uplc]`
+- The flake MUST define the shells `ci` (CI-JVM, CI-JS, it, nightly, release), `ci-native` and
+  `ci-lean`, each with only the packages that its jobs run. `[ci.shell.per-job]`
+- The CI shells MUST NOT hold chromium. `[ci.shell.no-chromium]`
+- On x86_64 Linux, the CI shells MUST take `uplc` from the static binary of the plutus release
+  that the `plutus` input pins. `[ci.shell.uplc-release]`
+- The saving job MUST root only its dev shell, not the flake inputs. `[ci.nix.root-shell-only]`
+- The key of a Nix store entry MUST end the shell name with `_`, so that no prefix of one shell
+  matches another shell. `[ci.nix.key-terminator]`
+
+*Implementation status of the rules above: built on the work branch, 2026-11-21, not yet run
+on CI.* `[ci.nix.root-shell-only]` replaces the flake-input part of `[ci.nix.gc-roots]`.
+
+### Decision: Run the browser test with the runner's Google Chrome
+
+Status: Accepted
+Area: ci
+Context: chromium is 1.5 GB of the 5.1 GB `ci` shell, and only `test:browser` of CI-JS uses it.
+Options:
+- The runner's Chrome: 0 MB. Its version follows the weekly runner image, not `flake.lock`.
+- A `ci-js` shell with the pinned chromium: 2.9 GB, its own cache entry.
+Chosen: the runner's Chrome, by the owner on 2026-11-21.
+Consequences: Adds `[ci.shell.no-chromium]`. A local run already uses the installed Chrome, or
+`CHROME_BIN`.
+
+### Decision: One Nix store entry per CI shell, rooting the shell only
+
+Status: Accepted
+Area: ci
+Context: rooting the flake inputs fetched haskell.nix, hackage and CHaP: 4.3 GB and 3.3 min.
+The `ci` shell evaluates without them when it takes the release `uplc`.
+Options:
+- One entry that roots all CI shells: one saver, but `ci-native` clang and `ci-lean` Z3 ride in
+  every restore.
+- One entry per shell, each saved by the one job that uses it: each restore holds only its shell.
+Chosen: one entry per shell, by the developer on 2026-11-21. CI-JVM 3.3.9 saves `ci`, CI-Native
+saves `ci-native`, Lean-Proofs saves `ci-lean`.
+Consequences: Adds `[ci.shell.per-job]`, `[ci.shell.uplc-release]`, `[ci.nix.root-shell-only]`
+and `[ci.nix.key-terminator]`.
 
 *Spike results, 2026-11-21.* Closures are nar sizes of the Linux outPaths, read from
 cache.nixos.org and cache.iog.io with `nix path-info --store <cache> -rS`, so no Linux builder is

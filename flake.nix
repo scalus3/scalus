@@ -186,6 +186,55 @@
         "-XX:+UseTransparentHugePages" # Use OS huge pages for better memory performance
       ];
 
+      # The CI shells (devShells.ci, ci-native, ci-lean). JDK 21: Scala 3.8+ requires JDK 17+ to run
+      # the compiler (3.3 LTS still supports JDK 8+), and ci-jvm cross-builds on 3.9.0/3.10.1. The
+      # headless JDK leaves out GTK, X11 and ALSA, which no CI job uses.
+      ciJdk = pkgs.jdk21_headless;
+      ciSbt = pkgs.sbt.override { jre = ciJdk; };
+      # Common JVM options for CI. NO heap settings here: .jvmopts caps the heap at 8g, for CI
+      # and for developers alike. That leaves ~8GB for Node.js (Scala.js tests), Nix and the OS
+      # on a 16GB GitHub Actions runner. Do not restore a percentage: MaxRAMPercentage=75% gave a
+      # ~12GB heap and the OOM killer SIGTERMed the runner on every CI-JS run.
+      ciCommonJvmOpts = [
+        "-Xss64m" # Stack size for deep recursive calls in compiler
+        "-XX:+UseG1GC" # Use G1 Garbage Collector (stable, good for large heaps)
+        "-XX:+UseStringDeduplication" # Deduplicate identical strings to save memory
+        "-XX:ReservedCodeCacheSize=512m" # Reserve space for compiled native code
+        "-XX:InitialCodeCacheSize=64m" # Start with larger initial code cache
+        "-XX:+TieredCompilation" # Use tiered compilation (C1 + C2 compilers)
+        "-XX:+UseCompressedOops" # Use 32-bit pointers on 64-bit JVM (saves memory)
+      ];
+      ciSbtJvmOpts = ciCommonJvmOpts ++ [
+        "-Dsbt.boot.lock=false" # Disable boot lock (faster in containerized CI)
+        "-Dsbt.supershell=false" # Disable supershell for cleaner CI logs
+      ];
+      # The uplc of the plutus release that the `plutus` input pins: a static Linux binary. CI
+      # takes it instead of plutus.packages.uplc, whose evaluation fetches haskell.nix, hackage
+      # and CHaP (4.3 GB of flake inputs). The release has no macOS binary, so macOS keeps the
+      # build from source. Bump it with the `plutus` input.
+      uplcRelease = pkgs.runCommand "uplc-1.70.0.0"
+        {
+          src = pkgs.fetchurl {
+            url = "https://github.com/IntersectMBO/plutus/releases/download/1.70.0.0/uplc-x86_64-linux-ghc96";
+            hash = "sha256-+w3d9qxw9P3K89a+g8sdBgmNlFUhSaUm6DsvrJmTEjM=";
+          };
+        } ''install -Dm755 $src $out/bin/uplc'';
+      ciUplc = if system == "x86_64-linux" then uplcRelease else uplc;
+      mkCiShell = { mkShell ? pkgs.mkShellNoCC, packages, shellHook ? "" }: mkShell {
+        JAVA_HOME = "${ciJdk}";
+        JAVA_OPTS = builtins.concatStringsSep " " ciCommonJvmOpts;
+        SBT_OPTS = builtins.concatStringsSep " " ciSbtJvmOpts;
+        # Fixes issues with Node.js 20+ and OpenSSL 3 during webpack build
+        # Limit Node.js heap to avoid OOM when running Scala.js tests alongside JVM
+        NODE_OPTIONS = "--openssl-legacy-provider --max-old-space-size=2048";
+        LC_ALL = "C";
+        packages = [ ciJdk ciSbt ] ++ packages;
+        shellHook = ''
+          unlink plutus-conformance 2>/dev/null || true
+          ln -s ${plutus}/plutus-conformance plutus-conformance
+        '' + shellHook;
+      };
+
       # cardano-cli = cardano-node-flake.packages.${system}.cardano-cli;
     in
     {
@@ -328,100 +377,36 @@
               sbt
             ];
           };
-        ci =
-          let
-            # JDK 21: Scala 3.8+ requires JDK 17+ to run the compiler (3.3 LTS still
-            # supports JDK 8+). ci-jvm cross-builds on 3.9.0/3.10.1, so the CI shell must be >= 17.
-            jdk = pkgs.openjdk21;
-            sbt = pkgs.sbt.override { jre = jdk; };
-
-            # Common JVM options for CI environment (Java 21 - more conservative settings)
-            ciCommonJvmOpts = [
-              # NO heap settings here either: .jvmopts caps the heap at 8g, for CI
-              # and for developers alike. That leaves ~8GB for Node.js (Scala.js
-              # tests), Nix and the OS on a 16GB GitHub Actions runner. Do not
-              # restore a percentage: MaxRAMPercentage=75% gave a ~12GB heap and
-              # the OOM killer SIGTERMed the runner on every CI-JS run.
-              "-Xss64m" # Stack size for deep recursive calls in compiler
-
-              # Garbage Collection - G1GC for stability
-              "-XX:+UseG1GC" # Use G1 Garbage Collector (stable, good for large heaps)
-
-              # Memory optimizations
-              "-XX:+UseStringDeduplication" # Deduplicate identical strings to save memory
-
-              # Code cache settings - enabled for better JIT performance
-              "-XX:ReservedCodeCacheSize=512m" # Reserve space for compiled native code
-              "-XX:InitialCodeCacheSize=64m" # Start with larger initial code cache
-
-              # Compilation settings
-              "-XX:+TieredCompilation" # Use tiered compilation (C1 + C2 compilers)
-
-              # Memory efficiency
-              "-XX:+UseCompressedOops" # Use 32-bit pointers on 64-bit JVM (saves memory)
-            ];
-
-            # CI SBT-specific options (prioritize build speed for single-run builds)
-            ciSbtJvmOpts = ciCommonJvmOpts ++ [
-              # For CI single-run builds, TieredStopAtLevel=1 is acceptable since there's
-              # no warm JVM benefit. For builds > 15 min, consider removing this flag.
-              #                "-XX:TieredStopAtLevel=1"           # Stop at C1 compiler (faster CI startup)
-              #                "-XX:CompileThreshold=1500"         # Higher threshold for native compilation
-
-              # CI-specific optimizations
-              "-Dsbt.boot.lock=false" # Disable boot lock (faster in containerized CI)
-              "-Dsbt.supershell=false" # Disable supershell for cleaner CI logs
-            ];
-          in
-          pkgs.mkShell ({
-            JAVA_HOME = "${jdk}";
-            JAVA_OPTS = builtins.concatStringsSep " " ciCommonJvmOpts;
-            SBT_OPTS = builtins.concatStringsSep " " ciSbtJvmOpts;
-            # Fixes issues with Node.js 20+ and OpenSSL 3 during webpack build
-            # Limit Node.js heap to avoid OOM when running Scala.js tests alongside JVM
-            NODE_OPTIONS = "--openssl-legacy-provider --max-old-space-size=2048";
-            # Fix locale warnings in CI
-            LC_ALL = "C";
-            LOCALE_ARCHIVE = pkgs.lib.optionalString pkgs.stdenv.isLinux "${pkgs.glibcLocales}/lib/locale/locale-archive";
-            packages = with pkgs; [
-              jdk
-              sbt
-              nodejs
-              uplc
-              llvm
-              # Scala Native must compile and link with the nixpkgs toolchain. Without it, sbt uses the
-              # runner's /usr/bin/clang and glibc, and the nixpkgs crypto libraries (built on a newer
-              # glibc) fail at load time: GLIBC_ABI_DT_X86_64_PLT not found.
-              clang
-              libsodium
-              secp256k1
-              blst
-              # Lean 4 + Z3. Without a built workspace, as in ci-jvm, the tests that run Lean are
-              # canceled. The Lean-Proofs workflow, which builds the workspace and runs the proofs,
-              # uses `ci-lean`, whose Z3 is the one the pinned Blaster needs.
-              elan
-              z3
-            ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.chromium ];
-            shellHook = ''
-              unlink plutus-conformance 2>/dev/null || true
-              ln -s ${plutus}/plutus-conformance plutus-conformance
-              # For Scala Native only; the JVM uses scalus-crypto-jni (see the default shell).
-              export LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
-              # For Scala Native tests, provide blst path separately (used by build.sbt)
-              export BLST_NATIVE_LIB_PATH="${pkgs.blst}/lib"
-            '';
-          } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            # Use the browser pinned by flake.lock, independently of the host PATH.
-            CHROME_BIN = "${pkgs.chromium}/bin/chromium";
-          });
-        # `ci` with the Z3 the pinned Lean-blaster needs (`blasterZ3`), for the Lean-Proofs
-        # workflow. It is built from source, so it is not in `ci`: every other workflow would build
-        # it first, where the Nix cache has not kept it, and run out of time.
-        ci-lean = ci.overrideAttrs (old: {
-          nativeBuildInputs =
-            [ blasterZ3 ] ++ builtins.filter (p: (p.pname or "") != "z3") old.nativeBuildInputs;
-        });
+        # The CI shells hold what their jobs run and nothing more, so the Nix store cache of each
+        # stays small (docs/superpowers/specs/2026-11-21-ci-speed-design.md, section 9). No
+        # chromium: the browser test of CI-JS runs the runner's Google Chrome. No glibcLocales:
+        # LC_ALL=C needs no locale archive.
+        # `ci`: CI-JVM, CI-JS, and the it, nightly and release workflows. Z3 stays for
+        # UsdcxMintingPolicyVerificationTest. Without elan the Lean tests are canceled, as they are
+        # without a built workspace; the Lean-Proofs workflow runs them in `ci-lean`.
+        ci = mkCiShell {
+          packages = [ pkgs.nodejs ciUplc pkgs.z3 ];
+        };
+        # `ci-native`: CI-Native. Scala Native must compile and link with the nixpkgs toolchain.
+        # Without it, sbt uses the runner's /usr/bin/clang and glibc, and the nixpkgs crypto
+        # libraries (built on a newer glibc) fail at load time: GLIBC_ABI_DT_X86_64_PLT not found.
+        # The native tests do not run uplc; Macros reads the conformance corpus at compile time.
+        ci-native = mkCiShell {
+          mkShell = pkgs.mkShell;
+          packages = with pkgs; [ clang libsodium secp256k1 blst ];
+          shellHook = ''
+            export LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
+            # For Scala Native tests, provide blst path separately (used by build.sbt)
+            export BLST_NATIVE_LIB_PATH="${pkgs.blst}/lib"
+          '';
+        };
+        # `ci-lean`: the Lean-Proofs workflow, with the Z3 that the pinned Lean-blaster needs
+        # (`blasterZ3`). It is built from source, so it is not in `ci`: every other workflow would
+        # build it first, where the Nix cache has not kept it, and run out of time.
+        ci-lean = mkCiShell {
+          packages = [ ciUplc pkgs.elan blasterZ3 ];
+        };
         ci-secp =
           let
             jdk = pkgs.openjdk11;

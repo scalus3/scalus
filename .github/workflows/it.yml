@@ -50,8 +50,8 @@ jobs:
       - name: Restore the Nix store
         uses: nix-community/cache-nix-action/restore@v7
         with:
-          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci-${{ hashFiles('flake.nix', 'flake.lock') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci-
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci_${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci_
       - name: Restore the dependency cache
         uses: actions/cache/restore@v6
         with:
@@ -94,8 +94,8 @@ jobs:
       - name: Restore the Nix store
         uses: nix-community/cache-nix-action/restore@v7
         with:
-          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci-${{ hashFiles('flake.nix', 'flake.lock') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci-
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci_${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci_
       - name: Restore the dependency cache
         uses: actions/cache/restore@v6
         with:

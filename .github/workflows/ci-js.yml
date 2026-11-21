@@ -29,8 +29,8 @@ jobs:
       - name: Restore the Nix store
         uses: nix-community/cache-nix-action/restore@v7
         with:
-          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci-${{ hashFiles('flake.nix', 'flake.lock') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci-
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci_${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci_
       # The coursier downloads and the sbt 2 launcher, one entry per job ([ci.deps.*]); see ci-jvm.yml.
       - name: Name the dependency cache
         id: deps
