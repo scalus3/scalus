@@ -102,6 +102,16 @@ Other facts:
 - `scalus.utils.Macros` and `CekBuiltinsJsTest` run the `uplc` binary.
 - The CI-JVM 3.9.0 job built `nodejs` on the runner: the Nix cache did not hold it.
 
+Measured on 2026-11-21, branch run 44931794907 (step 1 of 6.5), on an empty Nix store:
+
+| Fact | Result |
+|---|---|
+| Closure of the `ci` shell (`nix path-info -S`) | 5.1 GB |
+| Flake inputs, sum of `nix flake archive` paths (measured locally) | 4.3 GB; the largest three are 1.2, 0.7 and 0.6 GB |
+| `/nix/store` with the shell and the inputs | 13 GB |
+| `nix develop .#ci` from the public binary caches only | 1.3 min |
+| GC roots for the flake inputs (`nix-store --realise`) | 3.3 min more |
+
 ## 5. Approaches
 
 ### Decision: Keep the sbt task cache in the GitHub Actions cache
