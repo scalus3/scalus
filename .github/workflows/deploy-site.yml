@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       versions:
-        description: 'Tags to (re)build, space-separated, e.g. "v1.3.0 v1.4.0". Empty = the newest v* tag. Other versions already on gh-pages are kept.'
+        description: 'Empty = redeploy the site; the newest release''s API docs are built only if not yet published. To (re)build the API docs and llms files of releases, list their tags, e.g. "v1.4.0 v1.5.0". Published versions are kept.'
         required: false
         type: string
         default: ''
@@ -64,8 +64,14 @@ jobs:
           VERSIONS: ${{ inputs.versions }}
         run: |
           set -euo pipefail
+          # Empty input: build the newest tag only when gh-pages does not have it yet [VW-14].
           if [ -z "$VERSIONS" ]; then
-            VERSIONS=$(git describe --tags --abbrev=0 --match 'v*')
+            NEWEST=$(git describe --tags --abbrev=0 --match 'v*')
+            if [ -d "scalus-site/public/api/${NEWEST#v}" ] && [ -d "scalus-site/public/llms/${NEWEST#v}" ]; then
+              echo "$NEWEST is already published: reusing it. List tags to rebuild them."
+            else
+              VERSIONS=$NEWEST
+            fi
           fi
           for TAG in $VERSIONS; do
             echo "::group::$TAG"

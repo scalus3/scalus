@@ -153,7 +153,7 @@ Who: a maintainer, by manual `workflow_dispatch`, as today.
 
 | Input | Type | Default |
 |---|---|---|
-| `versions` | space-separated tags | empty, which means the newest `v*` tag by `git describe --tags --abbrev=0 --match 'v*'` |
+| `versions` | space-separated tags | empty, which means the newest `v*` tag by `git describe --tags --abbrev=0 --match 'v*'` when gh-pages does not have it yet, and no tag otherwise (`[VW-14]`) |
 
 The `api_mode` input (`preserve` / `regenerate`) is removed.
 
@@ -172,6 +172,11 @@ Checks enforced here:
 - The deploy workflow MUST publish with `gh-pages --no-history`. `[VW-10]`
 - The deploy workflow MUST NOT generate `llms-api.txt` outside the build script. `[VW-11]`
 - After `pnpm build`, the deploy workflow MUST overwrite `out/llms-full.txt` and `out/llms-examples.txt` with the latest version's files. `[VW-12]`
+- With an empty `versions` input, the deploy workflow MUST build the newest tag only when gh-pages has no `api/<version>/` or no `llms/<version>/` folder for it. `[VW-14]`
+
+**Why `[VW-14]`:** most deploys only publish docs changes from the branch. The newest version is
+already restored by `[VW-1]`, and rebuilding it runs a full unidoc for an identical result. A
+deploy right after a release still builds the new tag, because gh-pages does not have it yet.
 
 **Why `[VW-2]`:** the first deploy after this change finds the old full-size, non-versioned root
 API on gh-pages. Restoring it would publish 861 MB of stale pages.
