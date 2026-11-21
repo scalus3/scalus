@@ -463,6 +463,9 @@ Other facts:
   `BaseValidatorTestJvm` (through `UplcCli`) and `CekBuiltinsJsTest`. `scalus.utils.Macros`
   reads the corpus at compile time on every platform and does not run `uplc`.
 - `uplc` has a runtime closure of 89 MB.
+- The x64 Ubuntu runner images (`ubuntu-latest`, `ubuntu-24.04`, `ubuntu-26.04`) have Google
+  Chrome on `PATH`; the arm64 images and `ubuntu-slim` have no Chrome (actions/runner-images
+  readmes, 2026-11-21). The image, and so the Chrome version, changes about each week.
 
 **Why:** the job has one Nix step today, so nix-direnv saves time only after phase 3 splits a
 job into more steps. `.envrc` loads the `default` shell, not `ci`, so CI cannot reuse it as it
