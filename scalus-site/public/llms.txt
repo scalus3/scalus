@@ -31,6 +31,7 @@ Claude Code users: the same `scalus` plugin routes TypeScript projects to its `s
 - **Multiplatform**: JVM, JavaScript/TypeScript, and Native compilation
 - **Local Testing**: In-memory Emulator and Docker-based devnet
 - **IDE Debugging**: Debug validators with breakpoints in IntelliJ or VS Code
+- **Formal Verification**: Prove validator properties for every input, on the compiled UPLC, with Lean 4, Blaster and Z3 (experimental)
 - **Design Patterns**: Proven optimization patterns with implementations
 
 ## Documentation
@@ -87,6 +88,16 @@ Claude Code users: the same `scalus` plugin routes TypeScript projects to its `s
 - /docs/testing/js-emulator - Emulator and profiling from JavaScript/TypeScript
 - /docs/testing/local-devnet - Docker-based local node (Yaci DevKit)
 - /docs/testing/protocol-version-builtins - Protocol versions and available builtins
+
+### Formal Verification
+- /docs/formal-verification - Prove properties of Cardano validators for every input, on the compiled UPLC, with Lean 4, Blaster and Z3 (experimental)
+- /docs/formal-verification/setup - Install Lean 4 (elan) and Z3, add scalus-verification, create the Lean workspace
+- /docs/formal-verification/first-proof - Tutorial: prove a rule of an HTLC validator for every script context with LeanProofsSuite and sbt verify
+- /docs/formal-verification/tuning - Inconclusive or slow proofs: step budgets, forAllDataLimited, script context forms, time limits
+- /docs/formal-verification/lean-workspace - Where checks run, the kept results (<Suite>.proofs.json), CI without Lean
+- /docs/formal-verification/sbt-commands - verify, leanInit, leanBuild, leanExport, leanProve, ualExport
+- /docs/formal-verification/examples - HTLC, linear vesting, payment splitter and one-shot minting proofs
+- /docs/formal-verification/advanced/lean-proofs - Export statements as Lean modules, prove by hand, check with leanProve
 
 ### Design Patterns
 - /docs/design-patterns - Optimization patterns for Cardano
