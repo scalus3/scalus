@@ -1,10 +1,15 @@
 name: CI-Native
 on:
+  workflow_dispatch:
   push:
     paths-ignore:
       - 'scalus-secp256k1-jni/**'
       - 'scalus-crypto-jni/**'
       - '.github/workflows/**'
+env:
+  # Only master saves caches; a branch restores the entries of master
+  # (docs/superpowers/specs/2026-11-21-ci-speed-design.md, [ci.nix.save-on-master]).
+  SAVE_CACHES: ${{ github.ref == 'refs/heads/master' }}
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -12,26 +17,76 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      # The deletion of old cache entries ([ci.prune.after-save]).
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: coursier/cache-action@v7
       - uses: nixbuild/nix-quick-install-action@v35
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      # The Nix store of the `ci-native` shell, saved by this job alone ([ci.nix.one-saver]), with
+      # a garbage collection before the save and a purge of the older entries; see ci-jvm.yml.
+      - name: Restore the Nix store
+        id: nix-restore
+        uses: nix-community/cache-nix-action/restore@v7
         with:
-          use-flakehub: false
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci-native.${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci-native.
+      - name: Keep the dev shell from garbage collection
+        if: env.SAVE_CACHES == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/gcroots"
+          nix develop .#ci-native --accept-flake-config --profile "$RUNNER_TEMP/gcroots/ci-native" --command true
+          echo "closure of the ci-native shell: $(nix path-info -S "$RUNNER_TEMP/gcroots/ci-native" | awk '{printf "%.0f MB", $2/1048576}')"
+      # Saved here, before the build and the tests, so a failing test does not lose the store: the
+      # post step of the combined action is skipped when the job fails. The garbage collection
+      # keeps the rooted shell, which the next steps use.
+      - name: Save the Nix store
+        if: env.SAVE_CACHES == 'true' && steps.nix-restore.outputs.hit-primary-key != 'true'
+        uses: nix-community/cache-nix-action/save@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci-native.${{ hashFiles('flake.nix', 'flake.lock') }}
+          gc-max-store-size-linux: 0
+          purge: true
+          purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-ci-native.
+          purge-created: 0
+          purge-primary-key: never
+      # The coursier downloads and the sbt 2 launcher, one entry per job ([ci.deps.*]); see ci-jvm.yml.
+      - name: Name the dependency cache
+        id: deps
+        run: |
+          prefix="deps-${{ runner.os }}-${{ runner.arch }}-ci-native-$(date -u +%Y-%m)-"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "key=${prefix}${{ hashFiles('build.sbt', 'project/*.sbt', 'project/build.properties') }}" >> "$GITHUB_OUTPUT"
+          mkdir -p ~/.cache/coursier ~/.sbt/boot
+      - name: Restore the dependency cache
+        id: deps-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt/boot
+          key: ${{ steps.deps.outputs.key }}
+          restore-keys: ${{ steps.deps.outputs.prefix }}
       - name: Build and test in Nix devshell
-        # The native test binaries each carry their own GC heap and run alongside the sbt JVM.
-        # The shared `ci` devshell sets -Xmx7g (sized for JVM/JS tests); that leaves too little
-        # headroom for the native binaries. Drop the sbt heap to 5G for this job only (the Scala
-        # Native build/optimize still fits). Substitution runs inside the nix shell where
-        # SBT_OPTS/JAVA_OPTS are defined, so the arg is single-quoted.
         # `free -h`/`nproc` log the runner's real memory/cores while we tune native test memory.
         run: |
           echo "== runner resources =="; free -h; nproc; echo "======================"
-          nix develop .#ci --accept-flake-config --command bash -c 'export SBT_OPTS="${SBT_OPTS//-Xmx7g/-Xmx5g}" JAVA_OPTS="${JAVA_OPTS//-Xmx7g/-Xmx5g}"; sbt ci-native'
+          nix develop .#ci-native --accept-flake-config --command sbt ci-native
+      - name: Save the dependency cache
+        if: env.SAVE_CACHES == 'true' && steps.deps-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt/boot
+          key: ${{ steps.deps.outputs.key }}
+      - name: Delete the older dependency caches of this job
+        if: env.SAVE_CACHES == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/prune-caches.sh "${{ steps.deps.outputs.prefix }}" "${{ steps.deps.outputs.key }}"
       - name: Report test results
         uses: sarisia/actions-status-discord@v1
         if: failure()

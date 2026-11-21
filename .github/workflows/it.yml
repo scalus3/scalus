@@ -19,7 +19,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: coursier/cache-action@v7
       - name: Download it-data
         uses: robinraju/release-downloader@v1
         with:
@@ -46,9 +45,21 @@ jobs:
             -R michaeljfazio/dugite -p ledger-rules.tar.gz -D dugite
           echo "018c480caad1abf311b7203998d0e905b743d17ee26213edc4575d027faab996  $f" | sha256sum -c
       - uses: nixbuild/nix-quick-install-action@v35
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      # Restore only: the CI-JVM 3.3.9 job saves the Nix store of the `ci` shell, and each push job
+      # its dependency cache ([ci.nix.one-saver], [ci.deps.*]). This job takes the ci-jvm-3.3.9 entry.
+      - name: Restore the Nix store
+        uses: nix-community/cache-nix-action/restore@v7
         with:
-          use-flakehub: false
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci.${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci.
+      - name: Restore the dependency cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt/boot
+          key: deps-${{ runner.os }}-${{ runner.arch }}-ci-jvm-3.3.9-
+          restore-keys: deps-${{ runner.os }}-${{ runner.arch }}-ci-jvm-3.3.9-
       - name: Run the conformance tests in the Nix devshell
         run: nix develop .#ci --accept-flake-config --command bash -c "export SCALUS_IT_DATA_PATH=$GITHUB_WORKSPACE/it-data/it-data; export SCALUS_DUGITE_LEDGER_RULES=$GITHUB_WORKSPACE/dugite/ledger-rules.tar.gz; sbt it-conformance"
       - name: Report test results
@@ -77,11 +88,22 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: coursier/cache-action@v7
       - uses: nixbuild/nix-quick-install-action@v35
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      # Restore only: the CI-JVM 3.3.9 job saves the Nix store of the `ci` shell, and each push job
+      # its dependency cache ([ci.nix.one-saver], [ci.deps.*]). This job takes the ci-jvm-3.3.9 entry.
+      - name: Restore the Nix store
+        uses: nix-community/cache-nix-action/restore@v7
         with:
-          use-flakehub: false
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci.${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci.
+      - name: Restore the dependency cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt/boot
+          key: deps-${{ runner.os }}-${{ runner.arch }}-ci-jvm-3.3.9-
+          restore-keys: deps-${{ runner.os }}-${{ runner.arch }}-ci-jvm-3.3.9-
       - name: Run the integration tests in the Nix devshell
         run: nix develop .#ci --accept-flake-config --command bash -c "sbt it-network"
       - name: Report test results

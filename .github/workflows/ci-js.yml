@@ -1,10 +1,15 @@
 name: CI-JS
 on:
+  workflow_dispatch:
   push:
     paths-ignore:
       - 'scalus-secp256k1-jni/**'
       - 'scalus-crypto-jni/**'
       - '.github/workflows/**'
+env:
+  # Only master saves caches; a branch restores the entries of master
+  # (docs/superpowers/specs/2026-11-21-ci-speed-design.md, [ci.nix.save-on-master]).
+  SAVE_CACHES: ${{ github.ref == 'refs/heads/master' }}
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -12,16 +17,37 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      # The deletion of old cache entries ([ci.prune.after-save]).
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: coursier/cache-action@v7
       - uses: nixbuild/nix-quick-install-action@v35
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      # The Nix store of the `ci` shell. The CI-JVM 3.3.9 job saves it ([ci.nix.one-saver]).
+      - name: Restore the Nix store
+        uses: nix-community/cache-nix-action/restore@v7
         with:
-          use-flakehub: false
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci.${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci.
+      # The coursier downloads and the sbt 2 launcher, one entry per job ([ci.deps.*]); see ci-jvm.yml.
+      - name: Name the dependency cache
+        id: deps
+        run: |
+          prefix="deps-${{ runner.os }}-${{ runner.arch }}-ci-js-$(date -u +%Y-%m)-"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "key=${prefix}${{ hashFiles('build.sbt', 'project/*.sbt', 'project/build.properties') }}" >> "$GITHUB_OUTPUT"
+          mkdir -p ~/.cache/coursier ~/.sbt/boot
+      - name: Restore the dependency cache
+        id: deps-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt/boot
+          key: ${{ steps.deps.outputs.key }}
+          restore-keys: ${{ steps.deps.outputs.prefix }}
       - name: Show runner memory
         run: |
           nproc
@@ -44,6 +70,19 @@ jobs:
             npm --prefix scalus-cardano-ledger/js/src/main/npm run test:browser
           '
           kill $sampler
+      - name: Save the dependency cache
+        if: env.SAVE_CACHES == 'true' && steps.deps-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt/boot
+          key: ${{ steps.deps.outputs.key }}
+      - name: Delete the older dependency caches of this job
+        if: env.SAVE_CACHES == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/prune-caches.sh "${{ steps.deps.outputs.prefix }}" "${{ steps.deps.outputs.key }}"
       - name: Report test results
         uses: sarisia/actions-status-discord@v1
         if: failure()

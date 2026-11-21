@@ -46,9 +46,6 @@ jobs:
         with:
           fetch-depth: 0
       - uses: nixbuild/nix-quick-install-action@v35
-      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
-        with:
-          use-flakehub: false
       - name: Build and test
         run: |
           nix develop .#ci-crypto --accept-flake-config --command bash -c "cd scalus-crypto-jni && make && sbt test"
@@ -70,9 +67,6 @@ jobs:
         with:
           fetch-depth: 0
       - uses: nixbuild/nix-quick-install-action@v35
-      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
-        with:
-          use-flakehub: false
       - name: Cross-compile for Windows x64
         run: |
           nix develop .#ci-crypto-windows --accept-flake-config --command bash -c "cd scalus-crypto-jni && make windows"
@@ -168,9 +162,6 @@ jobs:
         with:
           fetch-depth: 0
       - uses: nixbuild/nix-quick-install-action@v35
-      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
-        with:
-          use-flakehub: false
       - uses: actions/download-artifact@v8
         with:
           path: scalus-crypto-jni/src/main/resources/natives/

@@ -32,9 +32,6 @@ jobs:
 
       - uses: nixbuild/nix-quick-install-action@v35
 
-      - uses: DeterminateSystems/magic-nix-cache-action@main
-        with:
-          use-flakehub: false
 
       - name: Build native library
         run: |
@@ -60,9 +57,6 @@ jobs:
 
       - uses: nixbuild/nix-quick-install-action@v35
 
-      - uses: DeterminateSystems/magic-nix-cache-action@main
-        with:
-          use-flakehub: false
 
       - name: Download all native libraries
         uses: actions/download-artifact@v8
