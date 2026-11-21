@@ -20,6 +20,9 @@ on:
   schedule:
     # 03:17 UTC daily. Off the hour to avoid the GitHub Actions rush.
     - cron: '17 3 * * *'
+env:
+  # Only master saves caches (docs/superpowers/specs/2026-11-21-ci-speed-design.md, 6.5).
+  SAVE_CACHES: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/claude/ci-quality-assurance-e40b7b' }}
 jobs:
   proofs:
     name: blaster
@@ -28,13 +31,33 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      # The purge of old Nix store entries ([ci.nix.purge]).
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
       - uses: nixbuild/nix-quick-install-action@v35
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      # The Nix store of the `ci-lean` shell, saved by this job alone ([ci.nix.one-saver]), with a
+      # garbage collection before the save and a purge of the older entries; see ci-jvm.yml.
+      - name: Restore and save the Nix store
+        uses: nix-community/cache-nix-action@v7
         with:
-          use-flakehub: false
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-ci-lean-${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-ci-lean-
+          save: ${{ env.SAVE_CACHES }}
+          gc-max-store-size-linux: 0
+          purge: ${{ env.SAVE_CACHES }}
+          purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-ci-lean-
+          purge-created: 0
+          purge-primary-key: never
+      - name: Keep the dev shell from garbage collection
+        if: env.SAVE_CACHES == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/gcroots"
+          nix develop .#ci-lean --accept-flake-config --profile "$RUNNER_TEMP/gcroots/ci-lean" --command true
+          nix flake archive --accept-flake-config --json | jq -r '.. | .path? // empty' | sort -u |
+            while read -r p; do nix-store --add-root "$RUNNER_TEMP/gcroots/${p##*/}" --realise "$p" >/dev/null; done
+          echo "closure of the ci-lean shell: $(nix path-info -S "$RUNNER_TEMP/gcroots/ci-lean" | awk '{printf "%.0f MB", $2/1048576}')"
       - name: Cache elan and lake
         uses: actions/cache@v6
         with:
