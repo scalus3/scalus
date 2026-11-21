@@ -112,6 +112,19 @@ Measured on 2026-11-21, branch run 44931794907 (step 1 of 6.5), on an empty Nix 
 | `nix develop .#ci` from the public binary caches only | 1.3 min |
 | GC roots for the flake inputs (`nix-store --realise`) | 3.3 min more |
 
+Measured on 2026-11-21, branch runs 44941098234 (CI-JVM) and 44941098335 (CI-Native), after the
+shell split of section 9, on an empty Nix store:
+
+| Fact | Result |
+|---|---|
+| Closure of `ci` | 1155 MB; ready in 22 s |
+| Closure of `ci-native` | 2642 MB; ready in 52 s |
+| Nix store entry of `ci`, compressed | 627 MB |
+| Nix store entry of `ci-native`, compressed | 912 MB |
+| Dependency entry per job | 281 to 390 MB |
+| CI-JVM 3.3.9, 3.9.0, 3.10.1 | 15.0, 9.7, 12.9 min |
+| CI-Native | 14.3 min |
+
 ## 5. Approaches
 
 ### Decision: Keep the sbt task cache in the GitHub Actions cache
