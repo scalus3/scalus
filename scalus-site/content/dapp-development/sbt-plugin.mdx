@@ -11,7 +11,7 @@ The `ScalusSbtPlugin` adds sbt tasks to your project: `blueprint` for embedding
 `blueprintPin`/`blueprintCheck` for committing pinned blueprints to git, and `deploy`
 for publishing a contract as a reference script UTxO via Blockfrost. For
 [formal verification](/docs/formal-verification) it adds `verify` and the tasks of the Lean
-workspace; see [Verification sbt Commands](/docs/formal-verification/sbt-commands).
+workspace; see [Formal Verification sbt Commands](/docs/formal-verification/sbt-commands).
 
 Projects scaffolded from the [`hello.g8` or `validator.g8` templates](/docs/get-started/project-commands)
 come with this plugin already wired in, so the `blueprint` and `deploy` tasks below work out of the
@@ -209,7 +209,7 @@ With `scalus-verification` among the test dependencies, the plugin runs the proj
 | `leanExport [tests]` | writes the statements the tests prove into the workspace as Lean modules                  |
 | `ualExport [tests]`  | writes them as documents of the Universal Annotation Language                             |
 
-See [Verification](/docs/formal-verification) for the setup and
+See [Formal Verification](/docs/formal-verification) for the setup and
 [sbt Commands](/docs/formal-verification/sbt-commands) for the details.
 
 ## What's Next?

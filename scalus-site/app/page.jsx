@@ -85,6 +85,7 @@ export default function IndexPage() {
       "Cardano smart contract development",
       "Cardano dApps development platform",
       "Transaction building and evaluation",
+      "Formal verification of smart contracts with Lean 4",
       "Full-stack blockchain application development",
       "Cross-platform support (JVM, JavaScript, Native)"
     ]
