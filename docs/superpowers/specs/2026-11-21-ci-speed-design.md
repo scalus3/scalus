@@ -438,6 +438,32 @@ The spike measures:
 - The developer MUST NOT remove the `uplc` binary from the `ci` shell while a test runs it.
   `[ci.shell.keep-uplc]`
 
+*Spike results, 2026-11-21.* Closures are nar sizes of the Linux outPaths, read from
+cache.nixos.org and cache.iog.io with `nix path-info --store <cache> -rS`, so no Linux builder is
+needed. The `ci` shell is 5331 MB (1712 MB compressed).
+
+| Idea | Saving | What it costs |
+|---|---|---|
+| No chromium in `ci` | 1529 MB | `test:browser` falls back to the runner's `google-chrome`; the browser is then not pinned by `flake.lock`. A `ci-js` shell with chromium is 2863 MB. |
+| `plutus = { flake = false; }` | about 4.1 GB of flake inputs (52 lock nodes to 8) | `uplc` needs another source: the 9.3 MB `uplc-x86_64-linux-ghc96` release asset by `fetchurl`; no macOS asset |
+| clang and llvm only in a `ci-native` shell | about 1.1 GB | none known; llvm may go from `ci-native` too |
+| No `glibcLocales` | 233 MB | none: `LC_ALL=C` is built into glibc |
+| `mkShellNoCC` for the JVM and JS shells | 332 MB | none known |
+| Headless JDK | 0 MB with chromium, 270 MB without | none: `sbt.override { jre }` adds no second JDK |
+| sbt with only the Linux x86_64 `sbtn` | about 136 MB | a local `overrideAttrs` build |
+| elan and z3 out of `ci` | 345 MB | none: the Lean and Z3 tests are canceled without them, as today |
+| `nodejs_slim` | 26 MB | drops npm, which `runNpmTests` needs: rejected |
+
+Other facts:
+
+- Flake inputs are fetched lazily. A shell that does not use `plutus.packages` fetches the plutus
+  source but not haskell.nix, hackage or CHaP. `nix flake archive` fetches and roots all 52
+  lock nodes.
+- The tests that run `uplc` are `ProgramFlatTest`, `FromDataDerivationTest`, `CekBudgetJVMTest`,
+  `BaseValidatorTestJvm` (through `UplcCli`) and `CekBuiltinsJsTest`. `scalus.utils.Macros`
+  reads the corpus at compile time on every platform and does not run `uplc`.
+- `uplc` has a runtime closure of 89 MB.
+
 **Why:** the job has one Nix step today, so nix-direnv saves time only after phase 3 splits a
 job into more steps. `.envrc` loads the `default` shell, not `ci`, so CI cannot reuse it as it
 is.
