@@ -22,10 +22,43 @@ import scalus.uplc.Constant.BLS12_381_MlResult
 
 import scala.math.pow
 
+/** Import these instances with `import scalus.uplc.test.ArbitraryInstances.given`, or mix in the
+  * trait. The other generator files follow the same pattern.
+  */
+object ArbitraryInstances extends ArbitraryInstances
+
 // ScalaCheck uses Stream for shrinking, which is deprecated
 // Remove the deprecation warning for now
 @nowarn("cat=deprecation")
 trait ArbitraryInstances:
+
+    /** A value in `[min, max]` with a uniform bit length (spec `[gen.magnitude.range]`,
+      * `[gen.magnitude.sign-split]`, `[gen.magnitude.bit-length]` of
+      * docs/internal/test-refactor/d5-generators.md).
+      *
+      * `genMagnitude(0, 1000)` gives each bit length 0 to 10 with chance 1/11, so the band 0 to 1
+      * is as likely as the band 512 to 1000. `Gen.choose(0, 1000)` gives a value below 8 with
+      * chance 0.8 %. A range with both signs first picks the negative or the non-negative part with
+      * equal chance.
+      */
+    def genMagnitude(min: BigInt, max: BigInt): Gen[BigInt] = {
+        require(min <= max, s"genMagnitude: min $min > max $max")
+        // A value in [lo, hi], 0 <= lo <= hi: pick a bit length, then a value of that length.
+        // The ends are clipped, so the band of lo's or hi's bit length can be one value.
+        def byBitLength(lo: BigInt, hi: BigInt): Gen[BigInt] =
+            Gen.choose(lo.bitLength, hi.bitLength).flatMap { bits =>
+                val shortest = if bits == 0 then BigInt(0) else BigInt(1) << (bits - 1)
+                val longest = (BigInt(1) << bits) - 1
+                Gen.choose(lo.max(shortest), hi.min(longest))
+            }
+        if min >= 0 then byBitLength(min, max)
+        else if max < 0 then byBitLength(-max, -min).map(-_)
+        else Gen.oneOf(byBitLength(1, -min).map(-_), byBitLength(0, max))
+    }
+
+    /** The `Long` form of `genMagnitude`: the same values for the same seed. */
+    def genMagnitude(min: Long, max: Long): Gen[Long] =
+        genMagnitude(BigInt(min), BigInt(max)).map(_.toLong)
 
     def genByteStringOfN(n: Int): Gen[ByteString] = {
         Gen

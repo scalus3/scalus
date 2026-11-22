@@ -264,8 +264,7 @@ object GenStatsTest {
 
     def uplcRows: Seq[Row] = {
         import scalus.uplc.{Constant, DefaultUni, Program, Term}
-        // uplc.test.ArbitraryInstances is a trait only; cardano.ledger.ArbitraryInstances extends it.
-        import scalus.cardano.ledger.ArbitraryInstances.given
+        import scalus.uplc.test.ArbitraryInstances.given
         val g = "uplc.test.ArbitraryInstances"
         Seq(
           measure[ByteString](g, "ByteString"),

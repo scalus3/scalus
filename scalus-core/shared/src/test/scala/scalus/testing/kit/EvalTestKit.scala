@@ -4,6 +4,7 @@ import org.scalacheck.util.Pretty
 import org.scalacheck.Arbitrary
 import org.scalactic.{source, Prettifier}
 import org.scalatest.Assertion
+import org.scalatest.prop.{TableFor1, TableFor2, TableFor3}
 import org.scalatest.Assertions
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.uplc.builtin.Data
@@ -743,6 +744,155 @@ trait EvalTestKit
             (resultTerm α_== trueTerm) && f(payload1, payload2, payload3)
 
         check(handler, configParams*)
+
+    // ----- Property-based Testing with an edge table -----
+    //
+    // Spec `[gen.runs.checkeval-table]`, `[gen.runs.checkeval-once]` and
+    // `[gen.runs.checkeval-row-report]` of docs/internal/test-refactor/d5-generators.md.
+    // Each form compiles `f` once, evaluates it on every row of `edges`, then runs the random
+    // cases as `checkEval(f)` does. A row runs `f` on the PlutusVM and on the JVM, as a random
+    // case does. All failing rows are reported together, each with its heading names and values,
+    // and the random cases do not run.
+
+    /** `checkEval(f)` that first checks every row of `edges`.
+      *
+      * {{{
+      * val edges = Table("amount", BigInt(0), BigInt(2).pow(64))
+      * checkEval(edges) { (amount: BigInt) => amount >= 0 }
+      * }}}
+      */
+    protected inline final def checkEval[A1](edges: TableFor1[A1])(
+        inline f: A1 => Boolean,
+        configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
+    )(using
+        vm: PlutusVM,
+        options: Options
+    )(implicit
+        inline a1FromData: FromData[A1],
+        inline a1ToData: ToData[A1],
+        config: PropertyCheckConfiguration,
+        a1: Arbitrary[A1],
+        s1: Shrink[A1],
+        pp1: A1 => Pretty,
+        prettifier: Prettifier,
+        pos: source.Position
+    ): Assertion =
+        val compiled = PlutusV3.compile { (data: Data) => f(data.to[A1]) }
+
+        def handler(payload: A1): Boolean =
+            val applied = compiled.program.term $ toData[A1](payload).asTerm
+            val resultTerm = applied.evaluate
+            (resultTerm α_== trueTerm) && f(payload)
+
+        checkEdgeRows(Seq(edges.heading), edges.map(Seq(_)), row => handler(edges(row)))
+        check(handler, configParams*)
+
+    /** `checkEval(f)` that first checks every row of `edges`; see the one-argument form. */
+    protected inline final def checkEval[A1, A2](edges: TableFor2[A1, A2])(
+        inline f: (A1, A2) => Boolean,
+        configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
+    )(using
+        vm: PlutusVM,
+        options: Options
+    )(implicit
+        inline a1FromData: FromData[A1],
+        inline a1ToData: ToData[A1],
+        inline a2FromData: FromData[A2],
+        inline a2ToData: ToData[A2],
+        config: PropertyCheckConfiguration,
+        a1: Arbitrary[A1],
+        s1: Shrink[A1],
+        pp1: A1 => Pretty,
+        a2: Arbitrary[A2],
+        s2: Shrink[A2],
+        pp2: A2 => Pretty,
+        prettifier: Prettifier,
+        pos: source.Position
+    ): Assertion =
+        val compiled = PlutusV3.compile { (d1: Data, d2: Data) =>
+            f(d1.to[A1], d2.to[A2])
+        }
+
+        def handler(payload1: A1, payload2: A2): Boolean =
+            val applied = compiled.program.term $ payload1.toData.asTerm $ payload2.toData.asTerm
+            val resultTerm = applied.evaluate
+            (resultTerm α_== trueTerm) && f(payload1, payload2)
+
+        checkEdgeRows(
+          edges.heading.productIterator.map(_.toString).toSeq,
+          edges.map(_.productIterator.toSeq),
+          row => handler.tupled(edges(row))
+        )
+        check(handler, configParams*)
+
+    /** `checkEval(f)` that first checks every row of `edges`; see the one-argument form. */
+    protected inline final def checkEval[A1, A2, A3](edges: TableFor3[A1, A2, A3])(
+        inline f: (A1, A2, A3) => Boolean,
+        configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
+    )(using
+        vm: PlutusVM,
+        options: Options
+    )(implicit
+        inline a1FromData: FromData[A1],
+        inline a1ToData: ToData[A1],
+        inline a2FromData: FromData[A2],
+        inline a2ToData: ToData[A2],
+        inline a3FromData: FromData[A3],
+        inline a3ToData: ToData[A3],
+        config: PropertyCheckConfiguration,
+        a1: Arbitrary[A1],
+        s1: Shrink[A1],
+        pp1: A1 => Pretty,
+        a2: Arbitrary[A2],
+        s2: Shrink[A2],
+        pp2: A2 => Pretty,
+        a3: Arbitrary[A3],
+        s3: Shrink[A3],
+        pp3: A3 => Pretty,
+        prettifier: Prettifier,
+        pos: source.Position
+    ): Assertion =
+        val compiled = PlutusV3.compile { (d1: Data, d2: Data, d3: Data) =>
+            f(d1.to[A1], d2.to[A2], d3.to[A3])
+        }
+
+        def handler(payload1: A1, payload2: A2, payload3: A3): Boolean =
+            val applied =
+                compiled.program.term $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm
+            val resultTerm = applied.evaluate
+            (resultTerm α_== trueTerm) && f(payload1, payload2, payload3)
+
+        checkEdgeRows(
+          edges.heading.productIterator.map(_.toString).toSeq,
+          edges.map(_.productIterator.toSeq),
+          row => handler.tupled(edges(row))
+        )
+        check(handler, configParams*)
+
+    /** Runs `holds` on each row index and fails once with every failing row.
+      *
+      * A row fails when `holds` returns false or throws, for example when the script fails.
+      */
+    private def checkEdgeRows(
+        names: Seq[String],
+        rows: Seq[Seq[Any]],
+        holds: Int => Boolean
+    )(using pos: source.Position): Unit = {
+        val failures = rows.indices.flatMap { row =>
+            val outcome =
+                try if holds(row) then None else Some("false")
+                catch case NonFatal(exception) => Some(s"threw $exception")
+            outcome.map { result =>
+                val arguments =
+                    names.zip(rows(row)).map((name, value) => s"$name = $value").mkString(", ")
+                s"row $row ($arguments): $result"
+            }
+        }
+        if failures.nonEmpty then
+            fail(
+              s"${failures.size} of ${rows.size} edge rows failed:\n" + failures.mkString("\n")
+            )
+    }
 
     private val trueTerm = true.asTerm
 }
