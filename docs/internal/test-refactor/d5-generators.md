@@ -10,7 +10,12 @@ planned* until the pilot or the rollout builds it. The pilot built `[gen.quality
 `[gen.output.genstats-forms]`, `[gen.runs.checkeval-table]` to `[gen.runs.checkeval-row-report]`,
 `[gen.magnitude.range]` to `[gen.magnitude.bit-length]`, `[gen.value.*]`, `[gen.cover.pooled-keys]`
 to `[gen.cover.random-members]`, `[gen.family.given-calls-gen]` for `Coin`, `v1.Value` and
-`v2.TxOut`, and `[gen.quality.*]` for the four rows of pilot step 8.
+`v2.TxOut`, and `[gen.quality.*]` for the four rows of pilot step 8. Rollout unit 1 (`uplc.test`)
+built `[gen.cover.three-parts]` and `[gen.cover.encoding-edges]` for `ByteString`, `Data.I` and
+the `Constr` tag, `[gen.family.given-calls-gen]` for `ByteString`, `I`, `Data`, `Term` and
+`Program`, `[gen.family.program-versions]`, `[gen.family.program-v100-terms]`,
+`[gen.runs.edge-table]` for the two `Data` CBOR properties, and three rows of
+the threshold test.
 
 This note is step D5 of `[P3-11a]` in `docs/superpowers/specs/2026-10-20-test-refactoring-design.md`.
 It amends H-35 and H-36 in `helpers.md`. The measurements and the research are in

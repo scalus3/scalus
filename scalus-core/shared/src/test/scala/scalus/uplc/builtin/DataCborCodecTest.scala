@@ -300,18 +300,24 @@ class DataCborCodecTest extends AnyFunSuite with ScalaCheckPropertyChecks with A
         roundtrip(data)
     }
 
+    // [gen.runs.edge-table]: the edges first, so that each run tests every CBOR form
+    private val dataEdgeTable = Table("data", dataEdges*)
+
     test("Encoder <-> Decoder roundtrip") {
+        forAll(dataEdgeTable)(roundtrip)
         forAll { (d: Data) =>
             roundtrip(d)
         }
     }
 
     test("the bytes are those of the recursive encoder it replaced") {
-        forAll { (d: Data) =>
+        def sameBytes(d: Data): Unit = {
             val expected = Utils.bytesToHex(Cbor.encode(d)(using RecursiveEncoder).toByteArray)
             assert(Utils.bytesToHex(d.toCbor) == expected)
             assert(Utils.bytesToHex(Builtins.serialiseData(d).bytes) == expected)
         }
+        forAll(dataEdgeTable)(sameBytes)
+        forAll((d: Data) => sameBytes(d))
     }
 
     /** The recursive encoder that `dataCborEncoder` replaced (#398), kept as an oracle: the bytes

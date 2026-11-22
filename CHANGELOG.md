@@ -38,7 +38,9 @@
 - `scalus-testkit` generators changed their distribution. `Arbitrary[Value]` (on-chain) no
   longer generates negative amounts: use `genAnyValue` or `genMintValue`. `Arbitrary[TxOut]` always
   holds lovelace ≥ 1, the `mint` of `Arbitrary[TxInfo]` is signed and holds no lovelace, and
-  `Arbitrary[Coin]` now generates 0 and values up to the max supply.
+  `Arbitrary[Coin]` now generates 0 and values up to the max supply. `Arbitrary[Data]` generates
+  `Constr` tag 0 and tags up to 2^64 − 1, integers at the CBOR boundaries, and byte strings of
+  the hash and chunk lengths; `Arbitrary[Program]` generates versions 1.0.0 and 1.1.0.
 
 ### Fixed
 

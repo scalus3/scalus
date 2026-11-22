@@ -267,13 +267,38 @@ object GenStatsTest {
         import scalus.uplc.test.ArbitraryInstances.given
         val g = "uplc.test.ArbitraryInstances"
         Seq(
-          measure[ByteString](g, "ByteString"),
+          measure[ByteString](g, "ByteString", Probe(forms = bs => Seq(byteLength(bs.size)))),
           measure[Data](g, "Data", Probe(listedEdges = constrTagEdges ++ twoPow64Edges)),
           measure[DefaultUni](g, "DefaultUni"),
           measure[Constant](g, "Constant"),
           measure[Term](g, "Term"),
-          measure[Program](g, "Program")
+          measure[Program](g, "Program", Probe(forms = programForms))
         )
+    }
+
+    /** The length class of a byte string: an edge length of `[gen.cover.encoding-edges]`, or a
+      * band.
+      */
+    private def byteLength(size: Int): String =
+        if Set(0, 1, 28, 32, 64, 65).contains(size) then s"length=$size"
+        else if size < 64 then "length=other<64"
+        else "length=other>64"
+
+    /** The version of a program, and for version 1.0.0 whether its term holds `Constr` or `Case`.
+      */
+    private def programForms(program: scalus.uplc.Program): Seq[String] = {
+        import scalus.uplc.Term
+        def hasSop(t: Term): Boolean = t match
+            case _: Term.Constr | _: Term.Case => true
+            case Term.Force(t, _)              => hasSop(t)
+            case Term.Delay(t, _)              => hasSop(t)
+            case Term.LamAbs(_, t, _)          => hasSop(t)
+            case Term.Apply(f, a, _)           => hasSop(f) || hasSop(a)
+            case _                             => false
+        program.version match
+            case (1, 0, 0) => Seq("version=1.0.0", s"v1.0.0 constr/case=${hasSop(program.term)}")
+            case (1, 1, 0) => Seq("version=1.1.0")
+            case _         => Seq("version=other")
     }
 
     def ledgerRows: Seq[Row] = {

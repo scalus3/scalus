@@ -5,7 +5,8 @@ import org.scalacheck.rng.Seed
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.v1.{Credential, Value}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
-import scalus.uplc.builtin.ByteString
+import scalus.uplc.Term
+import scalus.uplc.builtin.{ByteString, Data}
 
 /** Thresholds for the shared generators: spec section 6.7 of
   * docs/internal/test-refactor/d5-generators.md (`[gen.quality.*]`).
@@ -76,6 +77,52 @@ class ArbitraryInstancesQualityTest extends AnyFunSuite {
         assertShare(mints, "a negative amount", 0.25)(entries(_).exists(_._3 < 0))
         assertDiscards(genMintValue)
     }
+    test("ByteString: the edge lengths and the realistic core") {
+        import scalus.uplc.test.ArbitraryInstances.genByteString
+        val sizes = sample(genByteString).map(_.size)
+        sizes.foreach(n => assert(0 <= n && n <= 256, n))
+        // half of the shares measured at the D5 rollout: 7.3, 7.1, 5.0, 4.9, 5.5, 4.3 and 7.9 %
+        val minimums =
+            Seq(0 -> 0.036, 1 -> 0.035, 28 -> 0.025, 32 -> 0.024, 64 -> 0.027, 65 -> 0.021)
+        for (edge, minimum) <- minimums do assertShare(sizes, s"length $edge", minimum)(_ == edge)
+        assertShare(sizes, "length above 65", 0.039)(_ > 65)
+        assertDiscards(genByteString)
+    }
+
+    test("Data: Constr tags in [0, 2^64 - 1], with the tag and integer edges") {
+        import scalus.uplc.test.ArbitraryInstances.genData
+        val values = sample(genData)
+        val tags = values.map(d => nodes(d).collect { case Data.Constr(tag, _) => tag })
+        tags.flatten.foreach(tag => assert(0 <= tag && tag <= TwoPow64 - 1, tag))
+        // minimums: half of the shares measured at the D5 rollout (10.1, 8.3, 18.7, 26.8, 9.1 %)
+        val ints = values.map(d => nodes(d).collect { case Data.I(i) => i })
+        assertShare(tags, "constr tag 0", 0.050)(_.contains(BigInt(0)))
+        assertShare(tags, "constr tag 7 to 127 (CBOR tags 1280 to 1400)", 0.041)(
+          _.exists(t => 7 <= t && t <= 127)
+        )
+        assertShare(tags, "constr tag >= 128 (CBOR tag 102)", 0.093)(_.exists(_ >= 128))
+        assertShare(ints, "an integer with |x| >= 2^64 (CBOR bignum)", 0.134)(
+          _.exists(_.abs >= TwoPow64)
+        )
+        assertShare(ints, "an integer at 2^64 - 1 or 2^64", 0.045)(
+          _.exists(i => i.abs == TwoPow64 || i.abs == TwoPow64 - 1)
+        )
+        assertDiscards(genData)
+    }
+
+    test("Program: versions 1.0.0 and 1.1.0, and no Constr or Case before 1.1.0") {
+        import scalus.uplc.test.ArbitraryInstances.genProgram
+        val programs = sample(genProgram)
+        programs.foreach { p =>
+            assert(p.version._1 >= 1, p.version)
+            if p.version == (1, 0, 0) then assert(!hasConstrOrCase(p.term), p)
+            else assert(p.version._2 >= 1, p.version)
+        }
+        // minimums: half of the measured 25.6 % and 24.7 %
+        assertShare(programs, "version 1.0.0", 0.127)(_.version == (1, 0, 0))
+        assertShare(programs, "version 1.1.0", 0.123)(_.version == (1, 1, 0))
+        assertDiscards(genProgram)
+    }
 }
 
 object ArbitraryInstancesQualityTest {
@@ -118,6 +165,22 @@ object ArbitraryInstancesQualityTest {
             val draws = 200
             val discarded = (0 until draws).count(i => gen(params, Seed(i.toLong)).isEmpty)
             assert(discarded <= draws / 20, s"size $size: $discarded of $draws discarded")
+
+    /** Every node of a `Data` value, the value itself included. */
+    def nodes(d: Data): Seq[Data] = d match
+        case Data.Constr(_, args) => d +: args.asScala.flatMap(nodes)
+        case Data.List(items)     => d +: items.asScala.flatMap(nodes)
+        case Data.Map(entries)    => d +: entries.asScala.flatMap((k, v) => nodes(k) ++ nodes(v))
+        case _                    => Seq(d)
+
+    /** `Constr` and `Case` are not allowed before program version 1.1.0. */
+    def hasConstrOrCase(t: Term): Boolean = t match
+        case _: Term.Constr | _: Term.Case => true
+        case Term.Force(t, _)              => hasConstrOrCase(t)
+        case Term.Delay(t, _)              => hasConstrOrCase(t)
+        case Term.LamAbs(_, t, _)          => hasConstrOrCase(t)
+        case Term.Apply(f, a, _)           => hasConstrOrCase(f) || hasConstrOrCase(a)
+        case _                             => false
 
     // ----- Value checks from the ledger specification, not from Scalus code -----
     //

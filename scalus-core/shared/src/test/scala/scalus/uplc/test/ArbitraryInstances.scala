@@ -20,8 +20,6 @@ import scalus.uplc.Constant.BLS12_381_G1_Element
 import scalus.uplc.Constant.BLS12_381_G2_Element
 import scalus.uplc.Constant.BLS12_381_MlResult
 
-import scala.math.pow
-
 /** Import these instances with `import scalus.uplc.test.ArbitraryInstances.given`, or mix in the
   * trait. The other generator files follow the same pattern.
   */
@@ -66,12 +64,19 @@ trait ArbitraryInstances:
             .map(a => ByteString.unsafeFromArray(a))
     }
 
-    given byteStringArb: Arbitrary[scalus.uplc.builtin.ByteString] = Arbitrary(
-      for
-          sz <- Gen.frequency((0, Gen.choose(1000, 10000)), (10, Gen.choose(0, 100)))
-          bytes <- Gen.containerOfN[Array, Byte](sz, Arbitrary.arbitrary)
-      yield scalus.uplc.builtin.ByteString.unsafeFromArray(bytes)
-    )
+    /** The generator behind `byteStringArb` (`[gen.family.given-calls-gen]`), in three parts
+      * (`[gen.cover.three-parts]`): 50 % 0 to 64 bytes, 25 % the edge lengths 0, 1, 28, 32, 64 and
+      * 65 (`[gen.cover.encoding-edges]`: hash sizes, and the 64-byte chunk limit of CBOR bytes), 25
+      * % any length up to 256 with a uniform bit length.
+      */
+    def genByteString: Gen[ByteString] =
+        Gen.frequency(
+          2 -> Gen.choose(0, 64),
+          1 -> Gen.oneOf(0, 1, 28, 32, 64, 65),
+          1 -> genMagnitude(0L, 256L).map(_.toInt)
+        ).flatMap(genByteStringOfN)
+
+    given byteStringArb: Arbitrary[scalus.uplc.builtin.ByteString] = Arbitrary(genByteString)
 
     given g1ElementArbitrary: Arbitrary[scalus.uplc.builtin.bls12_381.G1Element] = Arbitrary(
       for bs <- Arbitrary.arbitrary[ByteString]
@@ -83,24 +88,29 @@ trait ArbitraryInstances:
       yield Builtins.bls12_381_G2_hashToGroup(bs, dst = utf8"Test")
     )
 
-    // from: https://stackoverflow.com/questions/24834074/how-to-create-a-bigint-by-rounding-from-a-double-in-scala
-    private def round(d: Double) =
-        BigDecimal(d).setScale(0, BigDecimal.RoundingMode.HALF_UP).toBigInt
-    given iArb: Arbitrary[I] = Arbitrary(
-      for n <- Gen.oneOf[BigInt](
-            Gen.const[BigInt](0),
-            Gen.const[BigInt](-1),
-            Gen.const[BigInt](1),
-            Gen.const[BigInt](-1000),
-            Gen.const[BigInt](1000),
-            Gen.const[BigInt](Int.MaxValue),
-            Gen.const[BigInt](Int.MinValue),
-            Gen.const[BigInt](Long.MaxValue),
-            Gen.const[BigInt](Long.MinValue),
-            Gen.choose[BigInt](round(pow(2, 128)) * -1, round(pow(2, 128)))
-          )
-      yield I(n)
-    )
+    private lazy val TwoPow64 = BigInt(2).pow(64)
+
+    /** The edges of `Data.I` (`[gen.cover.encoding-edges]`): the boundaries of the CBOR integer
+      * heads (23/24, 255/256, 2^16, 2^32), the `Long` range, and the 2^64 boundary where CBOR
+      * switches to a bignum, each with both signs.
+      */
+    private lazy val dataIntegerEdges: Seq[BigInt] = {
+        val positive = Seq[BigInt](1, 23, 24, 255, 256, 65_536, BigInt(1L << 32), Long.MaxValue)
+        Seq[BigInt](0, Long.MinValue, TwoPow64 - 1, TwoPow64, -TwoPow64, -TwoPow64 - 1) ++
+            positive ++ positive.map(-_)
+    }
+
+    /** The generator behind `iArb`: 50 % -1 000 to 10^6, 25 % the edges of `dataIntegerEdges`, 25 %
+      * any integer in `[-2^128, 2^128]` with a uniform bit length (`[gen.cover.three-parts]`).
+      */
+    def genI: Gen[I] =
+        Gen.frequency(
+          2 -> Gen.choose(BigInt(-1000), BigInt(1_000_000)),
+          1 -> Gen.oneOf(dataIntegerEdges),
+          1 -> genMagnitude(-BigInt(2).pow(128), BigInt(2).pow(128))
+        ).map(I(_))
+
+    given iArb: Arbitrary[I] = Arbitrary(genI)
     given bArb: Arbitrary[B] = Arbitrary(
       Arbitrary.arbitrary[scalus.uplc.builtin.ByteString].map(B.apply)
     )
@@ -133,14 +143,26 @@ trait ArbitraryInstances:
                 else Shrink.shrink(scalaArgs).map(a => Map(PList.from(a)))
         }
 
-    given arbData: Arbitrary[Data] = Arbitrary {
+    /** A `Data.Constr` tag: 50 % 0 to 6 (the tags with a compact CBOR form 121 to 127), 25 % the
+      * edges 0, 6, 7, 127, 128 and 2^64 − 1 (`[gen.cover.encoding-edges]`: tag 7 and 128 start the
+      * other two CBOR forms), 25 % any tag up to 2^64 − 1 with a uniform bit length.
+      */
+    def genConstrTag: Gen[BigInt] =
+        Gen.frequency(
+          2 -> Gen.choose(BigInt(0), BigInt(6)),
+          1 -> Gen.oneOf[BigInt](0, 6, 7, 127, 128, TwoPow64 - 1),
+          1 -> genMagnitude(BigInt(0), TwoPow64 - 1)
+        )
+
+    /** The generator behind `arbData` (`[gen.family.given-calls-gen]`). */
+    def genData: Gen[Data] = {
         // The size budget `sz` is distributed across children: a container with n
         // children generates each child at size sz/n, keeping the total node count
         // O(sz) in the worst case. The previous scheme (n in [sz/3, sz/2] children,
         // EACH at size sz/2) had a multiplicative heavy tail that occasionally
         // produced multi-million-node values and OOM'd the test JVM.
         def constrGen(sz: Int): Gen[Constr] = for
-            c <- Gen.posNum[Long]
+            c <- genConstrTag
             n <- Gen.choose(0, (sz / 4).max(1))
             args <- Gen.listOfN(n, sizedTree(sz / n.max(2)))
         yield Constr(c, PList.from(args))
@@ -168,6 +190,29 @@ trait ArbitraryInstances:
         Gen.sized(sizedTree)
     }
 
+    given arbData: Arbitrary[Data] = Arbitrary(genData)
+
+    /** The edges of `Data` as fixed values, for the edge table of a property
+      * (`[gen.runs.edge-table]`): each `Constr` tag edge of `genConstrTag`, each integer edge of
+      * `genI`, and a byte string of each edge length of `genByteString`.
+      */
+    lazy val dataEdges: Seq[Data] = {
+        val tags = Seq[BigInt](
+          0,
+          6,
+          7,
+          127,
+          128,
+          BigInt(Long.MaxValue),
+          BigInt(Long.MaxValue) + 1,
+          TwoPow64 - 1
+        )
+        val bytes = Seq(0, 1, 28, 32, 64, 65).map(n =>
+            B(ByteString.unsafeFromArray(Array.fill(n)(n.toByte)))
+        )
+        tags.map(Constr(_, PList.Nil)) ++ dataIntegerEdges.map(I(_)) ++ bytes
+    }
+
     given arbitraryDefaultUni: Arbitrary[DefaultUni] = Arbitrary {
         def listGen(sz: Int): Gen[DefaultUni] = for a <- sizedTree(sz / 2)
         yield DefaultUni.Apply(ProtoList, a)
@@ -183,9 +228,11 @@ trait ArbitraryInstances:
               DefaultUni.ByteString,
               DefaultUni.Data,
               DefaultUni.Integer,
-              // Strings stay disabled: the parser handles Haskell-style escapes since 0.18.1,
-              // but round-tripping generated strings through the external `uplc` tool still
-              // depends on our pretty-printer escaping matching Haskell `show` exactly.
+              // Strings stay disabled: the pretty printer does not escape `"`, `\` or control
+              // characters, so `string "a"b"` parses back as "a" (D5 rollout probe: 3 of 5 000
+              // seeded `Arbitrary[String]` values fail). BLS constants stay out because Flat has
+              // only a stub for them; BuiltinValue stays out until a generator of non-empty values
+              // exists (`arbConstantByType` gives only the empty one).
 //        DefaultUni.String,
               DefaultUni.Unit
             )
@@ -280,7 +327,11 @@ trait ArbitraryInstances:
         case Constant.BuiltinValue(value) => Stream.empty
     }
 
-    given arbitraryTerm: Arbitrary[Term] = Arbitrary {
+    /** A term. With `withConstrCase = false` it holds no `Constr` and no `Case`, so a program of
+      * version 1.0.0 can hold it (`[gen.family.program-v100-terms]`). With `true` it gives the
+      * values of `arbitraryTerm` before D5 for the same seed.
+      */
+    def genTerm(withConstrCase: Boolean): Gen[Term] = {
         val nameGen = for
             alpha <- Gen.alphaChar
             n <- Gen.choose(0, 10)
@@ -312,15 +363,19 @@ trait ArbitraryInstances:
                 // Gen.lzy builds a branch only when oneOf picks it. Built eagerly, every call
                 // constructed all six recursive branches, and each of them called sizedTermGen
                 // again: thousands of Gen objects per sample. Same values for the same seed.
-                Gen.oneOf(
+                val common = Seq(
                   simple,
                   Gen.lzy(forceGen(sz, env)),
                   Gen.lzy(delayGen(sz, env)),
                   Gen.lzy(lamGen(sz, env)),
-                  Gen.lzy(appGen(sz, env)),
-                  Gen.lzy(constrGen(sz, env)),
-                  Gen.lzy(caseGen(sz, env))
+                  Gen.lzy(appGen(sz, env))
                 )
+                val sop =
+                    if withConstrCase then
+                        Seq(Gen.lzy(constrGen(sz, env)), Gen.lzy(caseGen(sz, env)))
+                    else Seq.empty
+                val branches = common ++ sop
+                Gen.oneOf(branches(0), branches(1), branches.drop(2)*)
 
         def forceGen(sz: Int, env: immutable.List[String]): Gen[Term] =
             for t <- sizedTermGen(sz / 2, env)
@@ -350,6 +405,11 @@ trait ArbitraryInstances:
         Gen.sized(sizedTermGen(_, Nil))
     }
 
+    /** The generator behind `arbitraryTerm`: terms with `Constr` and `Case`. */
+    def genTerm: Gen[Term] = genTerm(withConstrCase = true)
+
+    given arbitraryTerm: Arbitrary[Term] = Arbitrary(genTerm)
+
     given TermShrink: Shrink[Term] =
         given Shrink[Term] = TermShrink
         Shrink {
@@ -372,18 +432,26 @@ trait ArbitraryInstances:
             case _ => Stream.empty
         }
 
-    given Arbitrary[Program] = Arbitrary {
-        for
-            // The parser will reject uses of new constructs if the version is not high enough
-            // In order to keep our lives simple, we just generate a version that is always high
-            // enough to support everything. That gives us less coverage of parsing versions, but
-            // that's not likely to be the place where things go wrong
-            maj <- Gen.choose(1, 100)
-            min <- Gen.choose(1, 100)
-            patch <- Gen.posNum[Int]
-            term <- Arbitrary.arbitrary[Term]
-        yield Program((maj, min, patch), term)
+    /** The generator behind `Arbitrary[Program]` (`[gen.family.program-versions]`): 25 % version
+      * 1.0.0 with a term without `Constr` and `Case` (`[gen.family.program-v100-terms]`), 25 %
+      * version 1.1.0, and 50 % any version with a major and a minor of at least 1, so that every
+      * construct parses.
+      */
+    def genProgram: Gen[Program] = {
+        val anyVersion =
+            for
+                maj <- Gen.choose(1, 100)
+                min <- Gen.choose(1, 100)
+                patch <- Gen.posNum[Int]
+            yield (maj, min, patch)
+        Gen.frequency(
+          1 -> genTerm(withConstrCase = false).map(Program((1, 0, 0), _)),
+          1 -> genTerm.map(Program((1, 1, 0), _)),
+          2 -> Gen.zip(anyVersion, genTerm).map(Program(_, _))
+        )
     }
+
+    given Arbitrary[Program] = Arbitrary(genProgram)
 
     given Shrink[Program] = Shrink { case Program(v, t) =>
         val tShrunk = Shrink.shrink(t).map(Program(v, _))
