@@ -803,6 +803,9 @@ the 22-entry list at `:133-180` are deleted; the suite calls `ExampleCorpus.coun
 
 ### G. Generators
 
+*Superseded in part (2026-11-21):* D5 (`d5-generators.md`) amends H-35 and H-36; where the two
+disagree, the D5 note wins.
+
 **H-35 `ArbitraryInstances` chains** – `keep` structure, `change` one thing. Locations:
 `scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:28` (trait, 18
 givens), `scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ArbitraryInstances.scala:11-12`

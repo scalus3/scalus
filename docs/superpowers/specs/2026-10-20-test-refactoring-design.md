@@ -419,6 +419,16 @@ get lost; the pilot found two (F-33, F-34).
   (ledger main, JVM and JS) builds an Emulator with one UTxO per output; `withAddresses` stays for
   equal values. The local copies of `genesisHash`, `given Options` and `given PlutusVM` go to the
   `adopt-helper` rollout units, not to D4.
+
+  *Decisions (2026-11-21), D5:* the owner approved every recommendation of
+  `docs/internal/test-refactor/d5-generators.md`. One `given Arbitrary` per type generates
+  well-formed values; every other purpose is a named `Gen` (`gen<Role>`, `genAny`, `genInvalid`,
+  `genMalformed…Bytes`). `Arbitrary[v1.Value]` is non-negative; `genMintValue` and `genAnyValue`
+  are signed. Scalars mix 50 % realistic core, 25 % listed edges, 25 % wide part by bit length.
+  Pooled keys only for the `Value` policy ids and asset names. Transaction-level collections: 1 to
+  4 in 90 % of samples, 5 to 16 in 10 %. Run count stays 10; an off-chain law first runs
+  `forAll(Table(edges))`, an on-chain law takes its edges through the `Table` form of `checkEval`.
+  The quality gate is a seeded CI test (`ArbitraryInstancesQualityTest`); GenStats stays the report.
 - The Fable reviewer MUST choose the helper API from what the code base already has, plus
   what the findings ask for. It MUST name the existing helper that each new helper replaces or
   extends. `[P3-12]`
