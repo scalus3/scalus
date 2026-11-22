@@ -10,24 +10,80 @@ import scalus.uplc.test
 
 object ArbitraryInstances extends ArbitraryInstances
 trait ArbitraryInstances extends test.ArbitraryInstances {
+
+    /** POSIX time in milliseconds, 2020-01-01 and 2040-01-01: the realistic core of `genPosixTime`.
+      */
+    private val Year2020 = 1_577_836_800_000L
+    private val Year2040 = 2_208_988_800_000L
+
+    /** A POSIX time (`[gen.cover.three-parts]`): 50 % between 2020 and 2040, 25 % the edges 0, 1,
+      * 2020-01-01, `Long.MaxValue`, 2^64 and -1, 25 % any time in `[-2^64, 2^64]` with a uniform
+      * bit length. Before D5 it was `Arbitrary[BigInt]`: 67 % of the bounds were above 2^64.
+      */
+    def genPosixTime: Gen[PosixTime] =
+        Gen.frequency(
+          2 -> Gen.choose(Year2020, Year2040).map(BigInt(_)),
+          1 -> Gen.oneOf[BigInt](0, 1, Year2020, Long.MaxValue, BigInt(2).pow(64), -1),
+          1 -> genMagnitude(-BigInt(2).pow(64), BigInt(2).pow(64))
+        )
+
     given Arbitrary[IntervalBoundType] = Arbitrary {
         Gen.frequency(
           (1, Gen.const(IntervalBoundType.NegInf)),
           (1, Gen.const(IntervalBoundType.PosInf)),
-          (8, arbitrary[PosixTime].map(IntervalBoundType.Finite(_)))
+          (8, genPosixTime.map(IntervalBoundType.Finite(_)))
         )
     }
 
     given Arbitrary[IntervalBound] = autoDerived
 
-    given Arbitrary[Interval] = Arbitrary {
+    /** An interval with any two bounds, the lower one first: the `Arbitrary[Interval]` of before
+      * D5.
+      */
+    private def genAnyBoundsInterval: Gen[Interval] =
         for
             b1 <- arbitrary[IntervalBound]
             b2 <- arbitrary[IntervalBound]
         yield Ord[IntervalBound].compare(b1, b2) match
             case Order.Greater => Interval(b2, b1)
             case _             => Interval(b1, b2)
+
+    /** A validity range as a transaction holds it: a finite start in 2020 to 2040 and a width of 0
+      * (a point), up to 1 hour, or up to 30 days, each bound inclusive or not.
+      */
+    private def genValidityRange: Gen[Interval] =
+        for
+            start <- Gen.choose(Year2020, Year2040)
+            width <- Gen.frequency(
+              1 -> Gen.const(0L),
+              2 -> Gen.choose(1L, 3_600_000L),
+              1 -> Gen.choose(3_600_001L, 30L * 86_400_000L)
+            )
+            fromInclusive <- arbitrary[Boolean]
+            toInclusive <- arbitrary[Boolean]
+        yield Interval(
+          IntervalBound(IntervalBoundType.Finite(start), fromInclusive),
+          IntervalBound(IntervalBoundType.Finite(start + width), toInclusive)
+        )
+
+    /** The generator behind `Arbitrary[Interval]` (`[gen.cover.three-parts]`): 50 % a validity
+      * range, 25 % the edges `always`, `never`, `after`, `before` and a closed point, 25 % any two
+      * bounds.
+      */
+    def genInterval: Gen[Interval] = {
+        val edges = genPosixTime.flatMap { t =>
+            Gen.oneOf(
+              Interval.always,
+              Interval.never,
+              Interval.after(t),
+              Interval.before(t),
+              Interval.between(t, t)
+            )
+        }
+        Gen.frequency(2 -> genValidityRange, 1 -> edges, 1 -> genAnyBoundsInterval)
     }
+
+    given Arbitrary[Interval] = Arbitrary(genInterval)
 
     given TxIdV1: Arbitrary[TxId] = Arbitrary {
         genByteStringOfN(32).map(TxId.apply)
@@ -80,7 +136,7 @@ trait ArbitraryInstances extends test.ArbitraryInstances {
       Gen.const[BigInt](Int.MinValue),
       Gen.const[BigInt](Long.MaxValue),
       Gen.const[BigInt](Long.MinValue),
-      Gen.choose[BigInt](-BigInt(2).pow(64), BigInt(2).pow(64))
+      genMagnitude(-BigInt(2).pow(64), BigInt(2).pow(64)) // [gen.magnitude.users]
     )
     def genToken: Gen[(ByteString, BigInt)] =
         for
@@ -165,8 +221,8 @@ trait ArbitraryInstances extends test.ArbitraryInstances {
     }
 
     /** Any value the Scala type can hold, with signed amounts in `[-2^64, 2^64]`
-      * (`[gen.value.any-signed]`): the body of `Arbitrary[Value]` before D5, unchanged, for the
-      * group laws of `ValueTest`.
+      * (`[gen.value.any-signed]`): the body of `Arbitrary[Value]` before D5, for the group laws of
+      * `ValueTest`. Its wide amounts have a uniform bit length since rollout unit 2.
       */
     def genAnyValue: Gen[Value] =
         for

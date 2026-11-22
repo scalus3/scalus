@@ -11,6 +11,7 @@ import scalus.uplc.builtin.ByteString.utf8
 import scalus.uplc.builtin.Builtins
 import scalus.uplc.builtin.Builtins.{constrData, mkNilData}
 import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.FromData
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.testing.kit.EvalTestKit
 
@@ -264,6 +265,15 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assert(ref0.deriveTokenName != ref1.deriveTokenName)
         assertEvalEq(TxOutRef(TxInfo.placeholder.id, BigInt(0)).deriveTokenName, ref0TokenName)
     }
+    test("TxInfo round-trips through Data, optional fields included") {
+        // The other properties of this suite replace `data` and `outputs`; this one reads every
+        // field that `Arbitrary[TxInfo]` fills, so a broken encoding of a certificate, a
+        // withdrawal, a redeemer or a datum fails here.
+        forAll { (txInfo: TxInfo) =>
+            assert(summon[FromData[TxInfo]](txInfo.toData) == txInfo)
+        }
+    }
+
     test("findInput") {
         checkEval { (txOutRef: TxOutRef) =>
             TxInfo.placeholder.findInput(txOutRef).isEmpty

@@ -41,6 +41,10 @@
   `Arbitrary[Coin]` now generates 0 and values up to the max supply. `Arbitrary[Data]` generates
   `Constr` tag 0 and tags up to 2^64 − 1, integers at the CBOR boundaries, and byte strings of
   the hash and chunk lengths; `Arbitrary[Program]` generates versions 1.0.0 and 1.1.0.
+  `Arbitrary[Interval]` generates validity ranges in 2020 to 2040, points and short windows.
+  `Arbitrary[TxInfo]` holds 1 to 16 inputs, outputs and signatories, and now fills reference
+  inputs, certificates, withdrawals, redeemers, datums and the treasury amounts in half of the
+  samples.
 
 ### Fixed
 

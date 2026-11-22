@@ -3,7 +3,8 @@ package scalus.testing
 import org.scalacheck.Gen
 import org.scalacheck.rng.Seed
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.onchain.plutus.v1.{Credential, Value}
+import scalus.cardano.onchain.plutus.v1.{Credential, Interval, IntervalBoundType, Value}
+import scalus.cardano.onchain.plutus.v3.TxInfo
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.uplc.Term
 import scalus.uplc.builtin.{ByteString, Data}
@@ -123,6 +124,54 @@ class ArbitraryInstancesQualityTest extends AnyFunSuite {
         assertShare(programs, "version 1.1.0", 0.123)(_.version == (1, 1, 0))
         assertDiscards(genProgram)
     }
+    test("v1.Interval: bounds in order, with validity ranges and the edge forms") {
+        import scalus.cardano.onchain.plutus.v3.ArbitraryInstances.genInterval
+        val intervals = sample(genInterval)
+        intervals.foreach { i =>
+            for t <- finiteTimes(i) do assert(-TwoPow64 <= t && t <= TwoPow64, i)
+            (i.from.boundType, i.to.boundType) match
+                case (IntervalBoundType.Finite(a), IntervalBoundType.Finite(b)) => assert(a <= b, i)
+                case _                                                          => ()
+        }
+        // minimums: half of the shares measured at rollout unit 2 (57.3, 17.5, 43.0, 5.5, 5.0 %)
+        val year2020 = BigInt(1_577_836_800_000L)
+        val year2040 = BigInt(2_208_988_800_000L)
+        assertShare(intervals, "both bounds finite, in 2020 to 2040", 0.286)(i =>
+            finiteTimes(i).size == 2 && finiteTimes(i).forall(t => year2020 <= t && t <= year2040)
+        )
+        assertShare(intervals, "a point", 0.087)(i =>
+            finiteTimes(i).size == 2 && finiteTimes(i).distinct.size == 1
+        )
+        assertShare(intervals, "finite and narrower than 1 hour", 0.215)(i =>
+            finiteTimes(i).size == 2 && finiteTimes(i)(1) - finiteTimes(i)(0) < 3_600_000
+        )
+        assertShare(intervals, "always", 0.027)(_ == Interval.always)
+        assertShare(intervals, "never", 0.025)(_ == Interval.never)
+        assertDiscards(genInterval)
+    }
+
+    test("v3.TxInfo: capped collections, optional fields often empty, a mint without lovelace") {
+        import scalus.cardano.onchain.plutus.v3.ArbitraryInstances.genTxInfo
+        val infos = sample(genTxInfo)
+        infos.foreach { info =>
+            for n <- Seq(info.inputs.size, info.outputs.size, info.signatories.size) do
+                assert(1 <= n && n <= 16, n)
+            for n <- optionalSizes(info) do assert(n <= 4, n)
+            assert(canonicalProblem(info.mint).isEmpty, info.mint)
+            assert(!policies(info.mint).contains(AdaPolicy), info.mint)
+            info.outputs.asScala.foreach(out => assert(lovelaceOf(out.value) >= 1, out))
+        }
+        // minimums: half of the shares measured at rollout unit 2 (9.6, 50.9, 49.1, 50.8, 49.6,
+        // 49.7 and 3.2 %)
+        assertShare(infos, "5 or more inputs", 0.048)(_.inputs.size >= 5)
+        assertShare(infos, "no reference input", 0.254)(_.referenceInputs.isEmpty)
+        assertShare(infos, "a certificate", 0.245)(!_.certificates.isEmpty)
+        assertShare(infos, "a withdrawal", 0.253)(!_.withdrawals.toList.isEmpty)
+        assertShare(infos, "a redeemer", 0.248)(!_.redeemers.toList.isEmpty)
+        assertShare(infos, "a datum", 0.248)(!_.data.toList.isEmpty)
+        assertShare(infos, "every optional field empty", 0.016)(optionalSizes(_).forall(_ == 0))
+        assertDiscards(genTxInfo)
+    }
 }
 
 object ArbitraryInstancesQualityTest {
@@ -165,6 +214,20 @@ object ArbitraryInstancesQualityTest {
             val draws = 200
             val discarded = (0 until draws).count(i => gen(params, Seed(i.toLong)).isEmpty)
             assert(discarded <= draws / 20, s"size $size: $discarded of $draws discarded")
+
+    /** The finite bound times of an interval, lower bound first. */
+    def finiteTimes(i: Interval): Seq[BigInt] =
+        Seq(i.from.boundType, i.to.boundType).collect { case IntervalBoundType.Finite(t) => t }
+
+    /** The sizes of the optional collections of a `TxInfo`. */
+    def optionalSizes(info: TxInfo): Seq[BigInt] =
+        Seq(
+          info.referenceInputs.size,
+          info.certificates.size,
+          info.withdrawals.toList.size,
+          info.redeemers.toList.size,
+          info.data.toList.size
+        )
 
     /** Every node of a `Data` value, the value itself included. */
     def nodes(d: Data): Seq[Data] = d match
