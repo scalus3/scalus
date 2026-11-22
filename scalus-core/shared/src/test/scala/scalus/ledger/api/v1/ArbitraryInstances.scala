@@ -101,7 +101,74 @@ trait ArbitraryInstances extends test.ArbitraryInstances {
 
     def genLovelace: Gen[Value] = genAmount.map(Value.lovelace)
 
-    given Arbitrary[Value] = Arbitrary {
+    // ----- D5: Value generators (docs/internal/test-refactor/d5-generators.md, section 6.2) -----
+    //
+    // The members above stay as they are and keep their signed amounts. The default given now
+    // generates positive amounts only (`[gen.value.positive]`); signed values come from the
+    // named generators `genAnyValue`, `genMintValue` and `genValueOver`.
+
+    private lazy val TwoPow64 = BigInt(2).pow(64)
+
+    /** A policy id from the pool of 10: `[gen.cover.pool-contents]`. Two values that draw from the
+      * pool share policies, so the "same key" branches of `Value.plus` run.
+      */
+    def genPooledPolicyId: Gen[ByteString] =
+        Gen.choose(0, 9).map(i => ByteString.fromArray(Array.fill(28)(i.toByte)))
+
+    /** An asset name from the pool of 10: `[gen.cover.pool-contents]`. */
+    def genPooledAssetName: Gen[ByteString] =
+        Gen.choose(0, 9).map(i => ByteString.fromString(i.toString))
+
+    /** A positive amount, at most 2^64 (`[gen.value.amount-max]`), in three parts
+      * (`[gen.cover.three-parts]`): 50 % 1 to 10^8, 25 % edges, 25 % any amount with a uniform bit
+      * length.
+      *
+      * The edges are the boundaries of the CBOR integer encoding of `Data.I` (23/24, 255/256, 2^16,
+      * 2^32), the largest `Long`, and 2^64 − 1 and 2^64.
+      */
+    def genPositiveAmount: Gen[BigInt] =
+        Gen.frequency(
+          2 -> Gen.choose(BigInt(1), BigInt(100_000_000)),
+          1 -> Gen.oneOf(
+            BigInt(1),
+            BigInt(23),
+            BigInt(24),
+            BigInt(255),
+            BigInt(256),
+            BigInt(65_536),
+            BigInt(1L << 32),
+            BigInt(Long.MaxValue),
+            TwoPow64 - 1,
+            TwoPow64
+          ),
+          1 -> genMagnitude(BigInt(1), TwoPow64)
+        )
+
+    /** The generator behind `Arbitrary[Value]`: positive amounts (`[gen.value.positive]`), an
+      * optional lovelace entry (`[gen.value.lovelace-optional]`), 30 % pooled keys
+      * (`[gen.cover.pooled-keys]`).
+      */
+    def genValue: Gen[Value] =
+        genValueOf(Gen.option(genPositiveAmount), genPositiveAmount)
+
+    /** The value of `Arbitrary[TxOut]`: `genValue` with a lovelace entry of at least 1
+      * (`[gen.value.output-lovelace]`, `[gen.value.output-gen]`).
+      */
+    def genOutputValue: Gen[Value] =
+        genValueOf(genPositiveAmount.map(Some(_)), genPositiveAmount)
+
+    /** A mint value: non-zero signed amounts and no lovelace entry (`[gen.value.mint-signed]`). */
+    def genMintValue: Gen[Value] = {
+        val nonZero =
+            Gen.zip(Gen.oneOf(1, -1), genPositiveAmount).map((sign, amount) => amount * sign)
+        genValueOf(Gen.const(None), nonZero)
+    }
+
+    /** Any value the Scala type can hold, with signed amounts in `[-2^64, 2^64]`
+      * (`[gen.value.any-signed]`): the body of `Arbitrary[Value]` before D5, unchanged, for the
+      * group laws of `ValueTest`.
+      */
+    def genAnyValue: Gen[Value] =
         for
             lovelace <- Gen.option(genLovelace)
             size <- Gen.frequency(
@@ -114,5 +181,53 @@ trait ArbitraryInstances extends test.ArbitraryInstances {
         yield lovelace match
             case None    => values
             case Some(l) => Value.plus(l, values)
+
+    /** A signed value whose keys come only from `policies` × `tokens` (`[gen.value.over-keys]`).
+      * Each key is present with chance 1/2, so two values share keys in most draws: the two-operand
+      * laws of `ValueTest` use it (`[gen.value.two-operand-laws]`).
+      */
+    def genValueOver(policies: Seq[ByteString], tokens: Seq[ByteString]): Gen[Value] = {
+        val keys = for policy <- policies; token <- tokens yield (policy, token)
+        Gen.sequence[Seq[scala.Option[BigInt]], scala.Option[BigInt]](
+          keys.map(_ => Gen.frequency(1 -> Gen.const(None), 1 -> genAmount.map(Some(_))))
+        ).map { amounts =>
+            val entries = keys.zip(amounts).collect { case ((policy, token), Some(amount)) =>
+                (policy, token, amount)
+            }
+            valueFromEntries(entries)
+        }
     }
+
+    /** A value with 0 to 10 policies of 0 to 10 tokens. Policy ids and asset names are 30 % pooled.
+      * A key drawn twice keeps its first amount, so an amount is never a sum of two draws.
+      */
+    private def genValueOf(lovelace: Gen[scala.Option[BigInt]], amount: Gen[BigInt]): Gen[Value] = {
+        val count = Gen.frequency((5, Gen.choose(0, 1)), (3, Gen.choose(1, 10)))
+        val policyId = Gen.frequency(3 -> genPooledPolicyId, 7 -> genPolicyId)
+        val assetName = Gen.frequency(3 -> genPooledAssetName, 7 -> genAssetName)
+        val policy =
+            for
+                id <- policyId
+                tokens <- count.flatMap(Gen.listOfN(_, Gen.zip(assetName, amount)))
+            yield tokens.map((name, value) => (id, name, value))
+        for
+            ada <- lovelace
+            entries <- count.flatMap(Gen.listOfN(_, policy)).map(_.flatten)
+        yield valueFromEntries(
+          ada.map(value => (Value.adaPolicyId, Value.adaTokenName, value)).toSeq ++ entries
+        )
+    }
+
+    /** A canonical value from (policy, token, amount) entries: the first amount of a key wins, zero
+      * amounts are dropped, keys are sorted.
+      */
+    private def valueFromEntries(entries: Seq[(ByteString, ByteString, BigInt)]): Value = {
+        val firstPerKey = entries.distinctBy((policy, token, _) => (policy, token))
+        val byPolicy = firstPerKey.groupBy(_._1).toSeq.map { (policy, tokens) =>
+            (policy, List.from(tokens.map((_, token, amount) => (token, amount))))
+        }
+        Value.fromList(List.from(byPolicy))
+    }
+
+    given Arbitrary[Value] = Arbitrary(genValue)
 }

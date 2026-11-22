@@ -11,7 +11,6 @@ import scalus.testing.ArbitraryDerivation.autoDerived
 
 import scala.collection.immutable
 import scala.collection.immutable.SortedMap
-import scala.math.pow
 
 object ArbitraryInstances extends ArbitraryInstances
 trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
@@ -73,7 +72,26 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         )
     }
 
-    given Arbitrary[Coin] = Arbitrary(Gen.choose(0L, pow(2L, 53).toLong).map(Coin.apply))
+    /** The max supply of lovelace, 45 × 10^9 ADA. A constant of the protocol, not a protocol
+      * parameter, so `[gen.size.params-source]` does not apply.
+      */
+    final val MaxLovelace = 45_000_000_000_000_000L
+
+    /** The generator behind `Arbitrary[Coin]` (spec `[gen.cover.three-parts]` of
+      * docs/internal/test-refactor/d5-generators.md): 50 % 1 to 100 ADA, 25 % edges, 25 % any value
+      * up to the max supply with a uniform bit length.
+      *
+      * The edges are 0, 1, 999 999 and 1 000 000 lovelace (the ADA boundary), 2^53 (the largest
+      * exact `Double`) and the max supply.
+      */
+    def genCoin: Gen[Coin] =
+        Gen.frequency(
+          2 -> Gen.choose(1_000_000L, 100_000_000L),
+          1 -> Gen.oneOf(0L, 1L, 999_999L, 1_000_000L, 1L << 53, MaxLovelace),
+          1 -> genMagnitude(0L, MaxLovelace)
+        ).map(Coin.apply)
+
+    given Arbitrary[Coin] = Arbitrary(genCoin)
     given Arbitrary[AssetName] = Arbitrary(
       Gen.choose(0, 32).flatMap(genByteStringOfN).map(AssetName.apply)
     )

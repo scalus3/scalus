@@ -3,7 +3,7 @@ package scalus.cardano.onchain.plutus.v3
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.{Arbitrary, Gen}
 import scalus.*
-import scalus.cardano.onchain.plutus.v1.{Interval, PubKeyHash, Value}
+import scalus.cardano.onchain.plutus.v1.{Interval, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, List, SortedMap}
 
@@ -33,7 +33,7 @@ trait ArbitraryInstances extends v2.ArbitraryInstances {
             inputs <- arbitrary[scalus.cardano.onchain.plutus.prelude.List[TxInInfo]]
             fee <- Gen.choose(0L, 1000000_000000L)
             signatories <- arbitrary[scalus.cardano.onchain.plutus.prelude.List[PubKeyHash]]
-            mint <- arbitrary[Value]
+            mint <- genMintValue // [gen.value.txinfo-mint]
             outputs <- arbitrary[scalus.cardano.onchain.plutus.prelude.List[TxOut]]
             interval <- arbitrary[Interval]
             id <- arbitrary[TxId]
