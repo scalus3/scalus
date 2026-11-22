@@ -3,7 +3,11 @@ package scalus.testing
 import org.scalacheck.rng.Seed
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.ByteString
+import scalus.cardano.ledger.TransactionOutput
+import scalus.cardano.onchain.plutus.v1.Value as OnchainValue
+import scalus.cardano.onchain.plutus.v2.TxOut
+import scalus.serialization.cbor.Cbor
+import scalus.uplc.builtin.{ByteString, Data}
 
 import java.nio.file.{Files, Path}
 import scala.collection.mutable
@@ -11,6 +15,10 @@ import scala.collection.mutable
 /** Measures the ScalaCheck generators: which constructors they produce, how big and deep the values
   * are, and how often edge values appear (spec `[P0-12]` to `[P0-16]` of
   * docs/superpowers/specs/2026-10-20-test-refactoring-design.md).
+  *
+  * D5 adds per-type probes (rules `[gen.quality.genstats-classes]` and
+  * `[gen.output.genstats-forms]` of docs/internal/test-refactor/d5-generators.md): the forms of an
+  * output, keys shared by two consecutive samples, and the CBOR size against a protocol limit.
   *
   * Not a correctness test: it asserts nothing and writes
   * `docs/internal/test-refactor/gen-stats.md`. Tagged `scalus.testing.Benchmark`, so the default
@@ -32,6 +40,12 @@ object GenStatsTest {
 
     val Samples = 10_000
 
+    private val TwoPow64 = BigInt(2).pow(64)
+
+    /** Edge names that `walk` records; rows list them so that a share of 0 % shows. */
+    private val constrTagEdges = Seq("constr tag 0", "constr tag >=128")
+    private val twoPow64Edges = Seq("int |x|>=2^64", "int |x|=2^64±1")
+
     final case class Row(
         group: String,
         name: String,
@@ -44,14 +58,44 @@ object GenStatsTest {
         maxNodes: Int,
         maxDepth: Int,
         edges: Map[String, Int],
+        forms: Map[String, Int],
+        sharedKeys: Option[Int],
+        cbor: Option[CborStats],
         millis: Long
     )
 
+    /** CBOR sizes of the samples against one protocol limit. */
+    final case class CborStats(limitName: String, limit: Long, maxBytes: Int, overLimit: Int)
+
+    /** Extra measurements for one type. The default measures nothing extra.
+      *
+      * @param forms
+      *   the classes of one sample, one per dimension, for example `payment=script` and
+      *   `datum=inline`
+      * @param keys
+      *   the keys of one sample; the row reports how often two consecutive samples share one
+      * @param cbor
+      *   the name of a protocol limit, its value, and the CBOR size of one sample
+      * @param listedEdges
+      *   edges that the row shows even when no sample has them, so that 0 % is visible
+      */
+    final case class Probe[A](
+        forms: A => Seq[String] = (_: A) => Seq.empty,
+        keys: Option[A => Set[Any]] = None,
+        cbor: Option[(String, Long, A => Int)] = None,
+        listedEdges: Seq[String] = Seq.empty
+    )
+
     /** Samples `Samples` values with the sizes that `forAll` uses (0 to 100) and a fixed seed. */
-    def measure[A](group: String, name: String)(using arb: Arbitrary[A]): Row = {
-        val roots, kinds, edges = mutable.Map.empty[String, Int].withDefaultValue(0)
+    def measure[A](group: String, name: String, probe: Probe[A] = Probe[A]())(using
+        arb: Arbitrary[A]
+    ): Row = {
+        val roots, kinds, edges, forms = mutable.Map.empty[String, Int].withDefaultValue(0)
         val nodes, depths = mutable.Map.empty[Int, Int].withDefaultValue(0)
         var discarded, maxNodes, maxDepth = 0
+        var sharedKeys, cborMax, cborOver = 0
+        // keys of the previous kept sample; the first sample has no predecessor
+        var previousKeys: Option[Set[Any]] = None
         val start = System.nanoTime()
         for i <- 0 until Samples do
             val params = Gen.Parameters.default.withSize(i % 101)
@@ -68,7 +112,19 @@ object GenStatsTest {
                     depths(bucket(d)) += 1
                     maxNodes = maxNodes.max(n)
                     maxDepth = maxDepth.max(d)
+                    probe.forms(value).foreach(f => forms(f) += 1)
+                    probe.keys.foreach { keysOf =>
+                        val current = keysOf(value)
+                        if previousKeys.exists(_.exists(current.contains)) then sharedKeys += 1
+                        previousKeys = Some(current)
+                    }
+                    probe.cbor.foreach { (_, limit, sizeOf) =>
+                        val size = sizeOf(value)
+                        cborMax = cborMax.max(size)
+                        if size > limit then cborOver += 1
+                    }
         val millis = (System.nanoTime() - start) / 1_000_000
+        probe.listedEdges.foreach(e => edges(e) += 0)
         Row(
           group,
           name,
@@ -81,6 +137,9 @@ object GenStatsTest {
           maxNodes,
           maxDepth,
           edges.toMap,
+          forms.toMap,
+          probe.keys.map(_ => sharedKeys),
+          probe.cbor.map((limitName, limit, _) => CborStats(limitName, limit, cborMax, cborOver)),
           millis
         )
     }
@@ -110,7 +169,17 @@ object GenStatsTest {
                 if b == -1 then edges += "int -1"
                 if b < 0 then edges += "int <0"
                 if b.bitLength > 63 then edges += "int >64bit"
+                // the 2^64 boundary: on-chain amounts may pass it, ledger amounts (Word64) may not
+                if b.abs >= TwoPow64 then edges += "int |x|>=2^64"
+                if (b.abs - TwoPow64).abs <= 1 then edges += "int |x|=2^64±1"
                 (1, 1)
+            case c: Data.Constr =>
+                // CBOR encodes tags 0 to 6, 7 to 127 and larger tags in three different ways.
+                // Same walk as the Product case below, so the node counts do not change.
+                if c.constr == 0 then edges += "constr tag 0"
+                if c.constr >= 128 then edges += "constr tag >=128"
+                kinds += c.productPrefix
+                children(c.productIterator)
             case l: Long =>
                 if l == 0 then edges += "long 0"
                 if l < 0 then edges += "long <0"
@@ -145,13 +214,21 @@ object GenStatsTest {
     private def pct(n: Int, total: Int): String = f"${100.0 * n / total}%.1f%%"
 
     private def topCounts(m: Map[String, Int], total: Int, limit: Int): String = {
-        val sorted = m.toSeq.sortBy(-_._2)
+        // ties sort by name, so that adding a class does not reorder the others
+        val sorted = m.toSeq.sortBy((k, v) => (-v, k))
         val shown = sorted.take(limit).map((k, v) => s"$k ${pct(v, total)}").mkString(", ")
         if sorted.size > limit then s"$shown, … (${sorted.size} kinds)" else shown
     }
 
     private def histogram(m: Map[Int, Int], total: Int): String =
         m.toSeq.sortBy(_._1).map((b, v) => s"$b+: ${pct(v, total)}").mkString(", ")
+
+    /** Classes sorted by dimension, then by share, so each dimension reads as one group. */
+    private def forms(m: Map[String, Int], total: Int): String =
+        m.toSeq
+            .sortBy((k, v) => (k.takeWhile(_ != '='), -v))
+            .map((k, v) => s"$k ${pct(v, total)}")
+            .mkString(", ")
 
     def render(rows: Seq[Row]): String = {
         val sb = new StringBuilder
@@ -160,7 +237,10 @@ object GenStatsTest {
         sb ++= "- **roots**: share of each top-level constructor.\n"
         sb ++= "- **kinds**: share of samples that contain the constructor anywhere.\n"
         sb ++= "- **nodes / depth**: power-of-two histograms; `8+` means 8 to 15.\n"
-        sb ++= "- **edges**: share of samples that contain the edge value anywhere.\n\n"
+        sb ++= "- **edges**: share of samples that contain the edge value anywhere.\n"
+        sb ++= "- **forms**: share of samples in each class, one class per dimension (`dimension=class`).\n"
+        sb ++= "- **shared keys**: share of samples that share a key with the sample before.\n"
+        sb ++= "- **cbor**: largest CBOR size, and the share of samples above the protocol limit.\n\n"
         for (group, groupRows) <- rows.groupBy(_.group).toSeq.sortBy(_._1) do
             sb ++= s"## $group\n\n"
             for r <- groupRows do
@@ -173,19 +253,23 @@ object GenStatsTest {
                     sb ++= s"- nodes: ${histogram(r.nodes, kept)}; max ${r.maxNodes}\n"
                     sb ++= s"- depth: ${histogram(r.depths, kept)}; max ${r.maxDepth}\n"
                     sb ++= s"- edges: ${topCounts(r.edges, kept, 20)}\n"
+                    if r.forms.nonEmpty then sb ++= s"- forms: ${forms(r.forms, kept)}\n"
+                    r.sharedKeys.foreach(n => sb ++= s"- shared keys: ${pct(n, kept)}\n")
+                    r.cbor.foreach { c =>
+                        sb ++= s"- cbor: max ${c.maxBytes} bytes; above ${c.limitName} ${c.limit}: ${pct(c.overLimit, kept)}\n"
+                    }
                 sb ++= "\n"
         sb.toString
     }
 
     def uplcRows: Seq[Row] = {
         import scalus.uplc.{Constant, DefaultUni, Program, Term}
-        import scalus.uplc.builtin.Data
         // uplc.test.ArbitraryInstances is a trait only; cardano.ledger.ArbitraryInstances extends it.
         import scalus.cardano.ledger.ArbitraryInstances.given
         val g = "uplc.test.ArbitraryInstances"
         Seq(
           measure[ByteString](g, "ByteString"),
-          measure[Data](g, "Data"),
+          measure[Data](g, "Data", Probe(listedEdges = constrTagEdges ++ twoPow64Edges)),
           measure[DefaultUni](g, "DefaultUni"),
           measure[Constant](g, "Constant"),
           measure[Term](g, "Term"),
@@ -198,6 +282,9 @@ object GenStatsTest {
         import scalus.cardano.ledger.*
         import scalus.cardano.ledger.ArbitraryInstances.given
         val g = "cardano.ledger.ArbitraryInstances"
+        val params = CardanoInfo.mainnet.protocolParams
+        def policies(assets: MultiAsset): Set[Any] = assets.assets.keySet.toSet
+        def valueSize(value: Value): Int = Cbor.encode(value).length
         Seq(
           measure[Address](g, "Address"),
           measure[ShelleyAddress](g, "ShelleyAddress"),
@@ -205,19 +292,38 @@ object GenStatsTest {
           measure[Credential](g, "Credential"),
           measure[Coin](g, "Coin"),
           measure[AssetName](g, "AssetName"),
-          measure[MultiAsset](g, "MultiAsset"),
-          measure[Value](g, "Value"),
+          measure[MultiAsset](g, "MultiAsset", Probe(keys = Some(policies))),
+          measure[Value](
+            g,
+            "Value",
+            Probe(
+              keys = Some(v => policies(v.assets)),
+              cbor = Some(("maxValueSize", params.maxValueSize, valueSize))
+            )
+          ),
           measure[ExUnits](g, "ExUnits"),
           measure[Script](g, "Script"),
           measure[Timelock](g, "Timelock"),
           measure[DatumOption](g, "DatumOption"),
-          measure[TransactionOutput](g, "TransactionOutput"),
+          measure[TransactionOutput](
+            g,
+            "TransactionOutput",
+            Probe(
+              forms = ledgerOutputForms,
+              keys = Some(o => policies(o.value.assets)),
+              cbor = Some(("maxValueSize", params.maxValueSize, o => valueSize(o.value)))
+            )
+          ),
           measure[Metadatum](g, "Metadatum"),
           measure[Redeemers](g, "Redeemers"),
           measure[Certificate](g, "Certificate"),
           measure[GovAction](g, "GovAction"),
           measure[TransactionBody](g, "TransactionBody"),
-          measure[Transaction](g, "Transaction")
+          measure[Transaction](
+            g,
+            "Transaction",
+            Probe(cbor = Some(("maxTxSize", params.maxTxSize, tx => Cbor.encode(tx).length)))
+          )
         )
     }
 
@@ -230,13 +336,82 @@ object GenStatsTest {
         Seq(
           measure[Interval](g, "Interval"),
           measure[Address](g, "v1.Address"),
-          measure[Value](g, "v1.Value"),
+          measure[Value](
+            g,
+            "v1.Value",
+            Probe(keys = Some(nonAdaPolicies), listedEdges = twoPow64Edges)
+          ),
           measure[OutputDatum](g, "v2.OutputDatum"),
-          measure[TxOut](g, "v2.TxOut"),
+          measure[TxOut](
+            g,
+            "v2.TxOut",
+            Probe(forms = onchainOutputForms, keys = Some(o => nonAdaPolicies(o.value)))
+          ),
           measure[TxOutRef](g, "TxOutRef"),
           measure[TxInInfo](g, "TxInInfo"),
           measure[ScriptPurpose](g, "ScriptPurpose"),
           measure[TxInfo](g, "TxInfo")
         )
     }
+
+    /** Forms of `[gen.output.ledger-forms]`; the payment and the staking credential are apart. */
+    private def ledgerOutputForms(output: TransactionOutput): Seq[String] = {
+        import scalus.cardano.address.{ByronAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress}
+        import scalus.cardano.ledger.DatumOption
+        val (payment, staking) = output.address match
+            case a: ShelleyAddress =>
+                val payment = a.payment match
+                    case ShelleyPaymentPart.Key(_)    => "key"
+                    case ShelleyPaymentPart.Script(_) => "script"
+                val staking = a.delegation match
+                    case ShelleyDelegationPart.Key(_)     => "key"
+                    case ShelleyDelegationPart.Script(_)  => "script"
+                    case ShelleyDelegationPart.Pointer(_) => "pointer"
+                    case ShelleyDelegationPart.Null       => "none"
+                (payment, staking)
+            case _: ByronAddress => ("byron", "byron")
+            case _: StakeAddress => ("stake address", "stake address")
+        val era = output match
+            case _: TransactionOutput.Shelley => "shelley"
+            case _: TransactionOutput.Babbage => "babbage"
+        val datum = output.datumOption match
+            case None                        => "none"
+            case Some(DatumOption.Hash(_))   => "hash"
+            case Some(DatumOption.Inline(_)) => "inline"
+        Seq(
+          s"payment=$payment",
+          s"staking=$staking",
+          s"era=$era",
+          s"datum=$datum",
+          s"scriptRef=${if output.scriptRef.isDefined then "yes" else "no"}"
+        )
+    }
+
+    /** Forms of `[gen.output.onchain-forms]`; the payment and the staking credential are apart. */
+    private def onchainOutputForms(output: TxOut): Seq[String] = {
+        import scalus.cardano.onchain.plutus.prelude.Option as POption
+        import scalus.cardano.onchain.plutus.v1.{Credential, StakingCredential}
+        import scalus.cardano.onchain.plutus.v2.OutputDatum
+        def credential(c: Credential): String = c match
+            case Credential.PubKeyCredential(_) => "key"
+            case Credential.ScriptCredential(_) => "script"
+        val staking = output.address.stakingCredential match
+            case POption.None                                        => "none"
+            case POption.Some(StakingCredential.StakingHash(cred))   => credential(cred)
+            case POption.Some(StakingCredential.StakingPtr(_, _, _)) => "pointer"
+        val datum = output.datum match
+            case OutputDatum.NoOutputDatum      => "none"
+            case OutputDatum.OutputDatumHash(_) => "hash"
+            case OutputDatum.OutputDatum(_)     => "inline"
+        Seq(
+          s"payment=${credential(output.address.credential)}",
+          s"staking=$staking",
+          s"datum=$datum",
+          s"referenceScript=${if output.referenceScript.isDefined then "yes" else "no"}"
+        )
+    }
+
+    /** Policy ids of an on-chain value, without the ADA policy. */
+    private def nonAdaPolicies(value: OnchainValue): Set[Any] =
+        value.toSortedMap.keys.toScalaList.filterNot(_.isEmpty).toSet
 }

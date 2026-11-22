@@ -5,8 +5,9 @@ area: gen
 # D5 – Shared generators
 
 The owner approved the recommendations on 2026-11-21 ("agree with recommended"), and the `Table`
-form of `checkEval` the same day ("ok, start the pilot"). No rule is built yet: each rule has
-*Implementation status: planned* until the pilot or the rollout builds it.
+form of `checkEval` the same day ("ok, start the pilot"). Each rule has *Implementation status:
+planned* until the pilot or the rollout builds it. Pilot step 1 built `[gen.quality.genstats-classes]`
+and `[gen.output.genstats-forms]`.
 
 This note is step D5 of `[P3-11a]` in `docs/superpowers/specs/2026-10-20-test-refactoring-design.md`.
 It amends H-35 and H-36 in `helpers.md`. The measurements and the research are in
