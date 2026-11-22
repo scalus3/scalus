@@ -6,8 +6,11 @@ area: gen
 
 The owner approved the recommendations on 2026-11-21 ("agree with recommended"), and the `Table`
 form of `checkEval` the same day ("ok, start the pilot"). Each rule has *Implementation status:
-planned* until the pilot or the rollout builds it. Pilot step 1 built `[gen.quality.genstats-classes]`
-and `[gen.output.genstats-forms]`.
+planned* until the pilot or the rollout builds it. The pilot built `[gen.quality.genstats-classes]`,
+`[gen.output.genstats-forms]`, `[gen.runs.checkeval-table]` to `[gen.runs.checkeval-row-report]`,
+`[gen.magnitude.range]` to `[gen.magnitude.bit-length]`, `[gen.value.*]`, `[gen.cover.pooled-keys]`
+to `[gen.cover.random-members]`, `[gen.family.given-calls-gen]` for `Coin`, `v1.Value` and
+`v2.TxOut`, and `[gen.quality.*]` for the four rows of pilot step 8.
 
 This note is step D5 of `[P3-11a]` in `docs/superpowers/specs/2026-10-20-test-refactoring-design.md`.
 It amends H-35 and H-36 in `helpers.md`. The measurements and the research are in

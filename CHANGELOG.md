@@ -35,6 +35,10 @@
 - `CommonSubexpressionElimination` is about 100 times faster on large scripts: 14 ms instead of
   2.1 s on a 7,400-node validator, 18 ms instead of 13.5 s on the stablecoin use case. Each pass
   extracts all candidates that do not nest with a better one, and keys compare as ints.
+- `scalus-testkit` generators changed their distribution. `Arbitrary[Value]` (on-chain) no
+  longer generates negative amounts: use `genAnyValue` or `genMintValue`. `Arbitrary[TxOut]` always
+  holds lovelace ≥ 1, the `mint` of `Arbitrary[TxInfo]` is signed and holds no lovelace, and
+  `Arbitrary[Coin]` now generates 0 and values up to the max supply.
 
 ### Fixed
 
