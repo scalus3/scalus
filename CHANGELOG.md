@@ -47,6 +47,11 @@
   samples.
   `Arbitrary[Address]` gives 64 % base, 12 % enterprise, 4 % pointer, 16 % Byron and 20 % stake
   addresses; `genPaymentAddress` never gives a stake address or a network other than 0 and 1.
+  `Arbitrary[TransactionOutput]` uses `genPaymentAddress`; `Arbitrary[TransactionBody]` holds 1
+  to 16 inputs and outputs, leaves each optional field empty in half of the samples, and puts the
+  `ttl` after the validity start; `Arbitrary[ExUnits]` and `Arbitrary[Slot]` reach the protocol
+  limit and `Long.MaxValue`. The derived ledger instances no longer discard samples at small sizes,
+  and `arbitrary[Option[A]]` in the ledger chain gives `None` in half of the samples.
 
 ### Fixed
 

@@ -67,7 +67,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
                             data = scalus.uplc.builtin.Data.unit,
-                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                            exUnits = genScriptExUnits.sample.get
                           )
                         )
                       )
@@ -225,7 +225,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
                             data = scalus.uplc.builtin.Data.unit,
-                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                            exUnits = genScriptExUnits.sample.get
                           )
                         )
                       )
@@ -320,7 +320,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
                             data = scalus.uplc.builtin.Data.unit,
-                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                            exUnits = genScriptExUnits.sample.get
                           )
                         )
                       )
@@ -432,7 +432,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
                             data = scalus.uplc.builtin.Data.unit,
-                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                            exUnits = genScriptExUnits.sample.get
                           )
                         )
                       )
@@ -538,7 +538,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
                             data = scalus.uplc.builtin.Data.unit,
-                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                            exUnits = genScriptExUnits.sample.get
                           )
                         )
                       )
@@ -648,7 +648,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
                             data = scalus.uplc.builtin.Data.unit,
-                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                            exUnits = genScriptExUnits.sample.get
                           )
                         )
                       )
@@ -750,7 +750,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
                             data = scalus.uplc.builtin.Data.unit,
-                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                            exUnits = genScriptExUnits.sample.get
                           )
                         )
                       )
@@ -839,7 +839,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
                             data = scalus.uplc.builtin.Data.unit,
-                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                            exUnits = genScriptExUnits.sample.get
                           )
                         )
                       )

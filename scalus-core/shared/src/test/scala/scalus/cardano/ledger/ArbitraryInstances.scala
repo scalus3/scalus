@@ -14,6 +14,21 @@ import scala.collection.immutable.SortedMap
 
 object ArbitraryInstances extends ArbitraryInstances
 trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
+
+    /** `[gen.cover.optional-empty]`, `[gen.cover.no-gen-option]`: `None` in 50 % of samples. */
+    def genOptional[A](gen: Gen[A]): Gen[Option[A]] =
+        Gen.frequency(1 -> Gen.const(None), 1 -> gen.map(Some(_)))
+
+    /** `Option` for every derived type of this file, `None` in 50 % of samples.
+      *
+      * The import of `autoDerived` makes it a candidate for every type, so without this given an
+      * `Option` field resolves to a derived `Option`: a sum type, which gives `Gen.fail` at size 0
+      * (`[gen.size.derived-fallback]`). The derived `Option` also gave 50 % `None`, so the shares
+      * stay; the values for a seed change.
+      */
+    given arbitraryOption[A](using a: Arbitrary[A]): Arbitrary[Option[A]] =
+        Arbitrary(genOptional(a.arbitrary))
+
     def genMapOfSizeFromArbitrary[A: Arbitrary, B: Arbitrary](
         from: Int,
         to: Int
@@ -98,12 +113,52 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
 
     given Arbitrary[Language] = autoDerived
     given Arbitrary[AddressBytes] = Arbitrary(arbitrary[ByteString].map(AddressBytes.apply))
-    given Arbitrary[Slot] = Arbitrary(Gen.choose(0L, Long.MaxValue).map(Slot.apply))
-    given Arbitrary[ExUnits] = Arbitrary {
-        for
-            mem <- Gen.choose(0L, 1000L)
-            steps <- Gen.choose(0L, 1000L)
-        yield ExUnits(mem, steps)
+
+    /** The generator behind `Arbitrary[Slot]` (`[gen.cover.three-parts]`): 50 % 0 to 2 × 10^8 (a
+      * mainnet slot is about 1.7 × 10^8), 25 % the edges 0, 1, 2^32 and `Long.MaxValue`, 25 % any
+      * slot with a uniform bit length (`[gen.magnitude.users]`).
+      */
+    def genSlot: Gen[Slot] =
+        Gen.frequency(
+          2 -> Gen.choose(0L, 200_000_000L),
+          1 -> Gen.oneOf(0L, 1L, 1L << 32, Long.MaxValue),
+          1 -> genMagnitude(0L, Long.MaxValue)
+        ).map(Slot.apply)
+
+    given Arbitrary[Slot] = Arbitrary(genSlot)
+
+    /** The generator behind `Arbitrary[ExUnits]` (`[gen.cover.three-parts]`): 50 % the units of a
+      * real script (10^4 to 10^7 memory, 10^6 to 10^9 steps), 25 % the edges 0, 1, the
+      * `maxTxExecutionUnits` of the parameter snapshot (`[gen.size.params-source]`) and one unit
+      * above it, 25 % any units with a uniform bit length. Before D5 both fields were at most 1
+      * 000.
+      */
+    def genExUnits: Gen[ExUnits] = {
+        val max = CardanoInfo.mainnet.protocolParams.maxTxExecutionUnits
+        val real =
+            for
+                mem <- Gen.choose(10_000L, 10_000_000L)
+                steps <- Gen.choose(1_000_000L, 1_000_000_000L)
+            yield ExUnits(mem, steps)
+        val edges = Gen.oneOf(
+          ExUnits(0, 0),
+          ExUnits(1, 1),
+          max,
+          ExUnits(max.memory + 1, max.steps + 1)
+        )
+        val wide = Gen.zip(genMagnitude(0L, Long.MaxValue), genMagnitude(0L, Long.MaxValue))
+        Gen.frequency(2 -> real, 1 -> edges, 1 -> wide.map(ExUnits(_, _)))
+    }
+
+    given Arbitrary[ExUnits] = Arbitrary(genExUnits)
+
+    /** The units of one script in a transaction that a ledger rule accepts: 0 to the
+      * `maxTxExecutionUnits` of the parameter snapshot (`[gen.size.params-source]`). A rule test
+      * takes it instead of `Arbitrary[ExUnits]`, whose wide part reaches `Long.MaxValue`.
+      */
+    def genScriptExUnits: Gen[ExUnits] = {
+        val max = CardanoInfo.mainnet.protocolParams.maxTxExecutionUnits
+        Gen.zip(Gen.choose(0L, max.memory), Gen.choose(0L, max.steps)).map(ExUnits(_, _))
     }
 
     given Arbitrary[ExUnitPrices] = autoDerived
@@ -350,7 +405,34 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         yield Input(transactionId, index)
     }
 
-    given Arbitrary[TransactionOutput] = autoDerived
+    /** The generator behind `Arbitrary[TransactionOutput]`: the Shelley and the Babbage form with
+      * equal chance, as the derived instance before D5, every datum and script reference form of
+      * `[gen.output.ledger-forms]`, and an address of `genPaymentAddress`, never a stake address
+      * (F-35). The derived instance discarded 3 % of samples at sizes 0 to 2.
+      *
+      * The optional fields use `genOptional`, not `arbitrary[Option[A]]`: the import of
+      * `autoDerived` makes it a candidate for every type, so in this file `arbitrary[Option[A]]`
+      * resolves to a derived `Option`, which gives `Gen.fail` at size 0. `genOptional` keeps its 50
+      * % `None`.
+      */
+    def genTransactionOutput: Gen[TransactionOutput] = {
+        val shelley =
+            for
+                address <- genPaymentAddress
+                value <- arbitrary[Value]
+                datumHash <- genOptional(arbitrary[DataHash])
+            yield TransactionOutput.Shelley(address, value, datumHash)
+        val babbage =
+            for
+                address <- genPaymentAddress
+                value <- arbitrary[Value]
+                datum <- genOptional(arbitrary[DatumOption])
+                scriptRef <- genOptional(arbitrary[ScriptRef])
+            yield TransactionOutput.Babbage(address, value, datum, scriptRef)
+        Gen.oneOf(shelley, babbage)
+    }
+
+    given Arbitrary[TransactionOutput] = Arbitrary(genTransactionOutput)
     given Arbitrary[ProtocolVersion] = Arbitrary {
         for
             major <- Gen.choose(1, 10)
@@ -479,7 +561,7 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         )
 
         val result: Arbitrary[AuxiliaryData] = autoDerived
-        result
+        withFallback(3, Gen.const(AuxiliaryData.Metadata(immutable.Map.empty)))(result)
     }
 
     given Arbitrary[VKeyWitness] = Arbitrary {
@@ -499,7 +581,8 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         yield BootstrapWitness(publicKey, signature, chainCode, attributes)
     }
 
-    given Arbitrary[RedeemerTag] = autoDerived
+    // A derived enum of case objects fell back to `Gen.fail` at size 0 ([gen.size.derived-fallback])
+    given Arbitrary[RedeemerTag] = Arbitrary(Gen.oneOf(RedeemerTag.values.toSeq))
 
     given Arbitrary[Redeemer] = Arbitrary {
         for
@@ -579,7 +662,8 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
 
     given Arbitrary[ProposalProcedure] = autoDerived
     given Arbitrary[Set[ProposalProcedure]] = Arbitrary(genSetOfSizeFromArbitrary(0, 3))
-    given Arbitrary[Vote] = autoDerived
+    // A derived enum of case objects gives `Gen.fail` at size 0 ([gen.size.derived-fallback])
+    given Arbitrary[Vote] = Arbitrary(Gen.oneOf(Vote.values.toSeq))
     // FIXME: autoDerived for Voter is not working correctly
 //    given Arbitrary[Voter] = autoDerived
     given Arbitrary[Voter] = Arbitrary {
@@ -591,7 +675,10 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
           arbitrary[AddrKeyHash].map(Voter.StakingPoolKey.apply),
         )
     }
-    given Arbitrary[VotingProcedure] = autoDerived
+    // Derived, its `Option[Anchor]` resolved to a derived `Option`, which gives `Gen.fail` at size 0
+    given Arbitrary[VotingProcedure] = Arbitrary {
+        Gen.zip(arbitrary[Vote], genOptional(arbitrary[Anchor])).map(VotingProcedure(_, _))
+    }
 
     given arbVotingProcedureMap: Arbitrary[SortedMap[GovActionId, VotingProcedure]] = Arbitrary {
         genMapOfSizeFromArbitrary[GovActionId, VotingProcedure](1, 4).map(map =>
@@ -626,7 +713,8 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         given Arbitrary[Long] = Arbitrary(Gen.choose(0, Long.MaxValue))
 
         val result: Arbitrary[GovAction] = autoDerived
-        result
+        // the one case without fields
+        withFallback(10, Gen.const(GovAction.InfoAction))(result)
     }
 
     given Arbitrary[Relay] = {
@@ -658,11 +746,22 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         Arbitrary(genRelay)
     }
 
+    /** `[gen.size.derived-fallback]`: below `minSize`, a derived sum type draws `fallback`.
+      *
+      * A `given ArbitraryDerivation.Fallback[T]` has no effect: `ArbitraryDerivation.split` summons
+      * the fallback inside its own generic method, so it always finds the default `Gen.fail`, and
+      * the derived instance discards every sample at size 0.
+      */
+    private def withFallback[T](minSize: Int, fallback: Gen[T])(
+        derived: Arbitrary[T]
+    ): Arbitrary[T] =
+        Arbitrary(Gen.sized(size => if size < minSize then fallback else derived.arbitrary))
+
     given Arbitrary[Certificate] = {
         given Arbitrary[Long] = Arbitrary(Gen.choose(0, Long.MaxValue))
 
         val result: Arbitrary[Certificate] = autoDerived
-        result
+        withFallback(3, arbitrary[Credential].map(Certificate.UnregCert(_, None)))(result)
     }
 
     given Arbitrary[Withdrawals] = Arbitrary {
@@ -671,64 +770,98 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         )
     }
 
-    given Arbitrary[TransactionBody] = Arbitrary {
+    /** `[gen.size.default-caps]`: 1 to 4 in 90 % of samples, 5 to 16 in 10 %. */
+    private def genCappedCount: Gen[Int] =
+        Gen.frequency(9 -> Gen.choose(1, 4), 1 -> Gen.choose(5, 16))
+
+    /** An optional collection of 1 to 4 items, empty in 50 % of samples. */
+    private def genOptionalCount: Gen[Int] = Gen.frequency(1 -> Gen.const(0), 1 -> Gen.choose(1, 4))
+
+    /** The validity start and the `ttl` of a body (`[gen.cover.cross-field]`): in 90 % of samples
+      * each is set with chance 1/2, and a `ttl` is at least the start, up to 10^6 slots later; in
+      * 10 % both are any slot, so that a codec sees a `ttl` before the start too.
+      */
+    private def genValidityInterval: Gen[(Option[Long], Option[Long])] = {
+        val consistent =
+            for
+                start <- genOptional(Gen.choose(0L, 200_000_000L))
+                ttl <- genOptional(Gen.choose(0L, 1_000_000L).map(_ + start.getOrElse(0L)))
+            yield (start, ttl)
+        val any = Gen.zip(
+          genOptional(Gen.choose(0L, Long.MaxValue)),
+          genOptional(Gen.choose(0L, Long.MaxValue))
+        )
+        Gen.frequency(9 -> consistent, 1 -> any)
+    }
+
+    /** The generator behind `Arbitrary[TransactionBody]`. Inputs and outputs are capped by
+      * construction (`[gen.size.caps]`); every optional field and every optional collection is
+      * empty in half of the samples. Before D5 certificates, collateral inputs and required signers
+      * always held 1 to 4 items, and 41 % of bodies had a `ttl` before their start.
+      */
+    def genTransactionBody: Gen[TransactionBody] =
         for
-            inputs <- genSetOfSizeFromArbitrary[TransactionInput](1, 4).map(TaggedSortedSet.from)
-            outputs <- genVectorOfSizeFromArbitrary[Sized[TransactionOutput]](1, 4)
+            inputs <- genCappedCount.flatMap(n => genSetOfSizeFromArbitrary[TransactionInput](n, n))
+            outputs <- genCappedCount.flatMap(n =>
+                genVectorOfSizeFromArbitrary[Sized[TransactionOutput]](n, n)
+            )
             fee <- arbitrary[Coin]
-            ttl <- Gen.option(Gen.choose(0L, Long.MaxValue))
-            certificates <- genSetOfSizeFromArbitrary[Certificate](1, 4).map(
-              TaggedOrderedStrictSet.from
+            (validityStartSlot, ttl) <- genValidityInterval
+            certificates <- genOptionalCount.flatMap(n =>
+                genSetOfSizeFromArbitrary[Certificate](n, n)
             )
-            withdrawals <- arbitrary[Option[Withdrawals]]
-            auxiliaryDataHash <- arbitrary[Option[AuxiliaryDataHash]]
-            validityStartSlot <- Gen.option(Gen.choose(0L, Long.MaxValue))
-            mint <- arbitrary[Option[Mint]]
-            scriptDataHash <- arbitrary[Option[ScriptDataHash]]
-            collateralInputs <- genSetOfSizeFromArbitrary[TransactionInput](1, 4).map(
-              TaggedSortedSet.from
+            withdrawals <- genOptional(arbitrary[Withdrawals])
+            auxiliaryDataHash <- genOptional(arbitrary[AuxiliaryDataHash])
+            mint <- genOptional(arbitrary[Mint])
+            scriptDataHash <- genOptional(arbitrary[ScriptDataHash])
+            collateralInputs <- genOptionalCount.flatMap(n =>
+                genSetOfSizeFromArbitrary[TransactionInput](n, n)
             )
-            requiredSigners <- genSetOfSizeFromArbitrary[AddrKeyHash](1, 4).map(set =>
-                TaggedSortedSet.from(set)
+            requiredSigners <- genOptionalCount.flatMap(n =>
+                genSetOfSizeFromArbitrary[AddrKeyHash](n, n)
             )
-            networkId <- Gen.option(Gen.oneOf(Gen.const(0), Gen.const(1)))
-            collateralReturnOutput <- arbitrary[Option[Sized[TransactionOutput]]]
-            totalCollateral <- arbitrary[Option[Coin]]
-            referenceInputs <- genSetOfSizeFromArbitrary[TransactionInput](0, 4).map(
-              TaggedSortedSet.from
+            networkId <- genOptional(Gen.oneOf(0, 1))
+            collateralReturnOutput <- genOptional(arbitrary[Sized[TransactionOutput]])
+            totalCollateral <- genOptional(arbitrary[Coin])
+            referenceInputs <- genOptionalCount.flatMap(n =>
+                genSetOfSizeFromArbitrary[TransactionInput](n, n)
             )
-            votingProcedures <- arbitrary[Option[VotingProcedures]]
-            proposalProcedures <- genVectorOfSizeFromArbitrary[ProposalProcedure](0, 4).map(
-              TaggedOrderedSet.from
+            votingProcedures <- genOptional(arbitrary[VotingProcedures])
+            proposalProcedures <- genOptionalCount.flatMap(n =>
+                genVectorOfSizeFromArbitrary[ProposalProcedure](n, n)
             )
-            currentTreasuryValue <- arbitrary[Option[Coin]]
+            currentTreasuryValue <- genOptional(arbitrary[Coin])
             donation <-
                 if currentTreasuryValue.isDefined then
                     Gen.posNum[Long].map(value => Some(Coin(value)))
                 else Gen.const(None)
         yield TransactionBody(
-          inputs,
+          TaggedSortedSet.from(inputs),
           outputs,
           fee,
           ttl,
-          certificates,
+          // `from` rejects an empty collection at Conway versions; a body without certificates
+          // holds the empty set, as `TransactionBody`'s default does
+          if certificates.isEmpty then TaggedOrderedStrictSet.empty
+          else TaggedOrderedStrictSet.from(certificates),
           withdrawals,
           auxiliaryDataHash,
           validityStartSlot,
           mint,
           scriptDataHash,
-          collateralInputs,
-          requiredSigners,
+          TaggedSortedSet.from(collateralInputs),
+          TaggedSortedSet.from(requiredSigners),
           networkId,
           collateralReturnOutput,
           totalCollateral,
-          referenceInputs,
+          TaggedSortedSet.from(referenceInputs),
           votingProcedures,
-          proposalProcedures,
+          TaggedOrderedSet.from(proposalProcedures),
           currentTreasuryValue,
           donation
         )
-    }
+
+    given Arbitrary[TransactionBody] = Arbitrary(genTransactionBody)
 
     given Arbitrary[Block] = Arbitrary {
         for
@@ -774,7 +907,7 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
             body <- arbitrary[KeepRaw[TransactionBody]]
             witnessSet <- arbitrary[TransactionWitnessSet]
             isValid <- arbitrary[Boolean]
-            auxiliaryData <- arbitrary[Option[KeepRaw[AuxiliaryData]]]
+            auxiliaryData <- genOptional(arbitrary[KeepRaw[AuxiliaryData]])
         yield Transaction(body, KeepRaw(witnessSet), isValid, auxiliaryData)
     }
 }

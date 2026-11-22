@@ -26,7 +26,18 @@ Rollout unit 3 (`cardano.address`) gave `Arbitrary[Address]` and `Arbitrary[Shel
 the weights of cardano-ledger `Arbitrary Addr`, added the role generator `genPaymentAddress` for
 unit 4 (F-35), and one row of the threshold test. *Implementation status:* unit 3 has no mutation
 for `[gen.proof.new-distribution]`: it only reweights forms that the old generator drew at 8 % or
-more, so no defect is reachable by the new weights alone.
+more, so no defect is reachable by the new weights alone. Rollout unit 4 (`cardano.ledger`) built
+`[gen.cover.three-parts]` and `[gen.magnitude.users]` for `Slot` and `ExUnits`,
+`[gen.size.params-source]` for the `ExUnits` edge, `[gen.output.ledger-forms]` with
+`genTransactionOutput` (F-35: no stake address, no network above 1), `[gen.size.caps]`,
+`[gen.cover.optional-empty]`, `[gen.cover.no-gen-option]` and `[gen.cover.cross-field]` for
+`TransactionBody`, `[gen.size.derived-fallback]`, the role generator `genScriptExUnits` for the
+rule test `FeesOkValidatorTest`, and five rows of the threshold test.
+*Implementation status* of `[gen.size.derived-fallback]`: a `given Fallback[T]` has no effect,
+because `ArbitraryDerivation.split` summons it inside a generic method. Derived sum types wrap their
+instance with `withFallback` instead, a derived product draws its fields at size 0 below size 0,
+and a given `Arbitrary[Option[A]]` replaces the derived `Option` that the `autoDerived` import
+gave every optional field.
 
 This note is step D5 of `[P3-11a]` in `docs/superpowers/specs/2026-10-20-test-refactoring-design.md`.
 It amends H-35 and H-36 in `helpers.md`. The measurements and the research are in

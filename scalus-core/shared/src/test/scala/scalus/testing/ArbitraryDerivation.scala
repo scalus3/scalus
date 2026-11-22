@@ -20,25 +20,28 @@ object ArbitraryDerivation extends AutoDerivation[Arbitrary] {
     }
 
     /** Magnolia callback: derives an `Arbitrary[T]` for a product type by recursively combining
-      * generators for each field. Falls back to the implicit `Fallback[T]` once the size budget is
-      * exhausted to avoid unbounded recursion.
+      * generators for each field, each at one size less.
+      *
+      * Below size 0 the fields are drawn at size 0. A product cannot recurse without a sum type,
+      * and `split` stops at size 0, so recursion still ends. Before D5 this branch returned the
+      * `Fallback[T]`, which is always `Gen.fail` here (see `split`): every derived product nested
+      * under another one discarded its sample at the smallest sizes
+      * (`[gen.size.derived-fallback]`).
       */
     def join[T](caseClass: CaseClass[Arbitrary, T]): Arbitrary[T] = Arbitrary {
         Gen.lzy(Gen.sized { size =>
-            if size >= 0 then {
-                Gen.resize(
-                  size - 1,
-                  caseClass.constructMonadic(_.typeclass.arbitrary)
-                )
-            } else {
-                summon[Fallback[T]].get
-            }
+            Gen.resize((size - 1).max(0), caseClass.constructMonadic(_.typeclass.arbitrary))
         })
     }
 
     /** Magnolia callback: derives an `Arbitrary[T]` for a sum type by uniformly choosing one of its
-      * subtypes and delegating to that subtype's generator. Falls back to the implicit
-      * `Fallback[T]` once the size budget is exhausted to avoid unbounded recursion.
+      * subtypes and delegating to that subtype's generator. Falls back to `Fallback[T]` once the
+      * size budget is exhausted to avoid unbounded recursion.
+      *
+      * The `summon` below runs inside this generic method, so it always finds the default
+      * `NoFallback` (`Gen.fail`), never a `given Fallback[T]` at the call site of `autoDerived`. A
+      * derived sum type that must give a value at size 0 wraps its instance instead, as
+      * `withFallback` in `cardano.ledger.ArbitraryInstances` does.
       */
     def split[T](sealedTrait: SealedTrait[Arbitrary, T]): Arbitrary[T] = Arbitrary {
         Gen.sized { size =>

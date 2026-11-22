@@ -163,7 +163,7 @@ class ArbitraryInstancesQualityTest extends AnyFunSuite {
         }
         // minimums: half of the shares measured at rollout unit 2 (9.6, 50.9, 49.1, 50.8, 49.6,
         // 49.7 and 3.2 %)
-        assertShare(infos, "5 or more inputs", 0.048)(_.inputs.size >= 5)
+        assertShare(infos, "5 or more inputs", 0.0488)(_.inputs.size >= 5)
         assertShare(infos, "no reference input", 0.254)(_.referenceInputs.isEmpty)
         assertShare(infos, "a certificate", 0.245)(!_.certificates.isEmpty)
         assertShare(infos, "a withdrawal", 0.253)(!_.withdrawals.toList.isEmpty)
@@ -204,6 +204,122 @@ class ArbitraryInstancesQualityTest extends AnyFunSuite {
         // half of the 20 % Byron share of cardano-ledger `Arbitrary Addr`
         assertShare(addresses, "Byron address", 0.10)(_.isInstanceOf[ByronAddress])
         assertDiscards(genPaymentAddress)
+    }
+    test("ExUnits and Slot: the real core, the edges and the parameter limit") {
+        import scalus.cardano.ledger.{CardanoInfo, ExUnits}
+        import scalus.cardano.ledger.ArbitraryInstances.{genExUnits, genSlot}
+        val max = CardanoInfo.mainnet.protocolParams.maxTxExecutionUnits
+        val units = sample(genExUnits)
+        units.foreach(u => assert(u.memory >= 0 && u.steps >= 0, u))
+        // minimums: half of the shares measured at rollout unit 4 (6.3, 6.6, 25.9, 54.1 %; slots
+        // 6.6, 6.4, 73.3 %)
+        assertShare(units, "zero units", 0.031)(_ == ExUnits(0, 0))
+        assertShare(units, "maxTxExecutionUnits", 0.033)(_ == max)
+        assertShare(units, "above maxTxExecutionUnits", 0.129)(u =>
+            u.memory > max.memory || u.steps > max.steps
+        )
+        assertShare(units, "units of a real script", 0.270)(u =>
+            10_000 <= u.memory && u.memory <= 10_000_000
+        )
+        val slots = sample(genSlot).map(_.slot)
+        slots.foreach(s => assert(s >= 0, s))
+        assertShare(slots, "slot 0", 0.033)(_ == 0)
+        assertShare(slots, "slot Long.MaxValue", 0.032)(_ == Long.MaxValue)
+        assertShare(slots, "a slot up to 2 x 10^8", 0.366)(_ <= 200_000_000L)
+        assertDiscards(genExUnits)
+        assertDiscards(genSlot)
+    }
+
+    test("TransactionOutput: never a stake address, every form at half of its share before D5") {
+        import scalus.cardano.address.{ByronAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress}
+        import scalus.cardano.ledger.{DatumOption, TransactionOutput}
+        import scalus.cardano.ledger.ArbitraryInstances.genTransactionOutput
+        val outputs = sample(genTransactionOutput)
+        outputs.foreach { out =>
+            assert(addressProblem(out.address).isEmpty, out.address)
+            assert(!out.address.isInstanceOf[StakeAddress], out)
+            if out.address.isInstanceOf[ShelleyAddress] then
+                assert((out.address.toBytes.bytes(0) & 0x0e) == 0, out.address)
+            assert(out.value.coin.value >= 0, out)
+        }
+        def shelley(out: TransactionOutput): Option[ShelleyAddress] = out.address match
+            case a: ShelleyAddress => Some(a)
+            case _                 => None
+        // [gen.output.form-shares]: half of the "before" GenStats of pilot step 1
+        assertShare(outputs, "Shelley form", 0.251)(_.isInstanceOf[TransactionOutput.Shelley])
+        assertShare(outputs, "Babbage form", 0.249)(_.isInstanceOf[TransactionOutput.Babbage])
+        assertShare(outputs, "no datum", 0.248)(_.datumOption.isEmpty)
+        assertShare(outputs, "datum hash", 0.190)(
+          _.datumOption.exists(_.isInstanceOf[DatumOption.Hash])
+        )
+        assertShare(outputs, "inline datum", 0.061)(
+          _.datumOption.exists(_.isInstanceOf[DatumOption.Inline])
+        )
+        assertShare(outputs, "script reference", 0.125)(_.scriptRef.isDefined)
+        assertShare(outputs, "key payment credential", 0.083)(
+          shelley(_).exists(_.payment.isInstanceOf[ShelleyPaymentPart.Key])
+        )
+        assertShare(outputs, "script payment credential", 0.083)(
+          shelley(_).exists(_.payment.isInstanceOf[ShelleyPaymentPart.Script])
+        )
+        assertShare(outputs, "pointer staking credential", 0.015)(
+          shelley(_).exists(_.delegation.isInstanceOf[ShelleyDelegationPart.Pointer])
+        )
+        assertShare(outputs, "no staking credential", 0.041)(
+          shelley(_).exists(_.delegation == ShelleyDelegationPart.Null)
+        )
+        // half of the measured 20.1 %, the Byron share of cardano-ledger: the 32.7 % before D5 was
+        // not realistic
+        assertShare(outputs, "Byron address", 0.100)(_.address.isInstanceOf[ByronAddress])
+        assertDiscards(genTransactionOutput)
+    }
+
+    test("TransactionBody: capped, optional fields often empty, a ttl rarely before its start") {
+        import scalus.cardano.ledger.ArbitraryInstances.genTransactionBody
+        val bodies = sample(genTransactionBody)
+        bodies.foreach { b =>
+            assert(1 <= b.inputs.toSet.size && b.inputs.toSet.size <= 16, b.inputs)
+            assert(1 <= b.outputs.size && b.outputs.size <= 16, b.outputs.size)
+        }
+        // minimums: half of the shares measured at rollout unit 4 (9.6, 48.6, 49.1, 50.0, 50.4,
+        // 50.1 and 23.6 %)
+        assertShare(bodies, "5 or more inputs", 0.048)(_.inputs.toSet.size >= 5)
+        assertShare(bodies, "no certificate", 0.243)(_.certificates.toSeq.isEmpty)
+        assertShare(bodies, "no collateral input", 0.245)(_.collateralInputs.toSet.isEmpty)
+        assertShare(bodies, "no required signer", 0.25)(_.requiredSigners.toSet.isEmpty)
+        assertShare(bodies, "no withdrawal", 0.252)(_.withdrawals.isEmpty)
+        assertShare(bodies, "no ttl", 0.25)(_.ttl.isEmpty)
+        assertShare(bodies, "ttl and validity start, in order", 0.118)(b =>
+            b.ttl.zip(b.validityStartSlot).exists((ttl, start) => ttl >= start)
+        )
+        // [gen.cover.cross-field]: only the 10 % wide part may put the ttl first
+        val inverted = bodies.count(b => b.ttl.zip(b.validityStartSlot).exists((t, s) => t < s))
+        assert(
+          inverted.toDouble / bodies.size < 0.05,
+          s"$inverted bodies with a ttl before the start"
+        )
+        assertDiscards(genTransactionBody)
+    }
+
+    test("derived ledger types give a value at sizes 0 to 20") {
+        import org.scalacheck.Arbitrary.arbitrary
+        import scalus.cardano.ledger.{Certificate, GovAction, Redeemers, Transaction, TransactionBody, TransactionOutput}
+        import scalus.cardano.ledger.ArbitraryInstances.given
+        // [gen.size.derived-fallback]: before D5 these discarded 1 to 5 % of all samples, all of
+        // them at the smallest sizes
+        val gens = Seq[(String, Gen[?])](
+          "Certificate" -> arbitrary[Certificate],
+          "GovAction" -> arbitrary[GovAction],
+          "Redeemers" -> arbitrary[Redeemers],
+          "TransactionOutput" -> arbitrary[TransactionOutput],
+          "TransactionBody" -> arbitrary[TransactionBody],
+          "Transaction" -> arbitrary[Transaction]
+        )
+        for (name, gen) <- gens; size <- 0 to 20; seed <- 0 until 50 do
+            assert(
+              gen(Gen.Parameters.default.withSize(size), Seed(seed.toLong)).isDefined,
+              (name, size, seed)
+            )
     }
 }
 
