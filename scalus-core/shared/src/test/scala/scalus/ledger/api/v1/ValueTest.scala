@@ -28,6 +28,54 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         yield List.from(elements)
     }
 
+    // ----- Edges and keys of the group laws (docs/internal/test-refactor/d5-generators.md) -----
+    //
+    // Each law below first checks its edge table (`[gen.runs.edge-table]`), then random cases.
+    // The laws need signed values, so they shadow the well-formed `given` with `genAnyValue`
+    // (`[gen.family.local-shadow]`). The two-operand laws draw both values over 2 policies and
+    // 2 token names (`[gen.value.two-operand-laws]`): independent random keys almost never meet,
+    // so the "same key" branches of `+` and `-` would run only in the edge rows.
+
+    private val policyA = ByteString.fromArray(Array.fill(28)(1.toByte))
+    private val policyB = ByteString.fromArray(Array.fill(28)(2.toByte))
+    private val tokenA = utf8"A"
+    private val tokenB = utf8"B"
+    private val twoPow64 = BigInt(2).pow(64)
+
+    private def genLawValue: Gen[Value] = genValueOver(Seq(policyA, policyB), Seq(tokenA, tokenB))
+
+    private val oneValueEdges = Table(
+      "value",
+      Value.zero,
+      Value.lovelace(1),
+      Value.lovelace(-1),
+      Value(policyA, tokenA, twoPow64),
+      Value(policyA, tokenA, -twoPow64),
+      Value.lovelace(5) + Value(policyA, tokenA, 1) + Value(policyB, tokenB, -1)
+    )
+
+    private val twoValueEdges = Table(
+      ("value1", "value2"),
+      (Value.zero, Value.zero),
+      (Value.lovelace(1), Value.lovelace(-1)), // amounts cancel
+      (Value(policyA, tokenA, 1), Value(policyA, tokenB, 1)), // same policy, other token
+      (Value(policyA, tokenA, 1), Value(policyB, tokenA, 1)), // other policy, same token name
+      (Value(policyA, tokenA, twoPow64), Value(policyA, tokenA, 1)), // past 2^64
+      (
+        Value(policyA, tokenA, 3) + Value(policyB, tokenB, 2),
+        Value(policyA, tokenA, -3)
+      ) // one key cancels
+    )
+
+    private val scaleEdges = Table(
+      ("value", "factor"),
+      (Value.zero, BigInt(5)),
+      (Value.lovelace(7), BigInt(0)),
+      (Value.lovelace(1), BigInt(-1)),
+      (Value(policyA, tokenA, twoPow64), BigInt(2).pow(62)),
+      (Value(policyA, tokenA, -twoPow64), -BigInt(2).pow(62))
+    )
+
     test("toSortedMap properties") {
         checkEval { (value: Value) =>
             value.toSortedMap.forall { case (policyId, tokens) =>
@@ -424,7 +472,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
     }
 
     test("unary_ properties") {
-        checkEval { (value: Value) =>
+        given Arbitrary[Value] = Arbitrary(genAnyValue)
+        checkEval(oneValueEdges) { (value: Value) =>
             val negatedValue = -value
             negatedValue.toSortedMap === value.toSortedMap.mapValues(_.mapValues(-_))
         }
@@ -446,12 +495,22 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
     }
 
     test("+ properties") {
-        checkEval { (value: Value) =>
-            (value + Value.zero) === value && (Value.zero + value) === value
+        locally {
+            given Arbitrary[Value] = Arbitrary(genAnyValue)
+            checkEval(oneValueEdges) { (value: Value) =>
+                (value + Value.zero) === value && (Value.zero + value) === value
+            }
         }
 
-        checkEval { (value1: Value, value2: Value) =>
+        given Arbitrary[Value] = Arbitrary(genLawValue)
+        checkEval(twoValueEdges) { (value1: Value, value2: Value) =>
             val sumValue = value1 + value2
+            // every key of an operand stays in the sum, unless its amounts cancel
+            def kept(cs: PolicyId, token: TokenName): Boolean =
+                (sumValue.quantityOf(cs, token) !== BigInt(0)) ||
+                    (value1.quantityOf(cs, token) + value2.quantityOf(cs, token)) === BigInt(0)
+            value1.flatten.forall { case (cs, token, _) => kept(cs, token) } &&
+            value2.flatten.forall { case (cs, token, _) => kept(cs, token) } &&
             sumValue.flatten.forall { case (cs, token, value) =>
                 val v1 = value1.toSortedMap.get(cs).flatMap { _.get(token) }
                 val v2 = value2.toSortedMap.get(cs).flatMap { _.get(token) }
@@ -601,12 +660,22 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
     }
 
     test("- properties") {
-        checkEval { (value: Value) =>
-            (value - Value.zero) === value && (Value.zero - value) === -value
+        locally {
+            given Arbitrary[Value] = Arbitrary(genAnyValue)
+            checkEval(oneValueEdges) { (value: Value) =>
+                (value - Value.zero) === value && (Value.zero - value) === -value
+            }
         }
 
-        checkEval { (value1: Value, value2: Value) =>
+        given Arbitrary[Value] = Arbitrary(genLawValue)
+        checkEval(twoValueEdges) { (value1: Value, value2: Value) =>
             val diffValue = value1 - value2
+            // every key of an operand stays in the difference, unless its amounts cancel
+            def kept(cs: PolicyId, token: TokenName): Boolean =
+                (diffValue.quantityOf(cs, token) !== BigInt(0)) ||
+                    (value1.quantityOf(cs, token) - value2.quantityOf(cs, token)) === BigInt(0)
+            value1.flatten.forall { case (cs, token, _) => kept(cs, token) } &&
+            value2.flatten.forall { case (cs, token, _) => kept(cs, token) } &&
             diffValue.flatten.forall { case (cs, token, value) =>
                 val v1 = value1.toSortedMap.get(cs).flatMap { _.get(token) }
                 val v2 = value2.toSortedMap.get(cs).flatMap { _.get(token) }
@@ -770,10 +839,11 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           */
         given Arbitrary[BigInt] =
             Arbitrary(Gen.choose(-BigInt(2).pow(62), BigInt(2).pow(62)))
+        given Arbitrary[Value] = Arbitrary(genAnyValue)
 
-        checkEval { (value: Value) => (value * 0) === Value.zero }
+        checkEval(oneValueEdges) { (value: Value) => (value * 0) === Value.zero }
 
-        checkEval { (value: Value, factor: BigInt) =>
+        checkEval(scaleEdges) { (value: Value, factor: BigInt) =>
             (value * factor).toSortedMap === (
               if factor !== BigInt(0) then
                   value.toSortedMap.mapValues { _.mapValues { _ * factor } }
