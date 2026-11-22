@@ -72,14 +72,20 @@ trait ArbitraryInstances extends scalus.uplc.test.ArbitraryInstances {
         yield Pointer(Slot(slot), txIndex, certIndex)
     }
 
-    given Arbitrary[ShelleyDelegationPart] = Arbitrary {
+    /** The generator behind `Arbitrary[ShelleyDelegationPart]`, with the weights of cardano-ledger
+      * `Arbitrary Addr` (`Core/Arbitrary.hs`): 80 % a stake key or script (a base address), 15 %
+      * none (an enterprise address), 5 % a pointer. Before D5 each form had 25 %.
+      */
+    def genShelleyDelegationPart: Gen[ShelleyDelegationPart] = {
         val genKey = genByteStringOfN(28).map(byteStr => ShelleyDelegationPart.Key(Hash(byteStr)))
         val genScript =
             genByteStringOfN(28).map(byteStr => ShelleyDelegationPart.Script(Hash(byteStr)))
         val genPointer = arbitrary[Pointer].map(ShelleyDelegationPart.Pointer.apply(_))
         val genNull = Gen.const(ShelleyDelegationPart.Null)
-        Gen.oneOf(genKey, genScript, genPointer, genNull)
+        Gen.frequency(8 -> genKey, 8 -> genScript, 3 -> genNull, 1 -> genPointer)
     }
+
+    given Arbitrary[ShelleyDelegationPart] = Arbitrary(genShelleyDelegationPart)
 
     given Arbitrary[ShelleyAddress] = Arbitrary {
         for
@@ -89,10 +95,26 @@ trait ArbitraryInstances extends scalus.uplc.test.ArbitraryInstances {
         yield ShelleyAddress(network, paymentPart, delegationPart)
     }
 
-    given Arbitrary[Address] = Arbitrary {
-        val genByron = arbitrary[ByronAddress]
-        val genShelley = arbitrary[ShelleyAddress]
-        val genStake = arbitrary[StakeAddress]
-        Gen.oneOf(genByron, genShelley, genStake)
+    /** An address that can receive an output: a Shelley address on mainnet or a testnet in 80 %, a
+      * Byron address in 20 %, the bootstrap share of cardano-ledger `Arbitrary Addr`. Never a stake
+      * address and never `Network.Other`: the ledger's `decodeAddr` rejects both in an output
+      * (F-35).
+      */
+    def genPaymentAddress: Gen[Address] = {
+        val shelley =
+            for
+                network <- Gen.oneOf(Network.Mainnet, Network.Testnet)
+                paymentPart <- arbitrary[ShelleyPaymentPart]
+                delegationPart <- genShelleyDelegationPart
+            yield ShelleyAddress(network, paymentPart, delegationPart)
+        Gen.frequency(4 -> shelley, 1 -> arbitrary[ByronAddress])
     }
+
+    /** The generator behind `Arbitrary[Address]`: 80 % a payment address of `genPaymentAddress`, 20
+      * % a stake address (a reward account). Before D5 each of the three kinds had 33 %.
+      */
+    def genAddress: Gen[Address] =
+        Gen.frequency(4 -> genPaymentAddress, 1 -> arbitrary[StakeAddress])
+
+    given Arbitrary[Address] = Arbitrary(genAddress)
 }

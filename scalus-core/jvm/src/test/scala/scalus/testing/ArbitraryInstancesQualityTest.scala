@@ -172,6 +172,39 @@ class ArbitraryInstancesQualityTest extends AnyFunSuite {
         assertShare(infos, "every optional field empty", 0.016)(optionalSizes(_).forall(_ == 0))
         assertDiscards(genTxInfo)
     }
+    test("Address: CIP-19 headers and lengths, with realistic shares of each form") {
+        import scalus.cardano.address.{Address, ByronAddress, ShelleyAddress, StakeAddress}
+        import scalus.cardano.ledger.ArbitraryInstances.genAddress
+        val addresses = sample(genAddress)
+        addresses.foreach(a => assert(addressProblem(a).isEmpty, (addressProblem(a), a)))
+        // minimums: half of the shares measured at rollout unit 3 (51.2, 10.1, 3.0, 15.9, 19.8 %)
+        def header(a: Address): Int = (a.toBytes.bytes(0) & 0xff) >> 4
+        assertShare(addresses, "base address", 0.256)(a =>
+            a.isInstanceOf[ShelleyAddress] && header(a) <= 3
+        )
+        assertShare(addresses, "enterprise address", 0.050)(a =>
+            a.isInstanceOf[ShelleyAddress] && (header(a) == 6 || header(a) == 7)
+        )
+        assertShare(addresses, "pointer address", 0.015)(a =>
+            a.isInstanceOf[ShelleyAddress] && (header(a) == 4 || header(a) == 5)
+        )
+        assertShare(addresses, "Byron address", 0.079)(_.isInstanceOf[ByronAddress])
+        assertShare(addresses, "stake address", 0.099)(_.isInstanceOf[StakeAddress])
+        assertDiscards(genAddress)
+    }
+    test("genPaymentAddress: never a stake address, a Shelley network of 0 or 1") {
+        import scalus.cardano.address.{ByronAddress, ShelleyAddress, StakeAddress}
+        import scalus.cardano.ledger.ArbitraryInstances.genPaymentAddress
+        val addresses = sample(genPaymentAddress)
+        addresses.foreach { a =>
+            assert(addressProblem(a).isEmpty, (addressProblem(a), a))
+            assert(!a.isInstanceOf[StakeAddress], a)
+            if a.isInstanceOf[ShelleyAddress] then assert((a.toBytes.bytes(0) & 0x0e) == 0, a)
+        }
+        // half of the 20 % Byron share of cardano-ledger `Arbitrary Addr`
+        assertShare(addresses, "Byron address", 0.10)(_.isInstanceOf[ByronAddress])
+        assertDiscards(genPaymentAddress)
+    }
 }
 
 object ArbitraryInstancesQualityTest {
@@ -214,6 +247,26 @@ object ArbitraryInstancesQualityTest {
             val draws = 200
             val discarded = (0 until draws).count(i => gen(params, Seed(i.toLong)).isEmpty)
             assert(discarded <= draws / 20, s"size $size: $discarded of $draws discarded")
+
+    /** CIP-19: the header type of an address and the length that the type fixes. A Byron address is
+      * a CBOR array of 2 (byte 0x82).
+      */
+    def addressProblem(a: scalus.cardano.address.Address): Option[String] = {
+        val bytes = a.toBytes.bytes
+        val kind = (bytes(0) & 0xff) >> 4
+        a match
+            case _: scalus.cardano.address.ByronAddress =>
+                Option.when((bytes(0) & 0xff) != 0x82)("Byron address is not a CBOR array of 2")
+            case _ =>
+                kind match
+                    case k if k <= 3 =>
+                        Option.when(bytes.length != 57)(s"base address of ${bytes.length} bytes")
+                    case 4 | 5 =>
+                        Option.when(bytes.length < 32)(s"pointer address of ${bytes.length} bytes")
+                    case 6 | 7 | 14 | 15 =>
+                        Option.when(bytes.length != 29)(s"header $kind with ${bytes.length} bytes")
+                    case k => Some(s"header type $k")
+    }
 
     /** The finite bound times of an interval, lower bound first. */
     def finiteTimes(i: Interval): Seq[BigInt] =

@@ -45,6 +45,8 @@
   `Arbitrary[TxInfo]` holds 1 to 16 inputs, outputs and signatories, and now fills reference
   inputs, certificates, withdrawals, redeemers, datums and the treasury amounts in half of the
   samples.
+  `Arbitrary[Address]` gives 64 % base, 12 % enterprise, 4 % pointer, 16 % Byron and 20 % stake
+  addresses; `genPaymentAddress` never gives a stake address or a network other than 0 and 1.
 
 ### Fixed
 

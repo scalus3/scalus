@@ -22,6 +22,11 @@ control characters. Rollout unit 2 (`v1` to `v3`) built `[gen.magnitude.users]` 
 `[gen.cover.optional-empty]` and `[gen.cover.no-gen-option]` for its reference inputs,
 certificates, withdrawals, redeemers, datums and treasury amounts, and two rows of the threshold
 test. Votes and proposal procedures stay empty: no generator of the governance types exists.
+Rollout unit 3 (`cardano.address`) gave `Arbitrary[Address]` and `Arbitrary[ShelleyDelegationPart]`
+the weights of cardano-ledger `Arbitrary Addr`, added the role generator `genPaymentAddress` for
+unit 4 (F-35), and one row of the threshold test. *Implementation status:* unit 3 has no mutation
+for `[gen.proof.new-distribution]`: it only reweights forms that the old generator drew at 8 % or
+more, so no defect is reachable by the new weights alone.
 
 This note is step D5 of `[P3-11a]` in `docs/superpowers/specs/2026-10-20-test-refactoring-design.md`.
 It amends H-35 and H-36 in `helpers.md`. The measurements and the research are in
