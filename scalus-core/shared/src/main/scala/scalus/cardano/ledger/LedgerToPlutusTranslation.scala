@@ -736,7 +736,10 @@ object LedgerToPlutusTranslation {
           currentTreasuryAmount = body.currentTreasuryValue
               .map(coin => prelude.Option.Some(BigInt(coin.value)))
               .getOrElse(prelude.Option.None),
+          // A zero donation is no donation: the ledger maps `Coin 0` to Nothing
+          // (Conway/TxInfo.hs:539-542), and `guardConwayFeaturesForPlutusV1V2` lets it through.
           treasuryDonation = body.donation
+              .filter(_.nonZero)
               .map(coin => prelude.Option.Some(BigInt(coin.value)))
               .getOrElse(prelude.Option.None)
         )
