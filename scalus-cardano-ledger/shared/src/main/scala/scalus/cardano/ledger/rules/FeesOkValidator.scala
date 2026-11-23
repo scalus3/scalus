@@ -46,12 +46,17 @@ object FeesOkValidator extends STS.Validator {
 
         val actualTotalSumOfCollateralCoins = collateralBalance.coin
 
-        val minRequiredFee = MinTransactionFee.computeMinFee(event, utxos, protocolParams) match
-            case Right(fee)  => fee
-            case Left(error) => return failure(error)
+        // Exact, as the ledger's `Integer`: redeemer units far above the protocol limit can give
+        // a minimum fee past `Long.MaxValue`. The error report clamps it to the `Long` range.
+        val exactMinRequiredFee =
+            MinTransactionFee.computeExactMinFee(event, utxos, protocolParams) match
+                case Right(fee)  => fee
+                case Left(error) => return failure(error)
+        val minRequiredFee = Coin(exactMinRequiredFee.min(Long.MaxValue).toLong)
 
         // 1) The fee paid is >= the minimum fee
-        val isTransactionFeeGreaterOrEqualThanMinRequiredFee = transactionFee >= minRequiredFee
+        val isTransactionFeeGreaterOrEqualThanMinRequiredFee =
+            BigInt(transactionFee.value) >= exactMinRequiredFee
 
         // 2) If the total ExUnits are 0 in both Memory and Steps, no further part needs to be checked.
         // The total ExUnits are zero if there are no redeemers in the witness set

@@ -29,4 +29,22 @@ class ExUnitsTest extends AnyFunSuite {
     test("fitsWithin rejects units over on both components") {
         assert(ExUnits.enormous.exceeds(maxTxExUnits))
     }
+
+    private val mainnetPrices =
+        ExUnitPrices(NonNegativeInterval(577, 10_000), NonNegativeInterval(721, 10_000_000))
+
+    test("fee takes the ceiling of the exact sum") {
+        // 1000 * 0.0577 + 1000 * 0.0000721 = 57.7721
+        assert(ExUnits(1000, 1000).fee(mainnetPrices) == Coin(58))
+    }
+
+    test("fee of units at Long.MaxValue is exact when it fits in a Long") {
+        // ceil((2^63 - 1) * 577_721 / 10^7), as cardano-ledger txscriptfee computes it
+        assert(ExUnits.enormous.fee(mainnetPrices) == Coin(532_853_571_650_377_794L))
+    }
+
+    test("fee that does not fit in a Long throws ArithmeticException") {
+        val prices = ExUnitPrices(NonNegativeInterval(2, 1), NonNegativeInterval.zero)
+        assertThrows[ArithmeticException](ExUnits(Long.MaxValue, 0).fee(prices))
+    }
 }

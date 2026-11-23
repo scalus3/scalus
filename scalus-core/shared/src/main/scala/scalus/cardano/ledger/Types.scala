@@ -529,16 +529,18 @@ case class ExUnits(memory: Long, steps: Long) derives UpickleReadWriter {
 
     /** Calculate fee for the execution units given explicit prices.
       *
+      * The fee is the ceiling of the exact rational sum, as cardano-ledger `txscriptfee` computes
+      * it.
+      *
       * @param prices
       *   The execution unit prices (price per memory unit and price per CPU step)
       * @return
       *   The calculated fee in Coin (lovelace)
+      * @throws java.lang.ArithmeticException
+      *   if the fee exceeds the range of Coin
       */
-    def fee(prices: ExUnitPrices): Coin = {
-        Coin(
-          (prices.priceMemory * memory + prices.priceSteps * steps).ceil
-        )
-    }
+    def fee(prices: ExUnitPrices): Coin =
+        Coin.exact(ExUnits.exactFee(prices, BigInt(memory), BigInt(steps)))
 
     /** Calculate fee for the execution units using protocol parameters from implicit CardanoInfo.
       *
@@ -553,6 +555,19 @@ case class ExUnits(memory: Long, steps: Long) derives UpickleReadWriter {
 object ExUnits {
     val zero: ExUnits = ExUnits(0, 0)
     val enormous: ExUnits = ExUnits(Long.MaxValue, Long.MaxValue)
+
+    /** The fee for `memory` and `steps` units: the ceiling of the exact rational sum, as
+      * cardano-ledger `txscriptfee` computes it. The units are BigInt, because the ledger sums the
+      * units of all redeemers without a bound.
+      */
+    private[ledger] def exactFee(prices: ExUnitPrices, memory: BigInt, steps: BigInt): BigInt = {
+        val priceMemory = prices.priceMemory
+        val priceSteps = prices.priceSteps
+        val numerator = memory * priceMemory.numerator * priceSteps.denominator +
+            steps * priceSteps.numerator * priceMemory.denominator
+        val denominator = BigInt(priceMemory.denominator) * priceSteps.denominator
+        (numerator + denominator - 1) / denominator
+    }
 
     /** CBOR encoder for ExUnits */
     given Encoder[ExUnits] = deriveEncoder

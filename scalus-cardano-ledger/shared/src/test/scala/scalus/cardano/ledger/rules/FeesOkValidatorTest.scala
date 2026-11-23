@@ -899,4 +899,76 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 assert(error.actualTotalSumOfCollateralCoins == Coin.ada(40))
             case other => fail(s"expected FeesOkException, got $other")
     }
+
+    /** The exact script fee of `count` redeemers at `ExUnits.enormous`, as cardano-ledger
+      * `txscriptfee` computes it: one ceiling over the unbounded sum.
+      */
+    private def exactEnormousScriptFee(prices: ExUnitPrices, count: Int): BigInt = {
+        val units = BigInt(Long.MaxValue) * count
+        val pm = prices.priceMemory
+        val ps = prices.priceSteps
+        val numerator =
+            units * pm.numerator * ps.denominator + units * ps.numerator * pm.denominator
+        val denominator = BigInt(pm.denominator) * ps.denominator
+        (numerator + denominator - 1) / denominator
+    }
+
+    /** FeesOkValidator on a transaction with `count` redeemers at `ExUnits.enormous`. */
+    private def validateEnormousRedeemers(count: Int): FeesOkValidator.Result = {
+        val (_, publicKey) = generateKeyPair()
+        val keyAddress = Arbitrary
+            .arbitrary[ShelleyAddress]
+            .sample
+            .get
+            .copy(payment = ShelleyPaymentPart.Key(Hash(platform.blake2b_224(publicKey))))
+        val collateralInput = Arbitrary.arbitrary[TransactionInput].sample.get
+        val redeemers = IndexedSeq.tabulate(count) { index =>
+            Redeemer(RedeemerTag.Spend, index, Data.unit, ExUnits.enormous)
+        }
+        val transaction = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.ada(10),
+            collateralInputs = TaggedSortedSet(collateralInput)
+          ),
+          witnessSet = TransactionWitnessSet.empty.copy(redeemers =
+              Some(KeepRaw(Redeemers.Array(redeemers)))
+          )
+        )
+        val state = State(utxos = Map(collateralInput -> Output(keyAddress, Value(Coin.ada(30)))))
+        FeesOkValidator.validate(Context(), state, transaction)
+    }
+
+    test("FeesOkValidator reports the exact min fee for one redeemer at Long.MaxValue units") {
+        val scriptFee = exactEnormousScriptFee(Context().env.params.executionUnitPrices, 1)
+        validateEnormousRedeemers(1) match
+            case Left(error: TransactionException.FeesOkException) =>
+                val sizeFee = BigInt(error.minRequiredFee.value) - scriptFee
+                assert(sizeFee > 0 && sizeFee < Coin.ada(1).value, s"size fee $sizeFee")
+            case other => fail(s"expected FeesOkException, got $other")
+    }
+
+    test("FeesOkValidator sums redeemer units without saturation") {
+        // Two redeemers at Long.MaxValue: the ledger sums them as Natural, so the script fee
+        // is twice that of one redeemer, and it still fits in a Long.
+        val scriptFee = exactEnormousScriptFee(Context().env.params.executionUnitPrices, 2)
+        assert(scriptFee.isValidLong)
+        validateEnormousRedeemers(2) match
+            case Left(error: TransactionException.FeesOkException) =>
+                val sizeFee = BigInt(error.minRequiredFee.value) - scriptFee
+                assert(sizeFee > 0 && sizeFee < Coin.ada(1).value, s"size fee $sizeFee")
+            case other => fail(s"expected FeesOkException, got $other")
+    }
+
+    test("FeesOkValidator rejects a min fee past Long.MaxValue without an exception") {
+        val scriptFee = exactEnormousScriptFee(Context().env.params.executionUnitPrices, 20)
+        assert(!scriptFee.isValidLong)
+        validateEnormousRedeemers(20) match
+            case Left(error: TransactionException.FeesOkException) =>
+                // The report clamps the min fee to the Long range.
+                assert(error.minRequiredFee == Coin(Long.MaxValue))
+                assert(error.transactionFee == Coin.ada(10))
+            case other => fail(s"expected FeesOkException, got $other")
+    }
 }

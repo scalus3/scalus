@@ -7,6 +7,12 @@ import monocle.Focus.refocus
 import scala.annotation.tailrec
 
 object MinTransactionFee {
+
+    /** The minimum fee of `transaction`.
+      *
+      * @throws java.lang.ArithmeticException
+      *   if the minimum fee exceeds the range of Coin
+      */
     def computeMinFee(
         transaction: Transaction,
         utxo: Utxos,
@@ -15,6 +21,20 @@ object MinTransactionFee {
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       Coin
+    ] = computeExactMinFee(transaction, utxo, protocolParams).map(Coin.exact)
+
+    /** The minimum fee of `transaction`, computed exactly as cardano-ledger does with `Integer`.
+      * The script fee of redeemers with units far above the protocol limit can exceed the range of
+      * Coin.
+      */
+    private[ledger] def computeExactMinFee(
+        transaction: Transaction,
+        utxo: Utxos,
+        protocolParams: ProtocolParams
+    ): Either[
+      TransactionException.BadInputsUTxOException |
+          TransactionException.BadReferenceInputsUTxOException,
+      BigInt
     ] = {
         AllResolvedScripts.allProvidedReferenceScriptsNonDistinctSeq(transaction, utxo) match {
             case Left(e) => Left(e)
@@ -23,8 +43,7 @@ object MinTransactionFee {
                 val transactionSizeFee = calculateTransactionSizeFee(transaction, protocolParams)
                 val exUnitsFee = calculateExUnitsFee(transaction, protocolParams)
 
-                val minFee = refScriptsFee + transactionSizeFee + exUnitsFee
-                Right(minFee)
+                Right(BigInt(refScriptsFee.value) + transactionSizeFee.value + exUnitsFee)
         }
     }
 
@@ -41,7 +60,7 @@ object MinTransactionFee {
             case Left(e) => Left(e)
             case Right(scripts) =>
                 val refScriptsFee = RefScriptsFeeCalculator(scripts, protocolParams)
-                val exUnitsFee = calculateExUnitsFee(transaction, protocolParams)
+                val exUnitsFee = Coin.exact(calculateExUnitsFee(transaction, protocolParams))
 
                 @tailrec
                 def go(transaction: Transaction): Coin = {
@@ -77,16 +96,17 @@ object MinTransactionFee {
         Coin(transactionSize * txFeePerByte + txFeeFixed)
     }
 
+    /** The script fee of all redeemers. Like cardano-ledger `totExUnits`, it sums the units without
+      * a bound: `Redeemers.totalExUnits` saturates at `Long.MaxValue`.
+      */
     private def calculateExUnitsFee(
         transaction: Transaction,
         protocolParams: ProtocolParams
-    ): Coin = {
-        val executionUnitPrices = protocolParams.executionUnitPrices
-        val totalExUnits =
-            transaction.witnessSet.redeemers.map(_.value.totalExUnits).getOrElse(ExUnits.zero)
-
-        if totalExUnits == ExUnits.zero then Coin.zero
-        else totalExUnits.fee(executionUnitPrices)
+    ): BigInt = {
+        val redeemers = transaction.witnessSet.redeemers.map(_.value.toSeq).getOrElse(Seq.empty)
+        val memory = redeemers.foldLeft(BigInt(0))(_ + _.exUnits.memory)
+        val steps = redeemers.foldLeft(BigInt(0))(_ + _.exUnits.steps)
+        ExUnits.exactFee(protocolParams.executionUnitPrices, memory, steps)
     }
 
     // Cache the lens at object level
