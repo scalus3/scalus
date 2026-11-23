@@ -193,8 +193,7 @@ object UplcParser:
       'v' -> 11.toChar, // Vertical tab
       '\\' -> '\\',
       '"' -> '"',
-      '\'' -> '\'',
-      '&' -> '\u0000' // Null character (used in Haskell for string gaps)
+      '\'' -> '\''
     )
 
     val escapedChar: P[Char] = P.charIn(escapeMap.keys).map(escapeMap)
@@ -240,17 +239,21 @@ object UplcParser:
 
     val asciiMnemonicChar: P[Char] = P.stringIn(asciiMnemonics.keys.toList).map(asciiMnemonics)
 
+    @deprecated("stringLiteral reads numeric escapes as code points, not as one Char", "1.5.0")
     val decimalChar: P[Char] = digit.rep(1).map(digits => digits.toList.mkString.toInt.toChar)
 
+    @deprecated("stringLiteral reads numeric escapes as code points, not as one Char", "1.5.0")
     val octalChar: P[Char] = P.char('o') *> P
         .charIn('0' to '7')
         .rep(1, 3)
         .map(digits => Integer.parseInt(digits.toList.mkString, 8).toChar)
 
+    @deprecated("stringLiteral reads numeric escapes as code points, not as one Char", "1.5.0")
     val hexChar: P[Char] = P.char('x') *> hexdig
         .rep(1)
         .map(digits => Integer.parseInt(digits.toList.mkString, 16).toChar)
 
+    @deprecated("stringLiteral reads numeric escapes as code points, not as one Char", "1.5.0")
     val unicodeChar: P[Char] = (
       (P.string("u{") *> hexdig.rep(1, 6) <* P.char('}')) |
           (P.char('u') *> hexdig.rep(4, 4))
@@ -258,15 +261,42 @@ object UplcParser:
 
     val controlChar: P[Char] = P.char('^') *> P.charIn('@'.to('_')).map(c => (c - '@').toChar)
 
+    @deprecated("stringLiteral reads numeric escapes as code points, not as one Char", "1.5.0")
     val escapeSequence: P[Char] = P.char('\\') *> (
       escapedChar | asciiMnemonicChar | decimalChar | octalChar | hexChar | unicodeChar | controlChar
     )
 
+    @deprecated("stringLiteral reads numeric escapes as code points, not as one Char", "1.5.0")
     val stringChar: P[Char] = regularChar | escapeSequence
+
+    /** The code point `digits` names in `radix`, as a string of one or two chars. Fails above
+      * U+10FFFF, like Haskell. A surrogate code point gives one lone surrogate char.
+      */
+    private def codePoint(digits: P[String], radix: Int): P[String] =
+        digits.mapFilter { ds =>
+            val n = BigInt(ds, radix)
+            Option.when(n <= Character.MAX_CODE_POINT)(String(Character.toChars(n.toInt)))
+        }
+
+    private val escape: P[String] = P.char('\\') *> (
+      // `\&` is the empty escape: it ends an escape that the next char would extend (`\SO\&H`)
+      P.char('&').as("") |
+          escapedChar.map(_.toString) |
+          asciiMnemonicChar.map(_.toString) |
+          codePoint(digit.rep(1).string, 10) |
+          codePoint(P.char('o') *> P.charIn('0' to '7').rep(1, 3).string, 8) |
+          codePoint(P.char('x') *> hexdig.rep(1).string, 16) |
+          codePoint(
+            (P.string("u{") *> hexdig.rep(1, 6).string <* P.char('}')) |
+                (P.char('u') *> hexdig.rep(4, 4).string),
+            16
+          ) |
+          controlChar.map(_.toString)
+    )
 
     // Main string literal parser
     val stringLiteral: P[String] =
-        P.char('"') *> stringChar.rep0.map(_.toList.mkString) <* P.char('"')
+        P.char('"') *> (P.charsWhile(isAllowedChar) | escape).rep0.map(_.mkString) <* P.char('"')
 
     def conListOf(t: DefaultUni): P[Constant] =
         symbol("[") *> constantOf(t).repSep0(symbol(",")) <* symbol("]") map { ls =>

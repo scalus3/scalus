@@ -266,6 +266,41 @@ class UplcParserTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbi
         }
     }
 
+    test("String constants print with the escapes of the uplc tool and parse back") {
+        // Expected forms follow `uplc convert` (Plutus 1.70): Haskell `showLitChar` escapes for
+        // `"`, `\` and characters that are not printable, other characters as they are.
+        val cases = Seq(
+          "a\"b" -> """a\"b""",
+          "\\" -> """\\""",
+          "a\nb\tc\r" -> """a\nb\tc\r""",
+          "\u0007\b\f\u000b" -> """\a\b\f\v""",
+          "\u0000" + "1" -> """\NUL1""",
+          "\u0001\u001f\u007f" -> """\SOH\US\DEL""",
+          "\u000eH" -> """\SO\&H""",
+          "\u0080" + "1" -> """\128\&1""",
+          "\u00ad\u2028\ufeff" -> """\173\8232\65279""",
+          "' \u00a0éд😀" -> "' \u00a0éд😀",
+          "\udb80\udc00" -> """\983040""", // U+F0000, private use, outside the BMP
+          "\ud83d" -> """\55357""" // a lone surrogate: Scalus only, Haskell Text cannot hold it
+        )
+        for (value, body) <- cases do
+            val printed = "string \"" + body + "\""
+            assert(Constant.String(value).pretty.render(80) == printed)
+            val parsed = UplcParser.constant.parse(printed).map(_._2).left.map(e => e.show)
+            assert(parsed == Right(Constant.String(value)), printed)
+        // Like Haskell, a numeric escape above U+10FFFF does not parse.
+        assert(UplcParser.constant.parse("string \"\\1114112\"").isLeft)
+    }
+
+    test("Pretty-printer <-> parser isomorphism for String constants") {
+        // Few generated strings hold a char that needs an escape, so draw many of them.
+        forAll(minSuccessful(5000)) { (s: String) =>
+            val pretty = Constant.String(s).pretty.render(80)
+            val parsed = UplcParser.constant.parse(pretty).map(_._2).left.map(e => e.show)
+            assert(parsed == Right(Constant.String(s)), pretty)
+        }
+    }
+
     test("Pretty-printer <-> parser isomorphism for Term") {
         forAll { (t: Term) =>
             val pretty = t.show

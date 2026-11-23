@@ -12,6 +12,8 @@ import scalus.uplc.DefaultUni
 import scalus.utils.Utils
 import scalus.utils.Style as PrettyStyle
 
+import java.lang.StringBuilder as JStringBuilder
+
 /** Pretty printers.
   *
   *   - Use `pretty` to pretty print to a [[org.typelevel.paiges.Doc]].
@@ -33,12 +35,58 @@ object PrettyPrinter:
 
     def pretty(df: DefaultFun): Doc = text(Utils.lowerFirst(df.toString))
 
+    /** Names of the control characters 0 to 31, as Haskell `showLitChar` prints them. */
+    private val asciiControlNames: IndexedSeq[String] =
+        ("NUL SOH STX ETX EOT ENQ ACK a b t n v f r SO SI " +
+            "DLE DC1 DC2 DC3 DC4 NAK SYN ETB CAN EM SUB ESC FS GS RS US").split(' ').toIndexedSeq
+
+    /** Haskell `isPrint`: all general categories except separators of lines and paragraphs,
+      * controls, formats, surrogates, private use and unassigned code points. A character that a
+      * newer Unicode version assigns (U+1356E in Unicode 16) stays as it is here, while an older
+      * GHC escapes it. Both forms parse to the same string.
+      */
+    private def isPrint(codePoint: Int): Boolean = {
+        val category = Character.getType(codePoint)
+        category != Character.LINE_SEPARATOR && category != Character.PARAGRAPH_SEPARATOR &&
+        category != Character.CONTROL && category != Character.FORMAT &&
+        category != Character.SURROGATE && category != Character.PRIVATE_USE &&
+        category != Character.UNASSIGNED
+    }
+
+    /** A string literal in the form the Plutus `uplc` tool prints and `UplcParser` reads.
+      *
+      * `"` and `\` get a backslash. Printable characters stay as they are. Other characters get the
+      * Haskell `showLitChar` escape: `\n`, `\SOH`, `\DEL`, or the decimal code point (`\173`). The
+      * empty escape `\&` ends an escape that the next character would extend: `\128\&1`, `\SO\&H`.
+      */
+    private def stringLiteral(value: String): String = {
+        val sb = new JStringBuilder(value.length + 2)
+        sb.append('"')
+        var i = 0
+        while i < value.length do
+            val start = i
+            val codePoint = value.codePointAt(i)
+            i += Character.charCount(codePoint)
+            def nextIs(p: Int => Boolean) = i < value.length && p(value.codePointAt(i))
+            if codePoint == '"' then sb.append("\\\"")
+            else if codePoint == '\\' then sb.append("\\\\")
+            else if isPrint(codePoint) then sb.append(value, start, i)
+            else if codePoint < 32 then
+                sb.append('\\').append(asciiControlNames(codePoint))
+                if codePoint == 14 && nextIs(_ == 'H') then sb.append("\\&")
+            else if codePoint == 127 then sb.append("\\DEL")
+            else
+                sb.append('\\').append(codePoint)
+                if nextIs(c => c >= '0' && c <= '9') then sb.append("\\&")
+        sb.append('"').toString
+    }
+
     def prettyValue(c: Constant, dataParens: Boolean = false): Doc =
         import Constant.*
         c match
             case Integer(value)    => str(value)
             case ByteString(value) => text("#" + value.toHex)
-            case String(value)     => text("\"" + value + "\"")
+            case String(value)     => text(stringLiteral(value))
             case Unit              => text("()")
             case Bool(value)       => text(if value then "True" else "False")
             case Constant.Data(value) =>

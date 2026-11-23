@@ -123,13 +123,10 @@ class UplcSourceMapRendererTest extends AnyFunSuite {
         assert(map.spans.exists(sp => map.uplc.substring(sp.s, sp.e) == "(con integer 40)"))
     }
 
-    test("a string constant that spoofs a marker degrades to no spans, never to corrupt text") {
-        // UPLC string constants are printed verbatim, so a constant can contain the renderer's
-        // marker characters. Here the constant spoofs the *start* marker of node id 2 and is
-        // printed before that node, so the scanner's "already recorded" guard cannot help: it
-        // would record a bogus offset, drop the constant's characters and emit spans that
-        // partially overlap. The renderer must notice and give up the spans rather than hand the
-        // view corrupted UPLC.
+    test("a string constant with the renderer's marker characters keeps its spans") {
+        // The renderer marks nodes with the characters U+0001 and U+0002. The printer escapes
+        // control characters in a string constant (`\SOH`, `\STX`), so a constant that holds
+        // them cannot spoof a marker, and the spans stay.
         val markerStart = 0x01.toChar
         val markerEnd = 0x02.toChar
         val spoof = Term.Const(Constant.String(s"${markerStart}2$markerEnd"), annB)
@@ -140,7 +137,8 @@ class UplcSourceMapRendererTest extends AnyFunSuite {
         )
         val map = UplcSourceMapRenderer.render(term)
         assert(map.uplc == term.show)
-        assert(map.spans.isEmpty)
+        assert(map.uplc.contains("\"\\SOH2\\STX\""))
+        assert(map.spans.nonEmpty)
     }
 
     test("spans are emitted sorted: s ascending, then e descending") {

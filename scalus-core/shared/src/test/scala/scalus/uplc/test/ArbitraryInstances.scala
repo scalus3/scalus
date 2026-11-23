@@ -228,12 +228,10 @@ trait ArbitraryInstances:
               DefaultUni.ByteString,
               DefaultUni.Data,
               DefaultUni.Integer,
-              // Strings stay disabled: the pretty printer does not escape `"`, `\` or control
-              // characters, so `string "a"b"` parses back as "a" (D5 rollout probe: 3 of 5 000
-              // seeded `Arbitrary[String]` values fail). BLS constants stay out because Flat has
-              // only a stub for them; BuiltinValue stays out until a generator of non-empty values
-              // exists (`arbConstantByType` gives only the empty one).
-//        DefaultUni.String,
+              DefaultUni.String,
+              // BLS constants stay out because Flat has only a stub for them; BuiltinValue stays
+              // out until a generator of non-empty values exists (`arbConstantByType` gives only
+              // the empty one).
               DefaultUni.Unit
             )
             if sz <= 0 then simple
