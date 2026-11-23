@@ -54,6 +54,11 @@
   limit and `Long.MaxValue`. The derived ledger instances no longer discard samples at small sizes,
   and `arbitrary[Option[A]]` in the ledger chain gives `None` in half of the samples.
 
+### Deprecated
+
+- `UplcParser.stringChar`, `escapeSequence`, `decimalChar`, `octalChar`, `hexChar` and
+  `unicodeChar`: they read a numeric escape as one `Char`. Use `UplcParser.stringLiteral`.
+
 ### Fixed
 
 - The UPLC pretty printer escapes string constants like `uplc convert`: `"`, `\` and control
