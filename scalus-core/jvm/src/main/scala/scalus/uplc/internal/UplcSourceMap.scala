@@ -3,7 +3,7 @@ package scalus.uplc.internal
 import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}
 import org.typelevel.paiges.Doc
-import scalus.uplc.{Constant, Term, TermPrinter, TermSanitizer}
+import scalus.uplc.{Term, TermPrinter, TermSanitizer}
 import scalus.uplc.internal.TermTraversal.exists
 import scalus.utils.Style
 
@@ -104,29 +104,10 @@ object UplcSourceMapRenderer {
         JsonCodecMaker.make(CodecMakerConfig.withTransientEmpty(false))
 
     // Control characters that printed UPLC does not contain: names are sanitized identifiers, byte
-    // strings are hex, numbers are digits. A `string` constant is printed verbatim and could in
-    // principle hold them; `render` verifies the stripped text against an unmarked render, so such
-    // a program loses its spans rather than getting corrupted text.
+    // strings are hex, numbers are digits, and a `string` constant prints them as the escapes
+    // `\SOH` and `\STX`. So every marker character in the marked render is a genuine marker.
     private val MarkerStart = '\u0001'
     private val MarkerEnd = '\u0002'
-
-    /** True when a `string` constant somewhere in `term` contains a marker character — the only way
-      * rendered UPLC can collide with the marker encoding. String constants are the single
-      * verbatim-printed value (also inside list/pair/array constants); everything else prints as
-      * identifiers, hex, or digits. When this is false, every marker character in the marked render
-      * is a genuine marker and stripping is exact, so [[render]] skips its verification pass.
-      */
-    private def mayCollideWithMarkers(t: Term): Boolean = t.exists {
-        case Term.Const(c, _) => constantHasMarkerChar(c)
-        case _                => false
-    }
-
-    private def constantHasMarkerChar(c: Constant): Boolean = c match
-        case Constant.String(s)    => s.exists(ch => ch == MarkerStart || ch == MarkerEnd)
-        case Constant.Pair(a, b)   => constantHasMarkerChar(a) || constantHasMarkerChar(b)
-        case Constant.List(_, vs)  => vs.exists(constantHasMarkerChar)
-        case Constant.Array(_, vs) => vs.exists(constantHasMarkerChar)
-        case _                     => false
 
     /** True when at least one node of `term` carries a usable source position, i.e. rendering it
       * would produce a non-empty span table. Terms decoded from CBOR carry no annotations at all,
@@ -137,18 +118,10 @@ object UplcSourceMapRenderer {
 
     /** Renders `term` and maps every positioned node to the text it printed.
       *
-      * The rendered text is always identical to `term.show`; when the program could spoof a marker
-      * this is checked, not merely intended (see below). Nodes without an effective source position
-      * get no span, and neither do the inner `Apply` nodes of an application chain: the printer
-      * flattens `[[[f a] b] c]` to `[f a b c]` and prints only the outermost `Apply`, whose span
-      * covers the whole chain.
-      *
-      * A `string` constant is printed verbatim, so a program can contain text indistinguishable
-      * from a marker. Rather than reason about which spoofs are recoverable, whenever a string
-      * constant holds a marker character the marked render is verified against an unmarked one, and
-      * the whole span table is dropped when they disagree: a source view with no spans is a
-      * degraded view, one with wrong text is a wrong one. Programs without such constants — all
-      * real ones — need no verification render: every marker in their marked render is genuine.
+      * The rendered text is always identical to `term.show`. Nodes without an effective source
+      * position get no span, and neither do the inner `Apply` nodes of an application chain: the
+      * printer flattens `[[[f a] b] c]` to `[f a b c]` and prints only the outermost `Apply`, whose
+      * span covers the whole chain.
       */
     def render(term: Term): UplcSourceMap = {
         // Name sanitization is what the printer does anyway, and it preserves both the tree
@@ -191,19 +164,6 @@ object UplcSourceMapRenderer {
               }
         )
         val (uplc, starts, ends) = stripMarkers(doc.render(RenderWidth), nodes.length)
-
-        // Only a `string` constant can spoof the marker encoding (see mayCollideWithMarkers), so
-        // the ground-truth check — the same printer with no markers at all — runs only when one
-        // holds a marker character. Markers are zero-width, so they cannot change a layout
-        // decision, and stripping them must restore the unmarked string exactly. If it does not,
-        // the program's own text collided with the marker encoding; report the clean text and no
-        // spans.
-        if mayCollideWithMarkers(sanitized) then {
-            val plain = TermPrinter
-                .prettySanitized(sanitized, Style.Normal, (_, d) => d)
-                .render(RenderWidth)
-            if uplc != plain then return UplcSourceMap(SchemaVersion, plain, Nil, Nil, Nil)
-        }
 
         val files = mutable.LinkedHashMap.empty[String, Int]
         val functions = mutable.LinkedHashMap.empty[String, Int]
@@ -255,14 +215,8 @@ object UplcSourceMapRenderer {
       *
       * A marker is consumed only when it parses completely: start char, an optional `/`, digits
       * forming an id below `count` that this scan has not seen yet, end char. Anything else is
-      * content and is copied through, so a control character inside a `string` constant can never
-      * make this throw or index out of bounds.
-      *
-      * It can still mislead this scan, though: a `string` constant holding the exact encoding of a
-      * marker that is printed *before* the node it names is consumed as that marker, which both
-      * eats the constant's characters and leaves the genuine marker to be copied through as text.
-      * Detecting that here would mean re-deriving what the text should have been, so [[render]]
-      * checks the result against an unmarked render instead and discards the spans on a mismatch.
+      * content and is copied through, so a malformed marker can never make this throw or index out
+      * of bounds.
       */
     private def stripMarkers(marked: String, count: Int): (String, Array[Int], Array[Int]) = {
         val clean = new StringBuilder(marked.length)
