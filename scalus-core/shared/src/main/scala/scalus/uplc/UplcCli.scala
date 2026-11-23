@@ -31,6 +31,12 @@ enum UplcEvalResult:
 object UplcCli:
     private val budget = raw"""(?ims)\s*CPU budget:\s+(\d+)\R\s*Memory budget:\s+(\d+).*""".r
 
+    /** `uplc` decodes stdin and encodes stdout with the locale's encoding. Under `LC_ALL=C`, as the
+      * CI shell sets it, a string constant with a non-ASCII character fails with "hGetContents:
+      * invalid argument". glibc has `C.UTF-8` built in, so it needs no locale archive.
+      */
+    private def uplc(cmd: String): ProcessBuilder = Process(cmd, None, "LC_ALL" -> "C.UTF-8")
+
     /** Evaluates a UPLC program using the Cardano `uplc` CLI using the builtin semantics variant
       * 'B'.
       *
@@ -59,7 +65,7 @@ object UplcCli:
 
         var out = ""
         var err = ""
-        val retCode = cmd
+        val retCode = uplc(cmd)
             .#<(new ByteArrayInputStream(flat))
             .!(ProcessLogger(o => out += o + "\n", e => err += e + "\n"))
         if retCode == 0 then
@@ -85,14 +91,12 @@ object UplcCli:
         // Capture stdout as raw bytes, stderr separately, and check the exit code. Without this,
         // a failed/killed `uplc` subprocess (e.g. OOM under CI memory pressure) silently yields
         // truncated output that looks like a flat-encoding mismatch instead of a tooling failure.
-        // `uplc` 1.70 reads stdin as UTF-8 whatever the locale (checked with LC_ALL=C, as the CI
-        // shell sets it), so string constants with raw non-ASCII characters reach it intact.
         val io = new ProcessIO(
           in => { in.write(program.getBytes("UTF-8")); in.close() },
           o => { o.transferTo(out); o.close() },
           e => { e.transferTo(err); e.close() }
         )
-        val code = Process(cmd).run(io).exitValue()
+        val code = uplc(cmd).run(io).exitValue()
         if code != 0 then
             throw new RuntimeException(
               s"`$cmd` failed with exit code $code: ${err.toString("UTF-8")}"

@@ -21,10 +21,16 @@ class CekBuiltinsJsTest extends CekBuiltinsTest:
 
         val program = Program((1, 0, 0), t)
         val cp = g.require("child_process")
+        // `uplc` decodes stdin with the locale's encoding; CI sets LC_ALL=C (see UplcCli.uplc)
+        val env = js.Object.assign(
+          js.Dynamic.literal(),
+          g.process.env.asInstanceOf[js.Object],
+          js.Dynamic.literal(LC_ALL = "C.UTF-8")
+        )
         val r = cp.spawnSync(
           "uplc",
           js.Array("evaluate"),
-          js.Dynamic.literal(input = program.show)
+          js.Dynamic.literal(input = program.show, env = env)
         )
         if r.status.asInstanceOf[Int] != 0 then throw new Exception(r.stderr.toString)
         Term.parseUplc(r.stdout.toString()) match
