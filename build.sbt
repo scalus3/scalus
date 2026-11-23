@@ -1168,7 +1168,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       ),
       // For tx builder
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "com.outr" %% "scribe" % "3.19.0", // logging
+      libraryDependencies += "com.outr" %% "scribe" % "3.19.1", // logging
       libraryDependencies ++= Seq(
         "dev.optics" %% "monocle-core" % monocleVersion,
         "dev.optics" %% "monocle-macro" % monocleVersion,
