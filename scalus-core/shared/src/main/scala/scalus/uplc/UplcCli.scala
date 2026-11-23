@@ -85,6 +85,8 @@ object UplcCli:
         // Capture stdout as raw bytes, stderr separately, and check the exit code. Without this,
         // a failed/killed `uplc` subprocess (e.g. OOM under CI memory pressure) silently yields
         // truncated output that looks like a flat-encoding mismatch instead of a tooling failure.
+        // `uplc` 1.70 reads stdin as UTF-8 whatever the locale (checked with LC_ALL=C, as the CI
+        // shell sets it), so string constants with raw non-ASCII characters reach it intact.
         val io = new ProcessIO(
           in => { in.write(program.getBytes("UTF-8")); in.close() },
           o => { o.transferTo(out); o.close() },
