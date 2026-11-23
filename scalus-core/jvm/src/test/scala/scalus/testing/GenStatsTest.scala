@@ -287,16 +287,9 @@ object GenStatsTest {
     /** The version of a program, and for version 1.0.0 whether its term holds `Constr` or `Case`.
       */
     private def programForms(program: scalus.uplc.Program): Seq[String] = {
-        import scalus.uplc.Term
-        def hasSop(t: Term): Boolean = t match
-            case _: Term.Constr | _: Term.Case => true
-            case Term.Force(t, _)              => hasSop(t)
-            case Term.Delay(t, _)              => hasSop(t)
-            case Term.LamAbs(_, t, _)          => hasSop(t)
-            case Term.Apply(f, a, _)           => hasSop(f) || hasSop(a)
-            case _                             => false
         program.version match
-            case (1, 0, 0) => Seq("version=1.0.0", s"v1.0.0 constr/case=${hasSop(program.term)}")
+            case (1, 0, 0) =>
+                Seq("version=1.0.0", s"v1.0.0 constr/case=${program.term.usesConstrOrCase}")
             case (1, 1, 0) => Seq("version=1.1.0")
             case _         => Seq("version=other")
     }

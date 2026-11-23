@@ -52,13 +52,9 @@ trait ArbitraryInstances extends v2.ArbitraryInstances {
     def genTxCert: Gen[TxCert] = {
         val credential = arbitrary[Credential]
         val pkh = arbitrary[PubKeyHash]
-        val optionalAmount = Gen.frequency(
-          1 -> Gen.const(Option.None),
-          1 -> genLovelaceAmount.map(Option.Some(_))
-        )
         Gen.oneOf(
-          Gen.zip(credential, optionalAmount).map(TxCert.RegStaking(_, _)),
-          Gen.zip(credential, optionalAmount).map(TxCert.UnRegStaking(_, _)),
+          Gen.zip(credential, genOptionalAmount).map(TxCert.RegStaking(_, _)),
+          Gen.zip(credential, genOptionalAmount).map(TxCert.UnRegStaking(_, _)),
           Gen.zip(credential, genDelegatee).map(TxCert.DelegStaking(_, _)),
           Gen.zip(credential, genDelegatee, genLovelaceAmount).map(TxCert.RegDeleg(_, _, _)),
           Gen.zip(credential, genLovelaceAmount).map(TxCert.RegDRep(_, _)),
@@ -73,15 +69,13 @@ trait ArbitraryInstances extends v2.ArbitraryInstances {
 
     /** `[gen.size.default-caps]`: 1 to 4 items in 90 % of samples, 5 to 16 in 10 %. */
     private def genCapped[A](item: Gen[A]): Gen[List[A]] =
-        Gen.frequency(9 -> Gen.choose(1, 4), 1 -> Gen.choose(5, 16))
-            .flatMap(Gen.listOfN(_, item))
-            .map(List.from)
+        genCappedCount.flatMap(Gen.listOfN(_, item)).map(List.from)
 
     /** An optional collection (`[gen.cover.optional-empty]`, `[gen.cover.no-gen-option]`): empty in
       * 50 % of samples, else 1 to 4 items.
       */
-    private def genOptional[A](item: Gen[A]): Gen[scala.List[A]] =
-        Gen.frequency(1 -> Gen.const(Nil), 1 -> Gen.choose(1, 4).flatMap(Gen.listOfN(_, item)))
+    private def genOptionalList[A](item: Gen[A]): Gen[scala.List[A]] =
+        genOptionalCount.flatMap(Gen.listOfN(_, item))
 
     private def genOptionalAmount: Gen[Option[Lovelace]] =
         Gen.frequency(1 -> Gen.const(Option.None), 1 -> genLovelaceAmount.map(Option.Some(_)))
@@ -94,16 +88,16 @@ trait ArbitraryInstances extends v2.ArbitraryInstances {
     def genTxInfo: Gen[TxInfo] =
         for
             inputs <- genCapped(arbitrary[TxInInfo])
-            referenceInputs <- genOptional(arbitrary[TxInInfo])
+            referenceInputs <- genOptionalList(arbitrary[TxInInfo])
             outputs <- genCapped(arbitrary[TxOut])
             fee <- Gen.choose(0L, 1000000_000000L)
             mint <- genMintValue // [gen.value.txinfo-mint]
-            certificates <- genOptional(genTxCert)
-            withdrawals <- genOptional(Gen.zip(arbitrary[Credential], genLovelaceAmount))
+            certificates <- genOptionalList(genTxCert)
+            withdrawals <- genOptionalList(Gen.zip(arbitrary[Credential], genLovelaceAmount))
             interval <- arbitrary[Interval]
             signatories <- genCapped(arbitrary[PubKeyHash])
-            redeemers <- genOptional(Gen.zip(arbitrary[ScriptPurpose], arbitrary[Data]))
-            data <- genOptional(Gen.zip(genByteStringOfN(32), arbitrary[Data]))
+            redeemers <- genOptionalList(Gen.zip(arbitrary[ScriptPurpose], arbitrary[Data]))
+            data <- genOptionalList(Gen.zip(genByteStringOfN(32), arbitrary[Data]))
             id <- arbitrary[TxId]
             treasury <- genOptionalAmount
             donation <- genOptionalAmount

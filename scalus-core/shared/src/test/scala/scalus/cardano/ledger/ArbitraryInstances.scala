@@ -127,6 +127,8 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
 
     given Arbitrary[Slot] = Arbitrary(genSlot)
 
+    private lazy val maxTxExUnits = CardanoInfo.mainnet.protocolParams.maxTxExecutionUnits
+
     /** The generator behind `Arbitrary[ExUnits]` (`[gen.cover.three-parts]`): 50 % the units of a
       * real script (10^4 to 10^7 memory, 10^6 to 10^9 steps), 25 % the edges 0, 1, the
       * `maxTxExecutionUnits` of the parameter snapshot (`[gen.size.params-source]`) and one unit
@@ -134,7 +136,7 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
       * 000.
       */
     def genExUnits: Gen[ExUnits] = {
-        val max = CardanoInfo.mainnet.protocolParams.maxTxExecutionUnits
+        val max = maxTxExUnits
         val real =
             for
                 mem <- Gen.choose(10_000L, 10_000_000L)
@@ -157,7 +159,7 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
       * takes it instead of `Arbitrary[ExUnits]`, whose wide part reaches `Long.MaxValue`.
       */
     def genScriptExUnits: Gen[ExUnits] = {
-        val max = CardanoInfo.mainnet.protocolParams.maxTxExecutionUnits
+        val max = maxTxExUnits
         Gen.zip(Gen.choose(0L, max.memory), Gen.choose(0L, max.steps)).map(ExUnits(_, _))
     }
 
@@ -409,11 +411,6 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
       * equal chance, as the derived instance before D5, every datum and script reference form of
       * `[gen.output.ledger-forms]`, and an address of `genPaymentAddress`, never a stake address
       * (F-35). The derived instance discarded 3 % of samples at sizes 0 to 2.
-      *
-      * The optional fields use `genOptional`, not `arbitrary[Option[A]]`: the import of
-      * `autoDerived` makes it a candidate for every type, so in this file `arbitrary[Option[A]]`
-      * resolves to a derived `Option`, which gives `Gen.fail` at size 0. `genOptional` keeps its 50
-      * % `None`.
       */
     def genTransactionOutput: Gen[TransactionOutput] = {
         val shelley =
@@ -770,12 +767,11 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         )
     }
 
-    /** `[gen.size.default-caps]`: 1 to 4 in 90 % of samples, 5 to 16 in 10 %. */
-    private def genCappedCount: Gen[Int] =
-        Gen.frequency(9 -> Gen.choose(1, 4), 1 -> Gen.choose(5, 16))
+    private def setOf[A: Arbitrary](count: Gen[Int]): Gen[immutable.Set[A]] =
+        count.flatMap(n => genSetOfSizeFromArbitrary[A](n, n))
 
-    /** An optional collection of 1 to 4 items, empty in 50 % of samples. */
-    private def genOptionalCount: Gen[Int] = Gen.frequency(1 -> Gen.const(0), 1 -> Gen.choose(1, 4))
+    private def vectorOf[A: Arbitrary](count: Gen[Int]): Gen[immutable.IndexedSeq[A]] =
+        count.flatMap(n => genVectorOfSizeFromArbitrary[A](n, n))
 
     /** The validity start and the `ttl` of a body (`[gen.cover.cross-field]`): in 90 % of samples
       * each is set with chance 1/2, and a `ttl` is at least the start, up to 10^6 slots later; in
@@ -801,35 +797,23 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
       */
     def genTransactionBody: Gen[TransactionBody] =
         for
-            inputs <- genCappedCount.flatMap(n => genSetOfSizeFromArbitrary[TransactionInput](n, n))
-            outputs <- genCappedCount.flatMap(n =>
-                genVectorOfSizeFromArbitrary[Sized[TransactionOutput]](n, n)
-            )
+            inputs <- setOf[TransactionInput](genCappedCount)
+            outputs <- vectorOf[Sized[TransactionOutput]](genCappedCount)
             fee <- arbitrary[Coin]
             (validityStartSlot, ttl) <- genValidityInterval
-            certificates <- genOptionalCount.flatMap(n =>
-                genSetOfSizeFromArbitrary[Certificate](n, n)
-            )
+            certificates <- setOf[Certificate](genOptionalCount)
             withdrawals <- genOptional(arbitrary[Withdrawals])
             auxiliaryDataHash <- genOptional(arbitrary[AuxiliaryDataHash])
             mint <- genOptional(arbitrary[Mint])
             scriptDataHash <- genOptional(arbitrary[ScriptDataHash])
-            collateralInputs <- genOptionalCount.flatMap(n =>
-                genSetOfSizeFromArbitrary[TransactionInput](n, n)
-            )
-            requiredSigners <- genOptionalCount.flatMap(n =>
-                genSetOfSizeFromArbitrary[AddrKeyHash](n, n)
-            )
+            collateralInputs <- setOf[TransactionInput](genOptionalCount)
+            requiredSigners <- setOf[AddrKeyHash](genOptionalCount)
             networkId <- genOptional(Gen.oneOf(0, 1))
             collateralReturnOutput <- genOptional(arbitrary[Sized[TransactionOutput]])
             totalCollateral <- genOptional(arbitrary[Coin])
-            referenceInputs <- genOptionalCount.flatMap(n =>
-                genSetOfSizeFromArbitrary[TransactionInput](n, n)
-            )
+            referenceInputs <- setOf[TransactionInput](genOptionalCount)
             votingProcedures <- genOptional(arbitrary[VotingProcedures])
-            proposalProcedures <- genOptionalCount.flatMap(n =>
-                genVectorOfSizeFromArbitrary[ProposalProcedure](n, n)
-            )
+            proposalProcedures <- vectorOf[ProposalProcedure](genOptionalCount)
             currentTreasuryValue <- genOptional(arbitrary[Coin])
             donation <-
                 if currentTreasuryValue.isDefined then

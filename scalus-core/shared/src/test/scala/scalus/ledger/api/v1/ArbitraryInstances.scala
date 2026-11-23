@@ -23,8 +23,8 @@ trait ArbitraryInstances extends test.ArbitraryInstances {
     def genPosixTime: Gen[PosixTime] =
         Gen.frequency(
           2 -> Gen.choose(Year2020, Year2040).map(BigInt(_)),
-          1 -> Gen.oneOf[BigInt](0, 1, Year2020, Long.MaxValue, BigInt(2).pow(64), -1),
-          1 -> genMagnitude(-BigInt(2).pow(64), BigInt(2).pow(64))
+          1 -> Gen.oneOf[BigInt](0, 1, Year2020, Long.MaxValue, TwoPow64, -1),
+          1 -> genMagnitude(-TwoPow64, TwoPow64)
         )
 
     given Arbitrary[IntervalBoundType] = Arbitrary {
@@ -136,7 +136,7 @@ trait ArbitraryInstances extends test.ArbitraryInstances {
       Gen.const[BigInt](Int.MinValue),
       Gen.const[BigInt](Long.MaxValue),
       Gen.const[BigInt](Long.MinValue),
-      genMagnitude(-BigInt(2).pow(64), BigInt(2).pow(64)) // [gen.magnitude.users]
+      genMagnitude(-TwoPow64, TwoPow64) // [gen.magnitude.users]
     )
     def genToken: Gen[(ByteString, BigInt)] =
         for
@@ -162,8 +162,6 @@ trait ArbitraryInstances extends test.ArbitraryInstances {
     // The members above stay as they are and keep their signed amounts. The default given now
     // generates positive amounts only (`[gen.value.positive]`); signed values come from the
     // named generators `genAnyValue`, `genMintValue` and `genValueOver`.
-
-    private lazy val TwoPow64 = BigInt(2).pow(64)
 
     /** A policy id from the pool of 10: `[gen.cover.pool-contents]`. Two values that draw from the
       * pool share policies, so the "same key" branches of `Value.plus` run.

@@ -6,7 +6,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.v1.{Credential, Interval, IntervalBoundType, Value}
 import scalus.cardano.onchain.plutus.v3.TxInfo
 import scalus.cardano.onchain.plutus.v2.OutputDatum
-import scalus.uplc.Term
 import scalus.uplc.builtin.{ByteString, Data}
 
 /** Thresholds for the shared generators: spec section 6.7 of
@@ -116,7 +115,7 @@ class ArbitraryInstancesQualityTest extends AnyFunSuite {
         val programs = sample(genProgram)
         programs.foreach { p =>
             assert(p.version._1 >= 1, p.version)
-            if p.version == (1, 0, 0) then assert(!hasConstrOrCase(p.term), p)
+            if p.version == (1, 0, 0) then assert(!p.term.usesConstrOrCase, p)
             else assert(p.version._2 >= 1, p.version)
         }
         // minimums: half of the measured 25.6 % and 24.7 %
@@ -406,14 +405,6 @@ object ArbitraryInstancesQualityTest {
         case _                    => Seq(d)
 
     /** `Constr` and `Case` are not allowed before program version 1.1.0. */
-    def hasConstrOrCase(t: Term): Boolean = t match
-        case _: Term.Constr | _: Term.Case => true
-        case Term.Force(t, _)              => hasConstrOrCase(t)
-        case Term.Delay(t, _)              => hasConstrOrCase(t)
-        case Term.LamAbs(_, t, _)          => hasConstrOrCase(t)
-        case Term.Apply(f, a, _)           => hasConstrOrCase(f) || hasConstrOrCase(a)
-        case _                             => false
-
     // ----- Value checks from the ledger specification, not from Scalus code -----
     //
     // A Plutus `Value` is a map from policy id to a map from token name to amount. Its canonical

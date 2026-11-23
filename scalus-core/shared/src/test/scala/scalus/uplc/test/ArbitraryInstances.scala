@@ -72,7 +72,7 @@ trait ArbitraryInstances:
     def genByteString: Gen[ByteString] =
         Gen.frequency(
           2 -> Gen.choose(0, 64),
-          1 -> Gen.oneOf(0, 1, 28, 32, 64, 65),
+          1 -> Gen.oneOf(byteStringEdgeLengths),
           1 -> genMagnitude(0L, 256L).map(_.toInt)
         ).flatMap(genByteStringOfN)
 
@@ -88,7 +88,21 @@ trait ArbitraryInstances:
       yield Builtins.bls12_381_G2_hashToGroup(bs, dst = utf8"Test")
     )
 
-    private lazy val TwoPow64 = BigInt(2).pow(64)
+    /** The edge lengths of `genByteString`: hash sizes, and the 64-byte chunk limit of CBOR bytes.
+      */
+    lazy val byteStringEdgeLengths: Seq[Int] = Seq(0, 1, 28, 32, 64, 65)
+
+    protected lazy val TwoPow64: BigInt = BigInt(2).pow(64)
+
+    /** `[gen.size.default-caps]`: a count of 1 to 4 in 90 % of samples, 5 to 16 in 10 %. */
+    lazy val genCappedCount: Gen[Int] =
+        Gen.frequency(9 -> Gen.choose(1, 4), 1 -> Gen.choose(5, 16))
+
+    /** `[gen.cover.optional-empty]`: the count of an optional collection, 0 in 50 % of samples,
+      * else 1 to 4.
+      */
+    lazy val genOptionalCount: Gen[Int] =
+        Gen.frequency(1 -> Gen.const(0), 1 -> Gen.choose(1, 4))
 
     /** The edges of `Data.I` (`[gen.cover.encoding-edges]`): the boundaries of the CBOR integer
       * heads (23/24, 255/256, 2^16, 2^32), the `Long` range, and the 2^64 boundary where CBOR
@@ -147,10 +161,12 @@ trait ArbitraryInstances:
       * edges 0, 6, 7, 127, 128 and 2^64 − 1 (`[gen.cover.encoding-edges]`: tag 7 and 128 start the
       * other two CBOR forms), 25 % any tag up to 2^64 − 1 with a uniform bit length.
       */
+    private lazy val constrTagEdges: Seq[BigInt] = Seq[BigInt](0, 6, 7, 127, 128, TwoPow64 - 1)
+
     def genConstrTag: Gen[BigInt] =
         Gen.frequency(
           2 -> Gen.choose(BigInt(0), BigInt(6)),
-          1 -> Gen.oneOf[BigInt](0, 6, 7, 127, 128, TwoPow64 - 1),
+          1 -> Gen.oneOf(constrTagEdges),
           1 -> genMagnitude(BigInt(0), TwoPow64 - 1)
         )
 
@@ -197,19 +213,9 @@ trait ArbitraryInstances:
       * `genI`, and a byte string of each edge length of `genByteString`.
       */
     lazy val dataEdges: Seq[Data] = {
-        val tags = Seq[BigInt](
-          0,
-          6,
-          7,
-          127,
-          128,
-          BigInt(Long.MaxValue),
-          BigInt(Long.MaxValue) + 1,
-          TwoPow64 - 1
-        )
-        val bytes = Seq(0, 1, 28, 32, 64, 65).map(n =>
-            B(ByteString.unsafeFromArray(Array.fill(n)(n.toByte)))
-        )
+        val tags = constrTagEdges ++ Seq(BigInt(Long.MaxValue), BigInt(Long.MaxValue) + 1)
+        val bytes =
+            byteStringEdgeLengths.map(n => B(ByteString.unsafeFromArray(Array.fill(n)(n.toByte))))
         tags.map(Constr(_, PList.Nil)) ++ dataIntegerEdges.map(I(_)) ++ bytes
     }
 
@@ -361,19 +367,14 @@ trait ArbitraryInstances:
                 // Gen.lzy builds a branch only when oneOf picks it. Built eagerly, every call
                 // constructed all six recursive branches, and each of them called sizedTermGen
                 // again: thousands of Gen objects per sample. Same values for the same seed.
-                val common = Seq(
-                  simple,
-                  Gen.lzy(forceGen(sz, env)),
-                  Gen.lzy(delayGen(sz, env)),
-                  Gen.lzy(lamGen(sz, env)),
-                  Gen.lzy(appGen(sz, env))
-                )
-                val sop =
-                    if withConstrCase then
-                        Seq(Gen.lzy(constrGen(sz, env)), Gen.lzy(caseGen(sz, env)))
-                    else Seq.empty
-                val branches = common ++ sop
-                Gen.oneOf(branches(0), branches(1), branches.drop(2)*)
+                val force = Gen.lzy(forceGen(sz, env))
+                val delay = Gen.lzy(delayGen(sz, env))
+                val lam = Gen.lzy(lamGen(sz, env))
+                val app = Gen.lzy(appGen(sz, env))
+                if withConstrCase then
+                    val constr = Gen.lzy(constrGen(sz, env))
+                    Gen.oneOf(simple, force, delay, lam, app, constr, Gen.lzy(caseGen(sz, env)))
+                else Gen.oneOf(simple, force, delay, lam, app)
 
         def forceGen(sz: Int, env: immutable.List[String]): Gen[Term] =
             for t <- sizedTermGen(sz / 2, env)
