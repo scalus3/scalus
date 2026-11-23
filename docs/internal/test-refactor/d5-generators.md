@@ -15,8 +15,8 @@ built `[gen.cover.three-parts]` and `[gen.cover.encoding-edges]` for `ByteString
 the `Constr` tag, `[gen.family.given-calls-gen]` for `ByteString`, `I`, `Data`, `Term` and
 `Program`, `[gen.family.program-versions]`, `[gen.family.program-v100-terms]`,
 `[gen.runs.edge-table]` for the two `Data` CBOR properties, and three rows of
-the threshold test. String constants stay off: the pretty printer does not escape `"`, `\` or
-control characters. Rollout unit 2 (`v1` to `v3`) built `[gen.magnitude.users]` for `genAmount`,
+the threshold test. String constants are on again, after the pretty printer learned to escape
+them. Rollout unit 2 (`v1` to `v3`) built `[gen.magnitude.users]` for `genAmount`,
 `[gen.cover.three-parts]` for `PosixTime` and `Interval`, `[gen.size.caps]` and
 `[gen.size.default-caps]` for the inputs, outputs and signatories of `TxInfo`,
 `[gen.cover.optional-empty]` and `[gen.cover.no-gen-option]` for its reference inputs,

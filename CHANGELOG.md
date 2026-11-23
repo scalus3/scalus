@@ -40,7 +40,8 @@
   holds lovelace ≥ 1, the `mint` of `Arbitrary[TxInfo]` is signed and holds no lovelace, and
   `Arbitrary[Coin]` now generates 0 and values up to the max supply. `Arbitrary[Data]` generates
   `Constr` tag 0 and tags up to 2^64 − 1, integers at the CBOR boundaries, and byte strings of
-  the hash and chunk lengths; `Arbitrary[Program]` generates versions 1.0.0 and 1.1.0.
+  the hash and chunk lengths; `Arbitrary[Program]` generates versions 1.0.0 and 1.1.0, and
+  String constants.
   `Arbitrary[Interval]` generates validity ranges in 2020 to 2040, points and short windows.
   `Arbitrary[TxInfo]` holds 1 to 16 inputs, outputs and signatories, and now fills reference
   inputs, certificates, withdrawals, redeemers, datums and the treasury amounts in half of the
@@ -55,6 +56,12 @@
 
 ### Fixed
 
+- The UPLC pretty printer escapes string constants like `uplc convert`: `"`, `\` and control
+  characters no longer give text that parses back to another string or does not parse. The parser
+  reads `\&` as no character and numeric escapes above U+FFFF as one code point.
+- `ExUnits.fee` and `MinTransactionFee` compute the fee exactly for units above the protocol limit,
+  where they threw "Reduced fraction overflows Long". `FeesOkValidator` now rejects such a
+  transaction with a fee error.
 - `PlutusVM.evaluateScript` no longer throws `IndexOutOfBoundsException` when the result has a
   free variable inside `constr` or `case`. Like Plutus, PlutusV1 and PlutusV2 accept the result and
   PlutusV3 fails with `InvalidReturnValue`. `DeBruijn.fromDeBruijnTerm` now names such a variable
