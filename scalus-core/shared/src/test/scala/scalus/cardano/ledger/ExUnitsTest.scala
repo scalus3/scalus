@@ -47,4 +47,10 @@ class ExUnitsTest extends AnyFunSuite {
         val prices = ExUnitPrices(NonNegativeInterval(2, 1), NonNegativeInterval.zero)
         assertThrows[ArithmeticException](ExUnits(Long.MaxValue, 0).fee(prices))
     }
+
+    test("fee of negative units is the ceiling too") {
+        // -15 * 1/10 = -1.5, whose ceiling is -1, not 0
+        val prices = ExUnitPrices(NonNegativeInterval(1, 10), NonNegativeInterval.zero)
+        assert(ExUnits(-15, 0).fee(prices) == Coin(-1))
+    }
 }

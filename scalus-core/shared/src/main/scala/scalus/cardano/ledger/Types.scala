@@ -566,7 +566,10 @@ object ExUnits {
         val numerator = memory * priceMemory.numerator * priceSteps.denominator +
             steps * priceSteps.numerator * priceMemory.denominator
         val denominator = BigInt(priceMemory.denominator) * priceSteps.denominator
-        (numerator + denominator - 1) / denominator
+        // `/%` truncates toward zero, so only a positive remainder rounds up: this is the ceiling
+        // for negative units too (the `Group[ExUnits]` inverse gives them)
+        val (quotient, remainder) = numerator /% denominator
+        if remainder > 0 then quotient + 1 else quotient
     }
 
     /** CBOR encoder for ExUnits */
