@@ -51,6 +51,12 @@ jobs:
             ~/.sbt/boot
           key: ${{ steps.deps.outputs.key }}
           restore-keys: ${{ steps.deps.outputs.prefix }}
+      # The runner has 16 GB and no swap. sbt (8 GB heap, plus code cache and metaspace) and two
+      # Node test processes still reach that peak at times, while sbt compiles one module and
+      # links and tests another, and the runner then kills the step with exit 143 (2 of 4 master
+      # runs, 2026-11-23 and 2026-11-24). With swap, such a peak makes the step slower instead.
+      - name: Add swap space
+        run: scripts/ci/add-swap.sh 8G
       - name: Show runner memory
         run: |
           nproc

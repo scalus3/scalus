@@ -42,6 +42,10 @@ jobs:
         with:
           fetch-depth: 0
       - uses: nixbuild/nix-quick-install-action@v35
+      # As in ci-js.yml: a memory peak of CI-JS must slow the step, not kill it.
+      - name: Add swap space
+        if: matrix.name == 'CI-JS'
+        run: scripts/ci/add-swap.sh 8G
       # Restore only, from the entries that the push jobs save on master. No task cache
       # ([ci.nightly.no-task-cache]).
       - name: Restore the Nix store
