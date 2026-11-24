@@ -785,7 +785,12 @@ Each step is one commit and one branch run; the owner says yes to each push. *Th
    | warm | warm | 7 s |
 
    The 1.6 MB of the meta-build output decides the load time. The CI runner starts with both
-   empty, which explains most of its 49 to 60 s. *Proposed:* a cache entry of `project/target`
+   empty, which explains most of its 49 to 60 s. A cold load spends its 24 s like this:
+   launcher and JVM start 5 s, plugin resolution and the compile of the meta-build sources
+   (`scalus-sbt-plugin`, `TestInputDigests.scala`) 6 s, `build.sbt` 10 s, settings 3 s.
+   sbt compiles each top-level statement of `build.sbt` as its own unit (about 50 `$Wrap`
+   classes in `project/target/config-classes`), so a cold JVM runs the compiler about 50
+   times. A warm load takes 4.5 s. sbt-welcome costs nothing measurable. *Proposed:* a cache entry of `project/target`
    and `project/project`, keyed by the hash of `project/**` and `*.sbt`, restored by exact key
    only, so a changed build never loads a stale meta-build. This changes `[ci.task.no-target]`,
    which so far keeps every `target/` out of the caches. Waits for the owner.
