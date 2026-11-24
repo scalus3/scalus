@@ -2,8 +2,7 @@
 
 area: ci
 
-Date: 2026-11-21. Status: phase 1 and the shell split of section 9 built; phase 2 planned in 7.4; phase 3 not
-built.
+Date: 2026-11-21. Status: phases 1 and 2 and the shell split of section 9 built; phase 3 planned in 8.1.
 
 ## 1. Overview
 
@@ -628,6 +627,13 @@ Phase 2 is done when step 8 is recorded and each push workflow is green on maste
 
 ## 8. Phase 3 – job shape
 
+*Informative.* Today the CI-JVM 3.3.9 job runs the format check, the tests, MiMa and the
+Scaladoc builds one after another. After phase 3, CI-JVM runs three kinds of job at the same
+time: a format job, one test job per Scala version, and a docs-and-MiMa job. The 3.3.9 job then
+runs only its compile and its tests, like the other versions. The docs-and-MiMa job restores
+the task cache of the 3.3.9 job, so it compiles only what the push changed. The three jobs share
+the task-cache steps through one composite action.
+
 - The CI-JVM workflow MUST run the format check in its own job. `[ci.jobs.format]`
 - The format job MUST NOT compile. `[ci.jobs.format-no-compile]`
 - The CI-JVM workflow MUST run MiMa, `jvm/doc` and `docs/unidoc` in their own job, on the
@@ -641,6 +647,55 @@ the other versions skip. `[ci.jobs.docs-mima-cache]`: the job restores the entry
 master run, so it compiles only the projects that the push changed.
 `[ci.jobs.docs-mima-no-save]`: a save under the 3.3.9 key races with that job, and a sixth
 entry costs space for few hits. *Decision of the developer, 2026-11-21.*
+
+- The push workflows MUST name, restore, save and prune the task cache through one composite
+  action in `.github/actions/`. `[ci.jobs.shared-cache-action]`
+- The nightly full run MUST run the docs-and-MiMa alias in its `-full` form.
+  `[ci.jobs.docs-mima-nightly]`
+
+**Why:** `[ci.jobs.shared-cache-action]`: the same five steps are in three workflows today, and
+the docs-and-MiMa job adds a fourth user, so a change of the key format needs one edit, not
+four. `[ci.jobs.docs-mima-nightly]`: the `-full` form of the 3.3.9 alias no longer holds MiMa
+and the docs after the split.
+
+*Implementation status of the rules of section 8: planned.*
+
+*Example, illustrative.* Measured on master run 45444236825 (c407a329e), the 3.3.9 job spent
+44 s in the format check, 19 s in `mima-jvm`, 48 s in `jvm/doc` and 36 s in `docs/unidoc`,
+about 2.5 minutes that phase 3 moves out of it.
+
+### 8.1 Phase 3 steps
+
+Each step is one commit on the branch of this work. Branch runs restore the entries of master
+and save nothing, so phase 3 needs no spike prefix.
+
+1. **Share the task-cache steps.** Add `.github/actions/sbt-task-cache/restore` (name the key,
+   restore) and `.github/actions/sbt-task-cache/save` (save, prune), with the job name as input.
+   Use them in `ci-jvm.yml`, `ci-js.yml` and `ci-native.yml`. The keys stay as they are, so the
+   entries of master still match.
+   Check: actionlint; the key that each job prints is the same as before.
+2. **Split the alias.** In `build.sbt`, through `ciCommand`:
+   - `ci-format`: `scalafmtCheckAll`, `scalafmtSbtCheck`;
+   - `ci-jvm-3_3_9`: `++3.3.9`, `clean`, `jvm/Test/compile`, `scalusCardanoLedgerIt/Test/compile`,
+     `jvm/testFull`;
+   - `ci-docs-mima`: `++3.3.9`, `clean`, `docs/clean`, `mima-jvm`, `jvm/doc`, `docs/unidoc`.
+   Check: `sbt ci-format` passes locally; `sbt ci-docs-mima` passes and leaves 0 warnings.
+3. **Add the jobs.** In `ci-jvm.yml`, `format` and `docs-mima` entries in the matrix, with the
+   fields `cache` (whose entries the job uses) and `save`. Entries, not separate jobs, so the
+   steps exist once. Each restores the Nix store and the dependency cache of the 3.3.9 job. `docs-mima` restores
+   the task cache of the 3.3.9 job and does not save it. Both count warnings and report to
+   Discord like the matrix jobs. Add `ci-docs-mima-full` to the `full` matrix of
+   `nightly.yml`.
+   Check: actionlint.
+4. **Branch run.** Push the branch and dispatch CI-JVM on it; this needs a yes from the owner.
+   Check: the three kinds of job are green; `docs-mima` restores a 3.3.9 entry of master; the
+   3.3.9 job runs no format, MiMa or doc step.
+5. **Land on master**, by fast-forward, after a yes from the owner. Check every push workflow of
+   that commit.
+6. **Measure.** On the next master push that changes only tests or docs, record the wall time of
+   CI-JVM (its slowest job) and of each job in section 4.
+
+Phase 3 is done when step 6 is recorded and CI-JVM is green on master.
 
 ## 9. Phase 4 – Nix shell
 
