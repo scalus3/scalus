@@ -429,6 +429,158 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         assert(unfinished.contains("symbolically"), unfinished)
     }
 
+    // spend: Spec.ensures(amountOf(redeemer) === lockedBy(txInfo, txOutRef) ||
+    //            carriesTheRest(txInfo, txOutRef, datum, amountOf(redeemer)))
+    //
+    // The step of a thread of withdrawals (docs/design/verification-details/multi-transaction.md):
+    // the output a withdrawal leaves is the one the next withdrawal spends, and the next reads the
+    // datum and the lovelace of it as the state.
+    private val stateIsCarried = verifier.statement(
+      "vesting.spend.state_is_carried",
+      forAllData[ScriptContext](ctx => accepts(ctx) ==>?: carriesTheState(ctx))
+    )
+
+    test("spend's fourth guarantee, of every script context, is not finished by Lean", Unfinished) {
+        val unfinished = inconclusive(
+          stateIsCarried,
+          UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
+        )
+        assert(unfinished.contains("did not finish"), unfinished)
+    }
+
+    /** The validator once more, under a name of its own: the verifier's statements of it are of the
+      * contexts of [[partialWithdrawalLimited]], which bound the outputs that the fourth guarantee
+      * reads and the contexts of [[fewInputs]] leave free.
+      */
+    private val spendsPartially = FunctionDef.named(
+      "spends_partially",
+      (ctx: ScriptContext) => VestingValidator.validate(ctx.toData)
+    )
+
+    verifier.addFunction(spendsPartially)
+
+    verifier.guarantees(
+      spendsPartially.ref,
+      limitedData[ScriptContext](ctx => partialWithdrawalLimited(ctx)),
+      Connective.Rejects
+    )
+
+    private val stateIsCarriedLimited = verifier.statement(
+      "vesting.spend.state_is_carried_limited",
+      forAllDataLimited[ScriptContext](ctx => partialWithdrawalLimited(ctx))(ctx =>
+          accepts(ctx) ==>?: carriesTheState(ctx)
+      )
+    )
+
+    test("spend's fourth guarantee holds of withdrawals of one input and two outputs") {
+        // What a partial withdrawal leaves, the next one spends: the rest, in one output at the
+        // spent output's address, under the same datum, with as much less lovelace.
+        check(
+          VerificationRequest(stateIsCarriedLimited, UplcBlaster(Budget.Auto, lean, 90.minutes))
+        )
+    }
+
+    /** The validator without its check of the datum of the output that keeps the rest. */
+    private val withoutDatumCheck = FunctionDef.named(
+      "vesting_without_datum_check",
+      (context: Data) => VestingWithoutDatumCheck.validate(context)
+    )
+
+    verifier.addFunction(withoutDatumCheck)
+
+    /** The negative control of the fourth guarantee: without the datum check, a withdrawal can
+      * leave the rest under another datum.
+      */
+    private val stateIsCarriedWithoutDatumCheck = verifier.refute(
+      "vesting.control.state_is_carried_without_datum_check",
+      forAllData[ScriptContext](ctx =>
+          succeeds(withoutDatumCheck, ctx.toData) ==>?: carriesTheState(ctx)
+      )
+    )
+
+    test(
+      "without the datum check, the fourth guarantee, of every script context, is not finished " +
+          "by Lean",
+      Unfinished
+    ) {
+        val unfinished = inconclusive(
+          stateIsCarriedWithoutDatumCheck,
+          UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
+        )
+        assert(unfinished.contains("did not finish"), unfinished)
+    }
+
+    private val stateIsCarriedWithoutDatumCheckLimited = verifier.refute(
+      "vesting.control.state_is_carried_without_datum_check_limited",
+      forAllDataLimited[ScriptContext](ctx => partialWithdrawalLimited(ctx))(ctx =>
+          succeeds(withoutDatumCheck, ctx.toData) ==>?: carriesTheState(ctx)
+      )
+    )
+
+    test("without the datum check, a withdrawal can leave the rest under another datum") {
+        val values = counterexampleOf(
+          check(
+            VerificationRequest(
+              stateIsCarriedWithoutDatumCheckLimited,
+              UplcBlaster(Budget.Auto, lean, 90.minutes)
+            )
+          )
+        )
+        val contexts = values.collect { case (_, Constant.Data(context)) =>
+            context.to[ScriptContext]
+        }
+        assert(contexts.exists(leavesAnotherDatum), values)
+    }
+
+    /** A withdrawal halfway through the period of what has vested, which leaves the rest under a
+      * datum of a period of no time: the validator rejects it, and the one without the datum check
+      * accepts it.
+      */
+    private val sampleLeavingAnotherDatum = verifier.statement(
+      "vesting.withdrawal.sample_leaving_another_datum_is_rejected",
+      fails(validator, sampleHalfwayUnder(vestedAtOnce))
+    )
+
+    private val sampleLeavingAnotherDatumWithoutDatumCheck = verifier.statement(
+      "vesting.control.sample_leaving_another_datum_is_accepted",
+      succeeds(withoutDatumCheck, sampleHalfwayUnder(vestedAtOnce))
+    )
+
+    /** The next withdrawal, at the same time, spends what the first left: the validator accepts a
+      * withdrawal of all of it, as the datum it reads has everything vested.
+      */
+    private val sampleOfTheRestUnderAnotherDatum = verifier.statement(
+      "vesting.withdrawal.sample_of_the_rest_under_another_datum_is_accepted",
+      succeeds(validator, sampleOfTheRestUnder(vestedAtOnce))
+    )
+
+    test("without the datum check, two withdrawals halfway through the period take everything") {
+        // Each meets the first three guarantees: they are of the transaction's own datum. Only the
+        // fourth sees the first withdrawal's fault.
+        assert(
+          artifactOf(check(sampleLeavingAnotherDatum, sampleBudget)).kind == ProofKind.LeanNative
+        )
+        assert(
+          artifactOf(check(sampleLeavingAnotherDatumWithoutDatumCheck, sampleBudget)).kind ==
+              ProofKind.LeanNative
+        )
+        assert(
+          artifactOf(check(sampleOfTheRestUnderAnotherDatum, sampleBudget)).kind ==
+              ProofKind.LeanNative
+        )
+        for context <- List(sampleHalfwayUnder(vestedAtOnce), sampleOfTheRestUnder(vestedAtOnce))
+        do
+            val ctx = context.to[ScriptContext]
+            assert(signedByTheBeneficiary(ctx) && withdrawsSomething(ctx))
+            assert(keepsTheUnvestedLocked(ctx))
+        assert(!carriesTheState(sampleHalfwayUnder(vestedAtOnce).to[ScriptContext]))
+        // Together they take the whole amount, of which half has vested.
+        assert(
+          halfOfTheAmount + halfOfTheAmount >
+              VestingValidator.linearVesting(sampleConfig, BigInt(1500))
+        )
+    }
+
     test("spend's conditions return true on the samples the validator accepts") {
         // Stated with `==>?:`, a condition that failed wherever the validator returns would be
         // proved of every context. Read with `==>:` on a spend the validator accepts, each returns
@@ -441,7 +593,9 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
               beneficiarySignedLimited,
               somethingIsWithdrawn,
               unvestedStaysLocked,
-              unvestedStaysLockedLimited
+              unvestedStaysLockedLimited,
+              stateIsCarried,
+              stateIsCarriedLimited
             )
         do assert(holdsAsImplicationOn(statement, Constant.Data(sample)), statement.name)
     }
@@ -770,6 +924,111 @@ object VestingVerificationTest {
                 o.value.toSortedMap.length <= 1 &&
                     o.value.toSortedMap.values.forall(t => t.length <= 1)
             )
+
+    /** The contexts of the statements that a withdrawal carries the state: of one input, the
+      * vesting output, out of which the withdrawal pays the fee; of two outputs, the beneficiary's
+      * and the one that keeps the rest; of one signatory; and of values of one policy of one token.
+      * Everything else of the context is free, the outputs' addresses and datums among it.
+      */
+    inline def partialWithdrawalLimited(inline ctx: ScriptContext): Boolean =
+        ctx.txInfo.inputs.length == 1 && ctx.txInfo.outputs.length == 2 &&
+            ctx.txInfo.signatories.length == 1 &&
+            ctx.txInfo.inputs.forall(i =>
+                i.resolved.value.toSortedMap.length <= 1 &&
+                    i.resolved.value.toSortedMap.values.forall(t => t.length <= 1)
+            ) &&
+            ctx.txInfo.outputs.forall(o =>
+                o.value.toSortedMap.length <= 1 &&
+                    o.value.toSortedMap.values.forall(t => t.length <= 1)
+            )
+
+    /** A datum a withdrawal could leave where the validator did not check it: the samples', of a
+      * period of no time, so that everything has vested from its start.
+      */
+    inline def vestedAtOnce: Config = config(BigInt(1000), BigInt(0), BigInt(20_000_000))
+
+    /** Halfway through the period, a signed withdrawal of what has vested, paid out less the fee,
+      * which leaves the rest at the script under `left`.
+      */
+    inline def sampleHalfwayUnder(inline left: Config): Data =
+        sample(
+          halfOfTheAmount,
+          BigInt(1500),
+          signed,
+          prelude.List.Cons(
+            TxOut(beneficiaryAddress, Value.lovelace(halfOfTheAmount - BigInt(200_000))),
+            prelude.List.Cons(
+              TxOut(
+                vestingAddress,
+                Value.lovelace(BigInt(20_000_000) - halfOfTheAmount),
+                OutputDatum.OutputDatum(left.toData)
+              ),
+              prelude.List.Nil
+            )
+          )
+        )
+
+    /** The withdrawal after [[sampleHalfwayUnder]], at the same time: it spends the output that one
+      * left, the second of its transaction, and takes all of it, signed and paid out less the fee.
+      */
+    inline def sampleOfTheRestUnder(inline left: Config): Data =
+        ScriptContext(
+          TxInfo(
+            inputs = prelude.List.Cons(
+              TxInInfo(
+                restRef,
+                TxOut(
+                  vestingAddress,
+                  Value.lovelace(halfOfTheAmount),
+                  OutputDatum.OutputDatum(left.toData)
+                )
+              ),
+              prelude.List.Nil
+            ),
+            outputs = payment(halfOfTheAmount - BigInt(200_000)),
+            fee = BigInt(200_000),
+            validRange = Interval.after(BigInt(1500)),
+            signatories = signed,
+            id = TxId(hex"7777777777777777777777777777777777777777777777777777777777777777")
+          ),
+          Action(halfOfTheAmount).toData,
+          ScriptInfo.SpendingScript(restRef, prelude.Option.Some(left.toData))
+        ).toData
+
+    /** The output a sample withdrawal leaves at the script: the second of its transaction. */
+    inline def restRef: TxOutRef =
+        TxOutRef(TxId(hex"5555555555555555555555555555555555555555555555555555555555555555"), 1)
+
+    /** spend's fourth condition, of the context `ctx`: a withdrawal of less than everything leaves
+      * the rest in the one output at the address of the spent output, under the same datum, with as
+      * much less lovelace. It fails where it cannot read them, as where there is no such output or
+      * more than one. Of a context that is no spend it says nothing.
+      */
+    inline def carriesTheState(inline ctx: ScriptContext): Boolean = ctx.scriptInfo match
+        case ScriptInfo.SpendingScript(ref, datum) =>
+            VestingValidator
+                .amountOf(ctx.redeemer) === VestingValidator.lockedBy(ctx.txInfo, ref) ||
+            VestingValidator.carriesTheRest(
+              ctx.txInfo,
+              ref,
+              datum,
+              VestingValidator.amountOf(ctx.redeemer)
+            )
+        case _ => true
+
+    /** Whether `ctx`, a spend, has an output at the spent output's address whose datum is not the
+      * spent output's: what the control's counterexample shows.
+      */
+    def leavesAnotherDatum(ctx: ScriptContext): Boolean = ctx.scriptInfo match
+        case ScriptInfo.SpendingScript(ref, prelude.Option.Some(datum)) =>
+            ctx.txInfo.inputs.find(_.outRef === ref) match
+                case prelude.Option.Some(own) =>
+                    ctx.txInfo.outputs.exists(output =>
+                        output.address === own.resolved.address &&
+                            output.datum != OutputDatum.OutputDatum(datum)
+                    )
+                case prelude.Option.None => false
+        case _ => false
 
     /** That the script accepts `ctx`: its code, to be written in a statement as
       * `succeeds(accepts(ctx))`, where it is compiled with what the statement says of `ctx`.

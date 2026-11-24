@@ -58,6 +58,13 @@ object VestingValidator extends Validator {
               configOf(datum).initialAmount -
               linearVesting(configOf(datum), txInfo.validFromOrFail(NoValidityLowerBound))
         )
+        // 4. The state is carried. A withdrawal of less than everything leaves the rest in one
+        //    output at the address of the spent one, under the same datum, with the lovelace
+        //    locked less what is withdrawn: what the next withdrawal spends.
+        Spec.ensures(
+          amountOf(redeemer) === lockedBy(txInfo, txOutRef) ||
+              carriesTheRest(txInfo, txOutRef, datum, amountOf(redeemer))
+        )
 
         val vestingDatum = datum.getOrFail(DatumNotFound)
         val vestingConfig = vestingDatum.to[Config]
@@ -159,6 +166,22 @@ object VestingValidator extends Validator {
     /** The lovelace in the vesting output being spent. */
     def lockedBy(txInfo: TxInfo, txOutRef: TxOutRef): BigInt =
         txInfo.findInputOrFail(txOutRef).resolved.value.getLovelace
+
+    /** Whether the transaction leaves what stays locked after a withdrawal of `amount` in the one
+      * output at the address of the spent output, under `datum`, with as much less lovelace. It
+      * fails where there is no such output, or more than one.
+      */
+    def carriesTheRest(
+        txInfo: TxInfo,
+        txOutRef: TxOutRef,
+        datum: Option[Data],
+        amount: BigInt
+    ): Boolean = {
+        val ownInput = txInfo.findInputOrFail(txOutRef)
+        val rest = txInfo.findContinuingOutputOrFail(ownInput, NotExactlyOneContractOutput)
+        rest.hasInlineDatum(datum.getOrFail(DatumNotFound)) &&
+        rest.value.getLovelace === ownInput.resolved.value.getLovelace - amount
+    }
 
     // Error messages
     inline val DatumNotFound = "Datum not found"
