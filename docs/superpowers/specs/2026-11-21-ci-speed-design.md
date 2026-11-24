@@ -768,24 +768,39 @@ The format job spends 49 s loading the build and 54 s in `scalafmtCheckAll`. The
 of spike item 4 no longer happens: the 3.9.0 job builds nothing. nix-direnv (spike item 5) gains
 nothing, because each job still enters the dev shell once.
 
-Each step is one commit and one branch run; the owner says yes to each push.
+Each step is one commit and one branch run; the owner says yes to each push. *The owner dropped
+"format without sbt" and the Plutus input change on 2026-11-24, and asked for steps 1 to 3.*
 
-1. **Format without sbt.** The format job runs the `scalafmt` CLI of the dev shell, with the
-   version that `.scalafmt.conf` names, on the Scala and sbt files, and does not start sbt.
-   Check: a branch run with one unformatted file fails; the job takes under 1 minute.
-2. **Shallow checkout in push jobs.** `fetch-depth: 1` in the push workflows; `release.yml`
+1. **Shallow checkout in push jobs.** `fetch-depth: 1` in the push workflows; `release.yml`
    keeps the full history, because sbt-ci-release reads the version from git.
-   Check: the version that sbt prints in a push job is `<last release>-SNAPSHOT`; the jobs pass.
-3. **Plutus source without haskell.nix.** Spike item 3: a `flake = false` input of the Plutus
-   repository gives the corpus, so the `ci` shell does not unpack haskell.nix. `uplc` keeps
-   coming from the release binary (`[ci.shell.uplc-release]`).
-   Check: `nix develop .#ci` on an empty store fetches no haskell.nix source; the conformance
-   tests run the same cases (`[ci.task.key-flake]` starts a new task cache, as expected).
-4. **Measure the sbt build load.** Split the 49 to 60 s into server start, meta-build compile and
-   settings resolution, and record which part a cache could keep. This step only measures.
-5. **Record.** The times of each push job in section 4.
+   Check: the jobs pass; `checkDtsUpToDate` still compares with `HEAD`.
+   *Status, 2026-11-24:* built (df68819a7), branch run pending.
+2. **Measure the sbt build load.** *Result, 2026-11-24, local, warm disk cache, new server:*
 
-Phase 4 is done when step 5 is recorded. Step 4 may propose a later phase.
+   | `project/target` and `project/project` | root `target/` | sbt load |
+   |---|---|---|
+   | empty | empty | 36 s |
+   | empty | warm | 26 s |
+   | warm | empty | 9 s |
+   | warm | warm | 7 s |
+
+   The 1.6 MB of the meta-build output decides the load time. The CI runner starts with both
+   empty, which explains most of its 49 to 60 s. *Proposed:* a cache entry of `project/target`
+   and `project/project`, keyed by the hash of `project/**` and `*.sbt`, restored by exact key
+   only, so a changed build never loads a stale meta-build. This changes `[ci.task.no-target]`,
+   which so far keeps every `target/` out of the caches. Waits for the owner.
+3. **Explore the doc build (option A).** *Result, 2026-11-24:* `docs-mima` restores the 3.3.9
+   entry, which holds no doc output since phase 3, so CI builds `jvm/doc` (48 s) and
+   `docs/unidoc` (36 s) from scratch on each push. Locally, even a fully cached run of both takes
+   46 s, because sbt syncs the HTML output (424 MB for `scalus` alone), so a cache entry of the
+   docs gains little. Release already builds and publishes a `-javadoc.jar` of each published
+   module on each master push (20 artifacts in run 45462455404), so a Scaladoc crash fails
+   Release, and the nightly run builds `docs/unidoc`. *Proposed:* the push form of
+   `ci-docs-mima` runs MiMa only; its `-full` form keeps both doc tasks. A doc crash on a branch
+   then shows only after landing, in Release, or in the nightly run. Waits for the owner.
+4. **Record.** The times of each push job in section 4.
+
+Phase 4 is done when step 4 is recorded.
 
 ### Decision: Run the browser test with the runner's Google Chrome
 
