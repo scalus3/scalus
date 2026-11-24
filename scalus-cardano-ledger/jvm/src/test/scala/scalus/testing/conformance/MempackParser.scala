@@ -189,9 +189,8 @@ object MempackParser {
         val ParsedValue(value, bytesConsumed) = parseCompactValue(bytes, offset)
         offset += bytesConsumed
 
-        // Parse DataHash32 (32 bytes)
-        val dataHashBytes = bytes.slice(offset, offset + 32)
-        val dataHash = DataHash.fromArray(dataHashBytes)
+        // Parse DataHash32: 4 x Word64 in little-endian order, like Addr28Extra
+        val dataHash = DataHash.fromArray(word64sToHashBytes(bytes.slice(offset, offset + 32)))
 
         // Construct the Address
         val address = Address.apply(network, paymentCred, stakingCred)
@@ -223,6 +222,17 @@ object MempackParser {
         }
     }
 
+    /** Convert a run of Word64 packed by mempack (little-endian, native byte order on x86/x64) to
+      * the hash bytes they hold (big-endian). Used for DataHash32 and Addr28Extra, see
+      * Cardano.Ledger.Alonzo.TxOut.decodeDataHash32.
+      */
+    private def word64sToHashBytes(packed: Array[Byte]): Array[Byte] = {
+        val in = ByteBuffer.wrap(packed).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        val out = ByteBuffer.allocate(packed.length).order(java.nio.ByteOrder.BIG_ENDIAN)
+        while in.hasRemaining do out.putLong(in.getLong())
+        out.array()
+    }
+
     /** Decode Addr28Extra to extract payment credential and network
       *
       * Addr28Extra is 32 bytes (4 x Word64) encoded in LITTLE-ENDIAN (native machine byte order on
@@ -247,16 +257,10 @@ object MempackParser {
           s"Addr28Extra must be 32 bytes, got ${addr28Bytes.length}"
         )
 
-        // mempack uses LITTLE-ENDIAN (native machine byte order on x86/x64)
-        val readBuffer = ByteBuffer.wrap(addr28Bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-
-        // Read 4 Word64 values in little-endian order
-        val w0 = readBuffer.getLong()
-        val w1 = readBuffer.getLong()
-        val w2 = readBuffer.getLong()
-        val w3 = readBuffer.getLong()
-
-        // Extract flags from lowest 2 bits of w3
+        // The 4 Word64 values in big-endian order: the hash is the first 28 bytes, and the flags
+        // are the lowest 2 bits of the 4th Word64.
+        val words = word64sToHashBytes(addr28Bytes)
+        val w3 = ByteBuffer.wrap(words, 24, 8).getLong()
         val isMainnet = (w3 & 0x2) != 0
         val isKeyHash = (w3 & 0x1) != 0
 
@@ -264,15 +268,7 @@ object MempackParser {
             if isMainnet then scalus.cardano.address.Network.Mainnet
             else scalus.cardano.address.Network.Testnet
 
-        // Extract 28-byte payment credential hash
-        // Write the Word64 values in big-endian to reconstruct the original hash bytes
-        val paymentHashBytes = new Array[Byte](28)
-        val hashBuffer = ByteBuffer.wrap(paymentHashBytes).order(java.nio.ByteOrder.BIG_ENDIAN)
-        hashBuffer.putLong(w0)
-        hashBuffer.putLong(w1)
-        hashBuffer.putLong(w2)
-        // The last 4 bytes come from the high 32 bits of w3 (after the LE read, these are in bits 32-63)
-        hashBuffer.putInt((w3 >>> 32).toInt)
+        val paymentHashBytes = words.take(28)
 
         // Create payment credential
         val paymentCred = if isKeyHash then {
