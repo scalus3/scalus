@@ -143,7 +143,8 @@ theorem Swap.product_never_falls : Reachable s → s'.r0 * s'.r1 ≥ s.r0 * s.r1
   fails.
 - **[ST-7]** The theorems are of two kinds: a step keeps an invariant (`guard → invariant`), and a
   step can be taken (`claim` passes `guard`), which is liveness. A theorem over many steps, as
-  that no sequence of swaps lowers the product, is the induction a model is for.
+  that no sequence of swaps lowers the product, is the induction a model is for. The same
+  induction over the compiled validator is in [several transactions](multi-transaction.md).
 
 **The types are those of the Scala code.** [`LeanTypes`](lean-types.md) writes a `structure` for
 each case class, with its `Data` encoding, in one module. A model that uses them requires the
