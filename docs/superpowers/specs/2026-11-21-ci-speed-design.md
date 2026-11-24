@@ -2,7 +2,8 @@
 
 area: ci
 
-Date: 2026-11-21. Status: phase 1 and the shell split of section 9 built; phases 2 and 3 not built.
+Date: 2026-11-21. Status: phase 1 and the shell split of section 9 built; phase 2 planned in 7.4; phase 3 not
+built.
 
 ## 1. Overview
 
@@ -125,6 +126,16 @@ shell split of section 9, on an empty Nix store:
 | CI-JVM 3.3.9, 3.9.0, 3.10.1 | 15.0, 9.7, 12.9 min |
 | CI-Native | 14.3 min |
 
+Measured on 2026-11-22, after step 9 of 6.5: 1322 entries deleted (5.34 GB). Left: 16 entries,
+5.16 GB, all on master.
+
+| Owner | Size | Entries |
+|---|---|---|
+| Nix store, `ci`, `ci-native`, `ci-lean` | 0.66, 0.96, 0.72 GB | 3 |
+| Dependency cache, one per push job | 0.29 to 0.41 GB, 1.77 GB in all | 5 |
+| Lean workspace | 0.70 GB | 2 |
+| `sbt/setup-sbt` of `crypto-jni.yml` and `deploy-site.yml` | 0.35 GB | 6 |
+
 ## 5. Approaches
 
 ### Decision: Keep the sbt task cache in the GitHub Actions cache
@@ -168,6 +179,25 @@ Options:
 - `testFull` on push, cache for compile only: safe. The job stays near 11 minutes.
 Chosen: `test` on push, by the owner on 2026-11-21.
 Consequences: Adds the rules of section 7.2 and 7.3.
+
+### Decision: Fix the version in push CI only
+
+Status: Accepted
+Area: ci
+Context: sbt-buildinfo writes the git version (`1.5.0+143-dff2d3b4-SNAPSHOT`) into
+`scalus.utils.BuildInfo`. It changes with each commit, so the task cache gives almost no reuse.
+`Blueprint.currentScalus` and `GenerateSubmissions` read `BuildInfo.version`, and projects that
+use a published snapshot pin the Scalus compiler by it.
+Options:
+- A fixed version in the push jobs only: full reuse. Push CI builds show `1.5.0-SNAPSHOT`, but
+  push CI publishes nothing.
+- A fixed version in every build but the publishing one: local builds gain too. A local
+  `publishLocal` needs a switch to get the git version.
+- No `version` in `BuildInfo`; readers use the last release: no switch. A snapshot blueprint
+  shows `1.5.0` for code built after 1.5.0.
+- A cache of `target/` or a remote cache: the key still changes, so each suite still reruns.
+Chosen: the push jobs only, with a guard in `release.yml`, by the owner on 2026-11-23.
+Consequences: Adds [ci.alias.stable-version] and [ci.alias.release-guard].
 
 ## 6. Phase 1 – cache reduction
 
@@ -296,6 +326,9 @@ jobs.
 Each step is one commit on the branch of this work, unless it says otherwise.
 
 *Status, 2026-11-21:* steps 1 to 8 done. Every workflow of steps 3 to 7 passed on the branch.
+*Status, 2026-11-22:* step 9 done. The cache holds 5.16 GB, not less than 5 GB: the
+`sbt/setup-sbt` entries (0.35 GB) are outside `[ci.prune.one-time]`. Phase 2 has 2.84 GB left
+under `[ci.task.budget]` for its five task cache entries.
 
 *Test runs.* A branch run cannot save under `[ci.nix.save-on-master]`, and `ci-js.yml` and
 `ci-native.yml` get `workflow_dispatch` only when it reaches master. So, until step 8, the save
@@ -350,6 +383,12 @@ Phase 1 is done when step 9 passes. Record the numbers of steps 1, 3 and 9 in se
 - Each push job MUST save its task cache only on a push to master. `[ci.task.save-on-master]`
 - A job MUST NOT restore or save a `target/` directory. `[ci.task.no-target]`
 - The sum of all cache entries MUST stay under 8 GB. `[ci.task.budget]`
+- The prefix of the task cache key MUST hold the hash of `flake.nix` and `flake.lock`.
+  `[ci.task.key-flake]`
+
+*Example, illustrative.* The key `sbt-task-Linux-X64-<flake hash>-ci-jvm-3.3.9-2026-12-<sha>`
+has the prefix `sbt-task-Linux-X64-<flake hash>-ci-jvm-3.3.9-2026-12-`. It follows
+`[ci.nix.no-like-wildcards]`: the matrix name `3.3.9` has dots, not underscores.
 
 **Why:** `[ci.task.key]`: the jobs build different Scala versions and platforms, so each job
 has its own task results. The month bounds the growth: each run adds its new results to the
@@ -357,46 +396,162 @@ restored ones. `[ci.task.no-target]`: sbt then builds each project from a cache 
 scratch, never from incremental state of another run. Incremental state is the known cause of
 stale SIR in the example validator tests. `[ci.task.budget]` leaves 2 GB of the limit for the
 Lean workspace and for a branch run.
+`[ci.task.key-flake]`: `Macros.conformanceCases` lists the files of the `plutus-conformance`
+corpus during `scalusJVM/Test/compile`. sbt does not see the corpus as a compile input, so a
+cached compile keeps the old list of cases. A new flake hash starts from an empty task cache.
+The test digests of `[ci.alias.extra-digests]` cannot fix this, because they cover test results
+only.
+`[ci.prune.after-save]` applies to the task cache. A slow run of an older commit can save after
+a newer run and delete its entry. The next run then restores the older entry and rebuilds more.
+The cost is one slower run, so no rule orders the saves. *Decision of the developer, 2026-11-22.*
 
 *Spike setup.* A branch run can restore an entry that an earlier run of the same branch saved.
-So the spike runs on a branch `ci/task-cache-spike` whose workflows also save on that branch.
-The first run fills the cache, the next runs make the changes of section 7.2. The branch is
-deleted after the spike, and master gets the rules as written. *Decision of the developer,
-2026-11-21.*
+So the spike runs on a branch `ci/task-cache-spike`. On that branch, the task cache saves under
+the prefix `sbt-task-spike-` instead of `sbt-task-`. The Nix store cache and the dependency cache
+stay restore-only there, through `SAVE_CACHES`. *Changed 2026-11-22:* the spike changes
+`build.sbt`, so a dependency save on the spike branch would add a new entry and prune the entry
+of master. The spike branch and its entries are deleted after the spike, and master gets the
+rules as written. *Decision of the developer, 2026-11-21.*
 
 *Spike result needed.* The spike measures the size of `~/.cache/sbt` after a full run of each
 job. When the sum of the five entries, the Nix store entries and the dependency entry passes
 8 GB, the developer stops and asks. A fallback is a prune step that deletes each file of
 `~/.cache/sbt` that the run did not read, by its access time.
 
+*Spike result, 2026-11-22* (runs 45025286696 and 45026935999). On CI, sbt 2.1.0 keeps its disk
+cache in `~/.cache/sbt/v2` (`Global / localCacheDirectory`). After a full CI-JVM job, `cas`
+holds 67 to 146 MB, while `target/` holds 278 to 317 MB. A compressed entry is 69 MB. So the
+budget holds. But run 2 restored the entry of run 1 and still took 19 min: sbt took 36 of 625
+test suites from the cache, with no input change.
+
+*Cause, found locally.* `scalusJVM` enables sbt-buildinfo, whose keys include `version`.
+sbt-ci-release sets `version` from git: `1.5.0+143-dff2d3b4-SNAPSHOT`, plus the time in a dirty
+tree. So `BuildInfo.scala` changes with each commit, and `scalusJVM` and every project after it
+recompile and retest. Check: delete `target/`, run `scalusExamplesJVM/test`, delete `target/`,
+run it again.
+
+| Version | Second run |
+|---|---|
+| from git | 142 s, 9 compiles, 0 of 83 suites from the cache |
+| fixed, `1.5.0-SNAPSHOT` | 15 s, cache 100%, no compile, no suite |
+
+The `-Jdummy=<modification time of the plugin jar>` option of `PluginDependency` does not break
+reuse: with a fixed version and that option, the second run took 12 s with no compile.
+
+*Spike result with `[ci.alias.stable-version]`, 2026-11-23* (runs 45242048590, fill, and
+45246064362, no change). The CI-JVM 3.3.9 job of the no-change run:
+
+| Part | Result |
+|---|---|
+| Job | 6.6 min, of which 1.6 min is a diagnostic step that the landing removes (master: 15.1 min) |
+| Test suites | 625 of 625 from the cache |
+| sbt start and build load | about 1 min |
+| Format check, compile, tests, MiMa | under 2 min, each at "cache 100%" |
+| `jvm/doc`, `docs/unidoc` | 54 s and 42 s, though each reports "cache 100%" |
+| Task cache entry, compressed | 185 MB; `~/.cache/sbt` holds 460 MB |
+
+So `[ci.task.budget]` holds with five entries of this size.
+
 ### 7.2 Push aliases
 
 - The sbt alias of each push job MUST NOT run `clean`. `[ci.alias.no-clean]`
 - The sbt alias of each push job MUST run `test`, not `testFull`. `[ci.alias.test]`
-- The sbt build MUST add a digest of `flake.lock` and of the value of `SCALUS_TEST_ENV` to the
-  test inputs of each project, through `Test / extraTestDigests`. `[ci.alias.extra-digests]`
+- The sbt build MUST add a digest of `flake.nix`, of `flake.lock` and of the value of
+  `SCALUS_TEST_ENV` to the test inputs of each project, through `Test / extraTestDigests`.
+  `[ci.alias.extra-digests]`
+
+*Changed 2026-11-22:* the rule adds `flake.nix`. Phase 1 moved the JDK and the `uplc` release
+pin into `flake.nix`, so `flake.lock` alone no longer covers them. In sbt 2.1.0 the key is
+`TaskKey[Seq[sbt.util.Digest]]`, for example `Digest.sha256Hash(file("flake.nix").toPath)`.
 - The release workflow MUST run `clean` and MUST NOT restore the task cache.
   `[ci.alias.release-clean]`
+- A project whose tests get a build output by its path, for example in `Test / javaOptions`,
+  MUST add the content of that output to its `Test / extraTestDigests`.
+  `[ci.alias.path-inputs]`
+
+*Example, illustrative.* scalus-core passes the plugin jar and its whole test classpath, its own
+test classes included, so a change of one scalus-core test file reruns all of its suites. Its own
+test classes stay in the digest, because two suites run a test class by name in a child JVM. A
+smaller rerun needs the snippet and child-JVM suites in a project of their own (open question).
+
+Test resources need no digest: a change of one JSON file in the test resources of
+scalus-cardano-ledger reran all 135 of its suites (checked locally, 2026-11-24, sbt 2.1.0).
+
+- Each push job MUST set `SCALUS_STABLE_VERSION`, so the build uses the version
+  `<last release>-SNAPSHOT` instead of the git version. `[ci.alias.stable-version]`
+- The release workflow MUST fail before it builds when `SCALUS_STABLE_VERSION` is set.
+  `[ci.alias.release-guard]`
+
+*Example, illustrative.* At commit dff2d3b4, push CI builds with `BuildInfo.version` =
+`1.5.0-SNAPSHOT`. The snapshot that `release.yml` publishes from the same commit carries
+`1.5.0+143-dff2d3b4-SNAPSHOT`.
 
 **Why:** `[ci.alias.no-clean]`: after `clean`, sbt ignores the task cache for the next command
 (AGENTS.md, sbt 2 rules). `[ci.alias.extra-digests]`: sbt does not see the
 `plutus-conformance` corpus or `SCALUS_TEST_ENV` as test inputs. The corpus, the JDK and the
-`uplc` binary all come from `flake.lock`, so its hash covers them.
-`[ci.alias.release-clean]`: a published artifact must come from a clean build.
+`uplc` binary all come from `flake.nix` and `flake.lock`, so their hashes cover them.
+`[ci.alias.stable-version]`: sbt-buildinfo writes the version into scalus-core, so a version
+that changes with each commit makes every compile and every suite miss the task cache (7.1,
+spike result). `[ci.alias.release-guard]`: projects that use a published snapshot read
+`BuildInfo.version` to pin the Scalus compiler, so a published artifact must carry the git
+version. See the decision "Fix the version in push CI only".
+`[ci.alias.release-clean]`: a published artifact must come from a clean build. Without it, the
+global disk cache of sbt could give `ci-release` a compile output of an earlier run.
 
 *Spike result needed.* The spike checks each of these cases on CI. Each must rerun the
 affected suites:
 
 | Change | Expected |
 |---|---|
-| none | 0 suites run |
+| none | 0 suites run; the log gives the time of each step of the alias |
 | one test file of `scalus-examples` | the suites of that file only |
 | one line of `scalus-plugin` main sources | every suite of each project that the plugin compiles |
-| `flake.lock` | every suite |
+| `flake.nix` or `flake.lock` | the restore misses (`[ci.task.key-flake]`), and every suite runs |
+| one new case in the `plutus-conformance` corpus | `PlutusConformanceTest` runs the new case |
 | `SCALUS_TEST_ENV` | every suite |
 | a suite that cancels its tests (no Lean workspace) | runs again on the next push |
 
 When one case does not give the expected result, the developer stops and asks.
+
+*Spike results, 2026-11-23.* "none": each push job took every suite from the cache (runs
+45252697465, 45252702604, 45252708366). "a suite that cancels its tests": not as expected. sbt
+2.1.0 caches a suite whose tests were canceled like a passing one: the scalusJVM suite with 102
+canceled tests came from the cache in the "none" run.
+"one test file of `scalus-examples`" (run 45253834526): more reruns than expected, which is the
+safe direction. sbt recompiled all 127 test sources of `scalusExamplesJVM` (no `target/`), and
+41 of its 83 suites ran again, not 1. CI-JS and CI-Native took every suite from the cache. Each
+CI-JVM job took about 5 min.
+"one line of `scalus-plugin` main sources" (runs 45255142615, 45255142687, 45255142869; the
+change was the plugin's description text): every project recompiled, but some suites came from
+the cache: 23 of 324 in core on JVM, 13 of 322 on JS, 10 of 203 on Native, 0 of 83 in the
+examples. The plugin output did not change, so these hits may be valid. The 3.3.9 job failed at
+the format check on the unformatted spike comment.
+A local check of main code, 2026-11-23: a body change in `Hex.bytesToHex` reran 303 of 324
+`scalusJVM` suites. Each suite that uses `Hex` ran (`FlatTest`, `Ed25519ExtendedKeyTest`, …);
+the 21 cached ones do not use it (`Base58Test`, `SlotConfigTest`, …). So sbt keys a suite by
+the classes that it depends on.
+A local check of the plugin, 2026-11-23, found a hole: after a plugin change, the 7
+negative-compilation tests of `scalusJVM` (`ByNameParamErrorTest`, …) came from the cache. They
+run dotc with the plugin jar and the test classpath, which they get as paths in `javaOptions`,
+and sbt does not hash a path. The fix adds the plugin jar and the test classpath of `scalusJVM`
+to its `Test / extraTestDigests`. With it, a plugin change reran all 324 suites, and a run with
+no change still took all 324 from the cache.
+"`flake.nix` or `flake.lock`" (runs 45261620833, 45261620889, 45261620895): as expected. Each
+job missed the task cache by its new prefix and ran every suite.
+"one new case in the `plutus-conformance` corpus": not run. It follows from the row above: a
+new flake hash gives an empty task cache, so `scalusJVM/Test/compile` runs in full and
+`Macros.conformanceCases` reads the current corpus.
+"`SCALUS_TEST_ENV`": checked locally on 2026-11-22 (step 1 of 7.4): a new value reran all 863
+tests of `scalusExamplesJVM`. Push CI does not set it.
+
+*Changed 2026-11-22:* the corpus row checks a changed result, not only a rerun: a rerun with a
+stale case list would also pass the `flake.lock` row. The corpus is in the read-only Nix store,
+so the spike adds the case in a branch-only commit: the shellHook of `flake.nix` links a copy of
+the corpus with one more case.
+
+*Example, illustrative.* In the "none" row, sbt may not cache `mima-jvm`, `jvm/doc` or
+`docs/unidoc`. The 3.3.9 job then still runs them for 1.5 minutes, and its goal of a few minutes
+waits for phase 3.
 
 ### 7.3 Nightly full run
 
@@ -419,6 +574,57 @@ compile shows them all. *Decision of the developer, 2026-11-21.*
 
 *Example, illustrative.* A test reads a file that no digest covers. A change of that file makes
 the test fail, but push CI reports the cached pass. The nightly run fails the same night.
+
+### 7.4 Phase 2 steps
+
+Each step is one commit on the branch of this work, unless it says otherwise. The spike runs
+push this branch as `ci/task-cache-spike`; that push needs a yes from the owner.
+
+0. **Check the gates.** The master runs of phase 1 (5ce82f76f) are green, and step 9 of 6.5 is
+   done.
+   Check: the cache holds no entry of `[ci.prune.one-time]`. Without the purge, spike entries
+   evict the entries of master. *Status, 2026-11-22:* purge done, 5.16 GB in 16 entries.
+1. **Change the build.** In `build.sbt`:
+   - add `Test / extraTestDigests` per `[ci.alias.extra-digests]` to the settings that every
+     project with tests shares;
+   - change the push aliases `ci-jvm-3_3_9`, `ci-jvm-3_9_0`, `ci-jvm-3_10_1`, `ci-js` and
+     `ci-native` per `[ci.alias.no-clean]` and `[ci.alias.test]`, also `docs/clean`;
+   - add a `-full` twin of each, with the `clean` and `testFull` of today, for 7.3.
+   Check, locally in this worktree: `sbt scalusExamplesJVM/test` twice; the second run reports
+   no suites. Then `sbt shutdown`, and `SCALUS_TEST_ENV=emulator sbt scalusExamplesJVM/test`
+   runs every suite again.
+2. **Add the task cache to the three push workflows**, per 7.1 and the spike setup. Print the
+   size of `~/.cache/sbt` at the end of each job. During the spike, only the 3.3.9 job saves.
+   Check: `actionlint`, if the dev shell has it; else a careful read.
+3. **Spike run 1: one job.** Push the branch and dispatch CI-JVM twice.
+   Check: the second run restores the entry of the first by exact prefix. Read the compressed
+   size of that entry. When five such entries plus the Nix, dependency and Lean entries pass
+   8 GB (`[ci.task.budget]`), stop and ask.
+4. **Spike run 2: all jobs.** Let every push job save, and dispatch the three push workflows.
+   Check: the sum of all entries stays under 8 GB.
+5. **Spike cases.** Make one push per row of the table in 7.2, in that order. Record the result
+   of each row in that table.
+   Check: each row gives its expected result; else stop and ask.
+6. **Nightly full run.** Add one job per `-full` alias to `nightly.yml`, per 7.3. It restores
+   the Nix store and the dependency cache only. Each push job and each nightly job writes its
+   count of compiler warnings to the job summary. Add `clean` to the sbt command of
+   `release.yml` (`[ci.alias.release-clean]`).
+   Check: one dispatch run of `nightly.yml` on the spike branch, green, with a count in each
+   job summary.
+   *Status, 2026-11-24:* run 45373199801 green. The `full` jobs took 10 to 19 minutes. Each
+   count step passed. The two 3.3.9 jobs count 1 warning, from Scaladoc in `jvm/doc`: an
+   unresolved link `EmulatorResult` in `EmulatorJavaApi.scala`. All other jobs count 0. The
+   count leaves out the `[MODULE_TYPELESS_PACKAGE_JSON] Warning:` lines that Node prints in
+   CI-JS.
+7. **Land on master.** Remove the spike prefix and the spike save condition in one commit.
+   Delete the spike entries (`scripts/ci/prune-caches.sh sbt-task-spike- ''`). Then land by
+   fast-forward and check every push workflow of that commit. Ask the owner before the
+   deletion of the remote branch `ci/task-cache-spike`.
+8. **Measure on master.** The first master run fills the task cache. Then take the next push
+   that changes only tests or docs.
+   Check: record the time of each push job in section 4, next to the times of phase 1.
+
+Phase 2 is done when step 8 is recorded and each push workflow is green on master.
 
 ## 8. Phase 3 – job shape
 
@@ -567,6 +773,8 @@ It reuses the nightly workflow of section 7.3.
 - Whether `~/.sbt/boot` is enough for the sbt 2 launcher on CI: open, the spike of section 6.2
   decides it.
 - The size of the task cache per job: open, the spike of section 7.1 decides it.
-- Whether sbt 2.1 has `Test / extraTestDigests` under that name: open, the spike of section 7.2
-  checks it before the build uses it.
+- Whether sbt 2.1 has `Test / extraTestDigests` under that name: decided. sbt 2.1.0 has it,
+  as `TaskKey[Seq[sbt.util.Digest]]` (see `[ci.alias.extra-digests]`).
+- Whether sbt caches `mima-jvm`, `jvm/doc` and `docs/unidoc`: open, the "none" row of 7.2
+  decides it.
 - Whether the `plutus` input can shrink: open, phase 4 decides it.
