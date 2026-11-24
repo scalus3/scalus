@@ -2,6 +2,7 @@ import com.typesafe.tools.mima.core.*
 import sbt.internal.util.ManagedLogger
 import sbtwelcome.*
 import java.net.URI
+import sbt.util.Digest
 import scala.scalanative.build.*
 
 // =============================================================================
@@ -74,6 +75,14 @@ ThisBuild / description := "Scalus - DApps Development Platform for Cardano"
 ThisBuild / licenses := List(License.Apache2)
 ThisBuild / homepage := Some(uri("https://github.com/scalus3/scalus"))
 ThisBuild / versionScheme := Some("early-semver")
+// Push CI sets SCALUS_STABLE_VERSION, so the git version (`1.5.0+143-dff2d3b4-SNAPSHOT`) that
+// sbt-buildinfo writes into scalus-core does not change a source on each commit and miss the task
+// cache ([ci.alias.stable-version]). release.yml fails when it is set, so a published
+// BuildInfo.version is always the git version ([ci.alias.release-guard]).
+ThisBuild / version := {
+    if sys.env.contains("SCALUS_STABLE_VERSION") then s"$scalusStableVersion-SNAPSHOT"
+    else (ThisBuild / version).value
+}
 
 // BSP and semantic features
 ThisBuild / semanticdbEnabled := true
@@ -584,6 +593,18 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         s"-Dscalus.plugin.jar=${fileConverter.value.toPath((scalusPlugin / Compile / packageBin).value)}",
         s"-Dscalus.test.classpath=${classpathFiles((Test / fullClasspath).value, fileConverter.value).map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}"
       ),
+      // `sbt test` keys a cached result by the classes a suite uses, and sees the two options
+      // above only as paths. So after a plugin change the negative-compilation tests came from the
+      // cache, though dotc would now compile their snippets with the new plugin. Their content
+      // goes into the key here: each change of the plugin or of this classpath reruns every suite
+      // of this project ([ci.alias.path-inputs] in
+      // docs/superpowers/specs/2026-11-21-ci-speed-design.md). The digest keeps this project's own
+      // test classes: SameCborTest and CseDeterminismCrossJvmTest run a test class by name in a
+      // child JVM, so sbt does not see that they use it.
+      Test / extraTestDigests ++= {
+          val classpath = (Test / fullClasspath).value.map(entry => Digest(entry.data))
+          Digest((scalusPlugin / Compile / packageBin).value) +: classpath
+      },
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.86",
       libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0",
       // Ethereum KZG ceremony JSON is in scalus-ethereum-kzg-ceremony resources, needed for benchmark tests
@@ -689,6 +710,10 @@ lazy val scalusTsExporter = project
         s"-Dtsexport.fixtures.classpath=${classpathFiles((scalusTsExporterFixtures / Compile / fullClasspath).value, fileConverter.value).map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}",
         s"-Dtsexport.sourceroot=${(ThisBuild / baseDirectory).value.getAbsolutePath}"
       ),
+      // The suites read the fixture classes by the paths above, so sbt does not see them as
+      // inputs. Their content goes into the key of each cached result ([ci.alias.path-inputs]).
+      Test / extraTestDigests ++=
+          (scalusTsExporterFixtures / Compile / fullClasspath).value.map(entry => Digest(entry.data)),
       // GoldenTest type-checks the generated fixtures with `node_modules/.bin/tsc` and
       // `assume`s the check away when tsc is missing, which scalatest reports as a canceled
       // test inside a green suite. ci-jvm runs these tests through the `jvm` aggregate, which
@@ -1451,6 +1476,28 @@ def copyFiles(files: Seq[String], baseDir: File, targetDir: File, log: ManagedLo
 def commandSequence(name: String, steps: String*): Def.Setting[?] =
     commands += Command.command(name)(state => steps.toList ::: state)
 
+/** A CI job command in two forms, from the steps of the full form.
+  *
+  *   - `<name>-full`: the steps as given, with `clean` and `testFull`. The nightly full run uses it
+  *     ([ci.nightly.full]).
+  *   - `<name>`: the push form. It drops each `clean` step, so sbt can take results from its task
+  *     cache, and runs `test` instead of `testFull`, so sbt reruns only the suites whose inputs
+  *     changed ([ci.alias.no-clean], [ci.alias.test]).
+  *
+  * For example, `ci-native-full` runs `clean; native/Test/compile; native/testFull`, and
+  * `ci-native` runs `native/Test/compile; native/test`. Spec:
+  * docs/superpowers/specs/2026-11-21-ci-speed-design.md, section 7.2.
+  */
+def ciCommand(name: String, fullSteps: String*): Seq[Def.Setting[?]] = {
+    val pushSteps = fullSteps.collect {
+        case step if step.endsWith("testFull") => step.stripSuffix("testFull") + "test"
+        case step if step != "clean" && !step.endsWith("/clean") => step
+    }
+    // A step such as `x/testFull -- -n Tag` would stay uncached in push CI without a word.
+    require(!pushSteps.exists(_.contains("testFull")), s"$name: a push step still runs testFull")
+    Seq(commandSequence(name, pushSteps *), commandSequence(s"$name-full", fullSteps *))
+}
+
 // ABI compatibility gate for the stable surface: scalus-core, scalus-cardano-ledger and
 // scalus-bloxbean-cardano-client-lib, checked against scalusCompatibleVersion.
 // Both cross-projects declare mimaPreviousArtifacts with the platform-aware %%, so their Scala.js artifacts are
@@ -1542,7 +1589,7 @@ val crossVersionCiTasks = {
 // (the Scala.js half of MiMa runs in ci-js, see `mima-js`). The last two steps build Scaladoc as
 // Release publishes it (per module) and as the site publishes it (unidoc). Doc warnings do not
 // fail the build, but a crash or an error does.
-commandSequence(
+ciCommand(
   "ci-jvm-3_3_9",
   "++3.3.9",
   "clean",
@@ -1556,11 +1603,11 @@ commandSequence(
   "jvm/doc",
   "docs/unidoc"
 )
-commandSequence("ci-jvm-3_9_0", ("++3.9.0" +: crossVersionCiTasks) *)
-commandSequence("ci-jvm-3_10_1", ("++3.10.1" +: crossVersionCiTasks) *)
+ciCommand("ci-jvm-3_9_0", ("++3.9.0" +: crossVersionCiTasks) *)
+ciCommand("ci-jvm-3_10_1", ("++3.10.1" +: crossVersionCiTasks) *)
 // Convenience name for the default-version job.
 addCommandAlias("ci-jvm", "ci-jvm-3_3_9")
-commandSequence(
+ciCommand(
   "ci-js",
   "clean",
   "js/Test/compile",
@@ -1571,7 +1618,7 @@ commandSequence(
   "scalusCardanoLedgerJS/checkDtsUpToDate",
   "scalusCardanoLedgerJS/runNpmTests"
 )
-commandSequence("ci-native", "clean", "native/Test/compile", "native/testFull")
+ciCommand("ci-native", "clean", "native/Test/compile", "native/testFull")
 // The CI jobs for the default Scala version in one command. Do not build it on the root aggregate:
 // that links the deliberately bad scalusTsExporterFixtures and always fails.
 commandSequence("ci", "ci-jvm", "ci-js", "ci-native")
