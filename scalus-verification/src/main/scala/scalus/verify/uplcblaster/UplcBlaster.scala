@@ -566,7 +566,12 @@ object UplcBlaster {
           * ([[MappingPlan.Mapping.AsLeanType]]): its programs are given the value's `Data`, and no
           * premise restricts it.
           */
-        private[uplcblaster] val typed: Vector[Option[LeanTypeBinding]] = Vector.empty
+        private[uplcblaster] val typed: Vector[Option[LeanTypeBinding]] = Vector.empty,
+        /** The binders that stand for every value Lean has, of their type or not: a value of one is
+          * read as it is, and is never outside the type ([[CallsAsUnknowns]]'s unknowns, which have
+          * no premise of their type).
+          */
+        private[uplcblaster] val unrestricted: Set[Int] = Set.empty
     ) {
 
         /** The Lean type of the binder at `index`, where it has one. */
@@ -4584,7 +4589,10 @@ object UplcBlaster {
                     // A list's or a map's items are any `Data` to Lean, and need not be the type's:
                     // a value that is not is read all the same, with why, as Lean ran it.
                     val typed = value.map(v =>
-                        v -> outsideType(v, binder.tp).map(reason => s"${binder.name}: $reason")
+                        v -> Option
+                            .unless(goal.unrestricted(index))(outsideType(v, binder.tp))
+                            .flatten
+                            .map(reason => s"${binder.name}: $reason")
                     )
                     // The variable the value is of, in the reason.
                     val named = typed.left.map {

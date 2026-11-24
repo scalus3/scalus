@@ -392,6 +392,11 @@ final class LeanProofs private (
       * a refuted statement is not to be. A proof within a budget is one where the request asks for
       * a check within that budget, and makes no theorem.
       */
+    /** The budget a check within one is asked for at ([[Budget.Within]]). */
+    private def withinOf(blaster: UplcBlaster): Option[Int] = blaster.budget match
+        case Budget.Within(steps) => Some(steps)
+        case _                    => None
+
     private def checked(verifier: Verifier, request: VerificationRequest): VerificationResult = {
         val statement = request.statement
         val name = statement.name
@@ -400,11 +405,9 @@ final class LeanProofs private (
         val result = run(verifier, statement, request.tactic)
         // The budget a check within one is asked for at.
         val within = request.tactic match
-            case blaster: UplcBlaster =>
-                blaster.budget match
-                    case Budget.Within(steps) => Some(steps)
-                    case _                    => None
-            case _ => None
+            case blaster: UplcBlaster      => withinOf(blaster)
+            case unknowns: CallsAsUnknowns => withinOf(unknowns.inner)
+            case _                         => None
         (request.expected, result) match
             case (ExpectedOutcome.Valid, VerificationResult.Proven(proof)) =>
                 proof.artifact match
@@ -476,6 +479,10 @@ final class LeanProofs private (
         val writing = tactic match
             case blaster: UplcBlaster =>
                 keepingChecks(blaster.withMappingUnlessSet(mapping), statement)
+            case unknowns: CallsAsUnknowns =>
+                unknowns.withInner(inner =>
+                    keepingChecks(inner.withMappingUnlessSet(mapping), statement)
+                )
             case manual: LeanManual =>
                 val mapped = manual.withMappingUnlessSet(mapping)
                 writtenForHand(verifier, statement, mapped)
@@ -492,12 +499,6 @@ final class LeanProofs private (
       * inconclusive result is never kept, and a statement that unexpectedly gets a result here is
       * to fail its test, not to stand on that result from then on.
       */
-    def inconclusive(statement: Statement, tactic: UplcBlaster): String = {
-        val (own, declared) = ownStatement(statement)
-        inconclusive(own, declared, tactic)
-    }
-
-    /** [[inconclusive]], of a tactic that is not [[UplcBlaster]] itself, as [[CallsAsUnknowns]]. */
     def inconclusive(statement: Statement, tactic: Tactic): String = {
         val (own, declared) = ownStatement(statement)
         inconclusive(own, declared, tactic)
@@ -687,15 +688,23 @@ final class LeanProofs private (
         result: VerificationResult,
         text: String
     ): scalus.verify.ual.UalExport.Property =
-        propertyOf(
-          verifier,
-          statement,
-          result,
-          text,
-          UplcBlaster(Budget.LeanSteps(artifactOf(result).budget), lean).withMapping(mapping)
-        ).getOrElse(
-          failed(s"${statement.name} has no form in the Universal Annotation Language")
-        )
+        // The language has no form of a proof of the statement with its walks as unknowns: the
+        // statement as written was not proved at that budget.
+        if artifactOf(result).kind == ProofKind.BlasterOfUnknowns then
+            failed(
+              s"${statement.name} is proved with its walks as unknowns, which the Universal " +
+                  "Annotation Language has no form of"
+            )
+        else
+            propertyOf(
+              verifier,
+              statement,
+              result,
+              text,
+              UplcBlaster(Budget.LeanSteps(artifactOf(result).budget), lean).withMapping(mapping)
+            ).getOrElse(
+              failed(s"${statement.name} has no form in the Universal Annotation Language")
+            )
 
     /** [[ualProperty]] of a statement declared in `verifier`: none where it has no form in the
       * language.
@@ -783,7 +792,7 @@ final class LeanProofs private (
       */
     private def checkedProof(artifact: UplcBlaster.Artifact): Unit = {
         artifact.kind match
-            case ProofKind.Blaster =>
+            case ProofKind.Blaster | ProofKind.BlasterOfUnknowns =>
                 if !artifact.kept && !artifact.output.contains("✅ Valid") then
                     failed(s"expected a valid proof, got ${artifact.output}")
             case ProofKind.LeanNative =>

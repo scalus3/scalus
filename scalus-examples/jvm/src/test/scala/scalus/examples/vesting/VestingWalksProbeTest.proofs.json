@@ -1,0 +1,160 @@
+{
+  "environment": {
+    "uplc-blaster": {
+      "Blaster": "a06919767488",
+      "CardanoLedgerApi": "3dd048e3eb86",
+      "LinearVesting": "cfdfdce352d08b72",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "16c4f79c84fecfd5",
+      "toolchain": "leanprover/lean4:v4.24.0"
+    },
+    "uplc-blaster-unknowns": {
+      "Blaster": "a06919767488",
+      "CardanoLedgerApi": "3dd048e3eb86",
+      "LinearVesting": "cfdfdce352d08b72",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "16c4f79c84fecfd5",
+      "toolchain": "leanprover/lean4:v4.24.0"
+    }
+  },
+  "results": {
+    "vesting.probe.nothing_is_withdrawn_given_walks": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "2c84dc7564e8bc03",
+      "programs": [
+        "69ca1fd59ed58a3d"
+      ],
+      "notes": {
+        "budget": "1600",
+        "kind": "Blaster",
+        "read": "with the parts of ctx_2852 that no value of the type has, which its Lean type has, replaced by values of them"
+      },
+      "counterexample": {
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":0},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":1}]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":0,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[]},{"map":[]},{"map":[]},{"bytes":"213021"},{"map":[]},{"list":[]},{"constructor":0,"fields":[{"int":0}]},{"constructor":0,"fields":[{"int":0}]}]},{"constructor":16,"fields":[{"int":1}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"213121"},{"int":22}]},{"constructor":0,"fields":[{"constructor":14,"fields":[{"int":21},{"int":0},{"int":1},{"int":1}]}]}]}]},
+        "walks.adaInInputs": 0,
+        "walks.adaInOutputs": 1,
+        "walks.continuingDatum.Some.value.OutputDatum.datum": {"int":18},
+        "walks.continuingDatum.Some.value.OutputDatumHash.datumHash": "",
+        "walks.continuingDatum.Some.value.case": 4,
+        "walks.continuingDatum.case": 0,
+        "walks.continuingLocked": 0,
+        "walks.locked": 1,
+        "walks.ownInputFound": true,
+        "walks.signed": true,
+        "walks.valueKept": true,
+        "walks.vestingInputIsUnique": true
+      },
+      "tests": [
+        "a withdrawal that takes nothing is refuted, with the walks given"
+      ]
+    },
+    "vesting.probe.state_is_carried_given_walks": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "4c9a96f1af2e0c9b",
+      "programs": [
+        "819b4553b7c0602e"
+      ],
+      "notes": {
+        "budget": "1305",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "spend's fourth guarantee holds of every context, with the walks given and the lemma"
+      ]
+    },
+    "vesting.probe.state_is_carried_without_datum_check": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "2c84dc7564e8bc03",
+      "programs": [
+        "8a148338a04bccc9"
+      ],
+      "notes": {
+        "budget": "1600",
+        "kind": "Blaster",
+        "read": "with the parts of ctx_5450 that no value of the type has, which its Lean type has, replaced by values of them"
+      },
+      "counterexample": {
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":28871},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":2746}]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":0,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[]},{"map":[]},{"map":[]},{"bytes":"213021"},{"map":[]},{"list":[]},{"constructor":0,"fields":[{"int":0}]},{"constructor":0,"fields":[{"int":0}]}]},{"constructor":13,"fields":[{"int":15943}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"213121"},{"int":19}]},{"constructor":0,"fields":[{"constructor":11,"fields":[{"int":18},{"int":2747},{"int":-27376},{"int":-15943}]}]}]}]},
+        "walks.adaInInputs": 0,
+        "walks.adaInOutputs": -12928,
+        "walks.continuingDatum.Some.value.OutputDatum.datum": {"int":15},
+        "walks.continuingDatum.Some.value.OutputDatumHash.datumHash": "",
+        "walks.continuingDatum.Some.value.case": 4,
+        "walks.continuingDatum.case": 0,
+        "walks.continuingLocked": -15943,
+        "walks.locked": 0,
+        "walks.ownInputFound": true,
+        "walks.signed": true,
+        "walks.valueKept": true,
+        "walks.vestingInputIsUnique": true
+      },
+      "tests": [
+        "spend's fourth guarantee is refuted without the datum check, with the walks given"
+      ]
+    },
+    "vesting.probe.state_is_carried_without_the_lemma": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "2c84dc7564e8bc03",
+      "programs": [
+        "5491c8438a756fab"
+      ],
+      "notes": {
+        "budget": "1600",
+        "kind": "Blaster",
+        "read": "with the parts of ctx_4653 that no value of the type has, which its Lean type has, replaced by values of them"
+      },
+      "counterexample": {
+        "ctx": {"constructor":0,"fields":[{"constructor":0,"fields":[{"list":[]},{"list":[]},{"list":[]},{"int":1733},{"map":[]},{"list":[]},{"map":[]},{"constructor":0,"fields":[{"constructor":0,"fields":[{"constructor":1,"fields":[{"int":26372}]},{"constructor":0,"fields":[]}]},{"constructor":0,"fields":[{"constructor":0,"fields":[]},{"constructor":0,"fields":[]}]}]},{"list":[]},{"map":[]},{"map":[]},{"bytes":"213021"},{"map":[]},{"list":[]},{"constructor":0,"fields":[{"int":0}]},{"constructor":0,"fields":[{"int":0}]}]},{"constructor":12,"fields":[{"int":30087}]},{"constructor":1,"fields":[{"constructor":0,"fields":[{"bytes":"213121"},{"int":11}]},{"constructor":0,"fields":[{"constructor":13,"fields":[{"int":16},{"int":26373},{"int":-1},{"int":-19455}]}]}]}]},
+        "walks.adaInInputs": 0,
+        "walks.adaInOutputs": 28354,
+        "walks.continuingDatum.Some.value.OutputDatum.datum": {"constructor":13,"fields":[{"int":16},{"int":26373},{"int":-1},{"int":-19455}]},
+        "walks.continuingDatum.Some.value.OutputDatumHash.datumHash": "",
+        "walks.continuingDatum.Some.value.case": 4,
+        "walks.continuingDatum.case": 0,
+        "walks.continuingLocked": 2,
+        "walks.locked": 30088,
+        "walks.ownInputFound": true,
+        "walks.signed": true,
+        "walks.valueKept": true,
+        "walks.vestingInputIsUnique": true
+      },
+      "tests": [
+        "spend's fourth guarantee is refuted without the lemma, with the walks given"
+      ]
+    },
+    "vesting.probe.unvested_stays_locked_calls_as_unknowns": {
+      "tactic": "uplc-blaster-unknowns",
+      "result": "proved",
+      "statement": "c472ec8a44198d72",
+      "programs": [
+        "044b7e7b9905e9b0"
+      ],
+      "notes": {
+        "budget": "1262",
+        "kind": "BlasterOfUnknowns"
+      },
+      "tests": [
+        "spend's third guarantee of the validator holds of every context, with calls as unknowns"
+      ]
+    },
+    "vesting.probe.unvested_stays_locked_given_walks": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "4c9a96f1af2e0c9b",
+      "programs": [
+        "d16dbd52be6121a2"
+      ],
+      "notes": {
+        "budget": "1191",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "spend's third guarantee holds of every context, with the walks given"
+      ]
+    }
+  }
+}

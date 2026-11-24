@@ -48,6 +48,21 @@
         "the validator would not establish a precondition on the amount"
       ]
     },
+    "vesting.control.sample_leaving_another_datum_is_accepted": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2d3cb18e20f505f4",
+      "programs": [
+        "0d0189874c3e50a4"
+      ],
+      "notes": {
+        "budget": "20000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "without the datum check, two withdrawals halfway through the period take everything"
+      ]
+    },
     "vesting.schedule.bounded_without_condition": {
       "tactic": "uplc-blaster",
       "result": "refuted",
@@ -295,6 +310,21 @@
         "sample withdrawals are accepted on the Lean machine, and rejected unsigned or for more"
       ]
     },
+    "vesting.withdrawal.sample_leaving_another_datum_is_rejected": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "87acb769a9c0ddb7",
+      "programs": [
+        "a6672383690276d7"
+      ],
+      "notes": {
+        "budget": "20000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "without the datum check, two withdrawals halfway through the period take everything"
+      ]
+    },
     "vesting.withdrawal.sample_of_more_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
@@ -308,6 +338,21 @@
       },
       "tests": [
         "sample withdrawals are accepted on the Lean machine, and rejected unsigned or for more"
+      ]
+    },
+    "vesting.withdrawal.sample_of_the_rest_under_another_datum_is_accepted": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2d3cb18e20f505f4",
+      "programs": [
+        "7f0c2442ad142979"
+      ],
+      "notes": {
+        "budget": "20000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "without the datum check, two withdrawals halfway through the period take everything"
       ]
     },
     "vesting.withdrawal.sample_of_the_vested_is_accepted": {

@@ -3,6 +3,7 @@ package scalus.verify.uplcblaster
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude
+import scalus.cardano.onchain.plutus.prelude.require
 import scalus.compiler.Compile
 import scalus.verify.*
 import scalus.verify.Props.*
@@ -50,6 +51,22 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
             (xs.length > ys.length) ==>: (xs.length >= BigInt(1))
         )
         assert(unknownsOf(prop).size == 2)
+    }
+
+    test("a walk whose argument may fail is not one with an argument that cannot") {
+        // `{ require(...); xs }.length` fails where `xs.length` returns: the two calls have two
+        // unknowns, or one unknown's `None` would stand for both.
+        val prop = forAll[BigInt, prelude.List[BigInt]]((x, xs) =>
+            (xs.length >= BigInt(0)) ==>: ({ require(x > BigInt(0)); xs }.length >= BigInt(0))
+        )
+        assert(unknownsOf(prop).size == 2)
+    }
+
+    test("a walk of constants is no unknown") {
+        // It has one value, which Lean computes: an unknown of it would lose it.
+        val prop =
+            forAll[BigInt](x => prelude.List.Cons(BigInt(1), prelude.List.Nil).length + x > x)
+        assert(unknownsOf(prop).isEmpty)
     }
 
     test("a statement with no walk is left as it is") {

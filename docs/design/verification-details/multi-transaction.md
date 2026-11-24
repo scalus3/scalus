@@ -243,7 +243,11 @@ stays, and the tactic says which.
 with the bound names numbered, and its arguments in a normal form, over the statement's variables
 and the unknowns. The validator and the clause each have their own copy of an inline walk, with
 the same key. Where two calls the program makes with equal arguments get different keys, the
-proof may fail; it is never wrong: an equal key is the same function on the same values.
+proof may fail; it is never wrong: an equal key is the same function on the same values, and the
+two calls fail alike. So a value the program bound before the call stands in the key for the
+value it bound, which the program has when it makes the call, but a `let` inside the call stays
+in the key, used or not, as it may fail; and `fromData` of `toData` is the value only where both
+are of one type. A key of no variable is of a constant, and no unknown: Lean computes it.
 
 **The unknown.** A variable of the call's result type, as an `Option` where the call can fail: at
 the call, `None` fails as the walk would. Lean has it as any variable of its type.
@@ -257,8 +261,10 @@ proved once, by induction (`lean-manual`), and a proof that uses it cites it.
 counterexample is. Where the walks do not return the unknowns' values on its context, it is
 spurious, and the result says so; the probe's counterexamples were of that kind.
 
-**The result.** A proof with unknowns says which calls it made unknowns and which lemmas it
-assumed; the clause it checks is checked of every context, resting on them. The tie of the
+**The result.** A proof with unknowns is of its own kind, `ProofKind.BlasterOfUnknowns`, which
+says that it rests on the tie; the clause it checks is checked of every context, resting on it.
+It is kept, as any result of `blaster-uplc`, under the statement with unknowns: its programs are
+what it rests on. The Universal Annotation Language has no form of it yet. The tie of the
 program to its form with unknowns is trusted at first, and tested: on the statement's samples, the
 two programs, with each unknown set to what its walk returns, end alike. A lemma of the rewrite,
 proved in Lean with each walk's termination, replaces the trust.
@@ -281,7 +287,12 @@ proved in Lean with each walk's termination, replaces the trust.
      leaf, the linker's walk took the leaf's own `let`s for definitions, and moved them out of
      scope.
    - A refutation through unknowns is often of values no walk returns, as a length below zero; its
-     replay on the statement as written says so, and the result is inconclusive.
+     replay on the statement as written says so, and the result is inconclusive. A value of an
+     unknown is never outside its type, as it has no premise of it: the replay of the statement
+     with unknowns takes it as it is, and the statement as written decides.
+   - Of the validator itself, Lean finishes #4 of no contexts, nor of one input and two outputs in
+     10 minutes; the clause is open, as #3 is in `VestingVerificationTest`. With the walks as
+     unknowns it needs the lemma on `Value`, step 2.
 2. **Lemmas**: their statements, patterns and the premises they give; vesting's #4.
 3. **The proofs of the lemmas** and of each walk's termination, by induction.
 4. **The rewrite's lemma** in Lean.
