@@ -164,7 +164,9 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
     ): EmulatorResult[ForgeError, ChainPoint] =
         EmulatorResult.fromEither(produceBlock(on, slot, txs.asScala.toSeq))
 
-    /** `rollback`, with the result as an [[EmulatorResult]], spec section 11.3. */
+    /** `rollback`, with the result as an [[scalus.cardano.node.emulator.EmulatorResult]], spec
+      * section 11.3.
+      */
     final def tryRollback(n: Int): EmulatorResult[RollbackError, ChainPoint] =
         EmulatorResult.fromEither(rollback(n))
 
