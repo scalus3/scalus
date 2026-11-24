@@ -6,7 +6,6 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.PlutusV3
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.ValidatorRulesTestKit
 import scalus.cardano.ledger.utils.{CollateralSufficient, MinTransactionFee}
 import scalus.cardano.node.Emulator
 import scalus.cardano.onchain.plutus.prelude.List as PList
@@ -17,7 +16,7 @@ import scalus.utils.await
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap
-class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
+class TxBuilderCompleteTest extends AnyFunSuite, ArbitraryInstances {
 
     given testEnv: CardanoInfo = CardanoInfo.mainnet
 

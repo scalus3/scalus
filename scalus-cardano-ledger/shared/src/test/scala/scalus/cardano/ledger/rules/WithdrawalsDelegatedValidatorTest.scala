@@ -6,56 +6,30 @@ import org.scalatest.matchers.should.Matchers
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 
-import scala.collection.immutable.SortedMap
-
 /** The Conway LEDGER `validateWithdrawalsDelegated` check, spec [SC-23]. */
-class WithdrawalsDelegatedValidatorTest extends AnyFunSuite with Matchers with EitherValues {
+class WithdrawalsDelegatedValidatorTest
+    extends AnyFunSuite
+    with Matchers
+    with EitherValues
+    with CertsTestKit {
 
-    private val cardanoInfo = CardanoInfo.preprod
-    private val params = cardanoInfo.protocolParams
-    private val keyDeposit = Coin(params.stakeAddressDeposit)
-
-    private val stakeKeyHash = StakeKeyHash.fromHex("b" * 56)
-    private val keyAccount =
-        RewardAccount(StakeAddress(Network.Testnet, StakePayload.Stake(stakeKeyHash)))
+    private val keyAccount = RewardAccount(
+      StakeAddress(Network.Testnet, StakePayload.Stake(StakeKeyHash.fromHex("b" * 56)))
+    )
     private val keyCredential = keyAccount.address.credential
-    private val scriptAccount =
-        RewardAccount(
-          StakeAddress(Network.Testnet, StakePayload.Script(ScriptHash.fromHex("d" * 56)))
-        )
+    private val scriptAccount = scriptRewardAccount(ScriptHash.fromHex("d" * 56))
 
-    private def stateWith(accounts: (RewardAccount, Option[DRep])*): State = State(certState =
-        CertState.empty.copy(dstate = DelegationState(accounts.map { (account, drep) =>
-            account.address.credential -> ConwayAccountState(Coin.zero, keyDeposit, None, drep)
+    private def stateWith(accounts: (RewardAccount, Option[DRep])*): State =
+        State(certState = certState(accounts = accounts.map { (account, drep) =>
+            account.address.credential -> accountState(Coin.zero, drep = drep)
         }.toMap))
-    )
 
+    /** A transaction that withdraws zero from `account`. */
     private def tx(account: RewardAccount, certs: Certificate*): Transaction =
-        Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.empty[TransactionInput],
-            outputs = IndexedSeq.empty[Sized[TransactionOutput]],
-            fee = Coin.zero,
-            certificates =
-                if certs.isEmpty then TaggedOrderedStrictSet.empty
-                else TaggedOrderedStrictSet.from(certs),
-            withdrawals = Some(Withdrawals(SortedMap(account -> Coin.zero)))
-          )
-        )
-
-    private def context(major: Int): Context = Context(
-      env = UtxoEnv(
-        0,
-        params.copy(protocolVersion = ProtocolVersion(major, 0)),
-        CertState.empty,
-        Network.Testnet,
-        Coin.zero
-      ),
-      slotConfig = cardanoInfo.slotConfig
-    )
+        certTx(Map(account -> Coin.zero), certs*)
 
     private def validate(state: State, transaction: Transaction, major: Int = 10) =
-        WithdrawalsDelegatedValidator.validate(context(major), state, transaction)
+        WithdrawalsDelegatedValidator.validate(context(protocolMajor = major), state, transaction)
 
     test("rejects a withdrawal from a key account without a DRep") {
         val transaction = tx(keyAccount)
@@ -101,7 +75,7 @@ class WithdrawalsDelegatedValidatorTest extends AnyFunSuite with Matchers with E
         val result = STS.Mutator.transit[TransactionException](
           Seq(WithdrawalsDelegatedValidator),
           DefaultMutators.all,
-          context(10),
+          context(protocolMajor = 10),
           stateWith(keyAccount -> None),
           transaction
         )

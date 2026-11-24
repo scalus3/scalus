@@ -3,15 +3,15 @@ package scalus.cardano.ledger.rules
 import org.scalatest.EitherValues
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
-import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 
 /** `State.deposited` and `DRepState.delegates` of the CERTS step, spec [BK-1] to [BK-3]. */
-class CertsMutatorBookkeepingTest extends AnyFunSuite with Matchers with EitherValues {
+class CertsMutatorBookkeepingTest
+    extends AnyFunSuite
+    with Matchers
+    with EitherValues
+    with CertsTestKit {
 
-    private val cardanoInfo = CardanoInfo.preprod
-    private val params = cardanoInfo.protocolParams
-    private val keyDeposit = Coin(params.stakeAddressDeposit)
     private val drepDeposit = Coin(params.dRepDeposit)
 
     private val account = Credential.KeyHash(AddrKeyHash.fromHex("1" * 56))
@@ -26,32 +26,10 @@ class CertsMutatorBookkeepingTest extends AnyFunSuite with Matchers with EitherV
         state: State,
         certs: Seq[Certificate],
         proposals: Seq[ProposalProcedure] = Seq.empty
-    ): State = {
-        val context = new Context(
-          env = UtxoEnv(
-            slot = 0,
-            params = params,
-            certState = state.certState,
-            network = Network.Testnet,
-            treasury = Coin.zero
-          ),
-          slotConfig = cardanoInfo.slotConfig
-        )
-        val tx = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.empty,
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            certificates =
-                if certs.isEmpty then TaggedOrderedStrictSet.empty
-                else TaggedOrderedStrictSet.from(certs),
-            proposalProcedures =
-                if proposals.isEmpty then TaggedOrderedSet.empty
-                else TaggedOrderedSet.from(proposals)
-          )
-        )
-        CertsMutator.transit(context, state, tx).value
-    }
+    ): State =
+        CertsMutator
+            .transit(context(state.certState), state, govTx(proposals, certs = certs))
+            .value
 
     private def dreps(state: State): Map[Credential, Set[Credential]] =
         state.certState.vstate.dreps.view.mapValues(_.delegates).toMap
@@ -93,15 +71,8 @@ class CertsMutatorBookkeepingTest extends AnyFunSuite with Matchers with EitherV
     }
 
     test("spec [BK-2]: a tx with a proposal and no certificate adds the proposal deposit") {
-        val proposal = ProposalProcedure(
-          deposit = Coin(params.govActionDeposit),
-          rewardAccount = RewardAccount(
-            StakeAddress(Network.Testnet, StakePayload.Stake(StakeKeyHash.fromHex("1" * 56)))
-          ),
-          govAction = GovAction.InfoAction,
-          anchor = Anchor("https://example.com", DataHash.fromHex("0" * 64))
-        )
-        val after = run(base, Seq.empty, Seq(proposal))
+        val info = proposal(GovAction.InfoAction, deposit = Coin(params.govActionDeposit))
+        val after = run(base, Seq.empty, Seq(info))
         after.deposited shouldBe base.deposited + Coin(params.govActionDeposit)
     }
 

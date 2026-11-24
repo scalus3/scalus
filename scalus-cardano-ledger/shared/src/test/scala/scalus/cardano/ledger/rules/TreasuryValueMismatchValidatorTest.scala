@@ -1,18 +1,10 @@
 package scalus.cardano.ledger.rules
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 
 /** The Conway LEDGER `validateTreasuryValue` check, spec [SC-7], [SC-7e]. */
-class TreasuryValueMismatchValidatorTest extends AnyFunSuite {
-
-    private val cardanoInfo = CardanoInfo.preprod
-
-    private def context(treasury: Coin): Context = Context(
-      env = UtxoEnv(0, cardanoInfo.protocolParams, CertState.empty, Network.Testnet, treasury),
-      slotConfig = cardanoInfo.slotConfig
-    )
+class TreasuryValueMismatchValidatorTest extends AnyFunSuite, CertsTestKit {
 
     private def tx(currentTreasuryValue: Option[Coin]): Transaction =
         Transaction(
@@ -25,7 +17,7 @@ class TreasuryValueMismatchValidatorTest extends AnyFunSuite {
         )
 
     private def validate(treasury: Coin, transaction: Transaction) =
-        TreasuryValueMismatchValidator.validate(context(treasury), State(), transaction)
+        TreasuryValueMismatchValidator.validate(context(treasury = treasury), State(), transaction)
 
     test("accepts a tx that states no treasury value") {
         assert(validate(Coin(1000), tx(None)) == Right(()))

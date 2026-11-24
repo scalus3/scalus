@@ -1,858 +1,155 @@
 package scalus.cardano.ledger
 package rules
 
-import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
-import scalus.uplc.builtin.{platform, Data}
+import scalus.uplc.builtin.Data
 
 class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("FeesOkValidator rule success") {
-        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
-          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
-        )
 
-        val context = Context()
+    // A non-empty token, for the tests where the collateral holds or returns more than ada.
+    private val token = MultiAsset.asset(scriptHash(1), AssetName.fromString("token"), 100)
 
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
+    // Within maxTxExecutionUnits, so the script part of the min fee stays far below the 10 ada fee.
+    private val redeemer =
+        Redeemer(RedeemerTag.Spend, 0, Data.unit, ExUnits(1_000_000, 1_000_000_000))
 
-        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
-                  collateralReturnOutput = Some(
-                    Sized(
-                      Output(
-                        Arbitrary.arbitrary[ShelleyAddress].sample.get,
-                        Value(Coin(20000000L), Arbitrary.arbitrary[MultiAsset].sample.get)
-                      )
-                    )
-                  ),
-                  // totalCollateral = net collateral (inputs - return)
-                  // 30000000 + 30000000 - 20000000 = 40000000
-                  totalCollateral = Some(Coin(40000000L)),
-                  fee = Coin(10000000L),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  mint = None,
-                  votingProcedures = None,
-                  withdrawals = None,
-                  proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              auxiliaryData = None,
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet.empty,
-                  bootstrapWitnesses = TaggedSortedSet.empty,
-                  nativeScripts = TaggedSortedMap.empty,
-                  plutusV1Scripts = TaggedSortedStrictMap.empty,
-                  plutusV2Scripts = TaggedSortedStrictMap.empty,
-                  plutusV3Scripts = TaggedSortedStrictMap.empty,
-                  plutusData = KeepRaw(TaggedSortedMap.empty),
-                  redeemers = Some(
-                    KeepRaw(
-                      Redeemers.Array(
-                        IndexedSeq(
-                          Redeemer(
-                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                            index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.uplc.builtin.Data.unit,
-                            exUnits = genScriptExUnits.sample.get
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(
-                Coin(30000000L),
-                transaction.body.value.collateralReturnOutput
-                    .map { _.value.value.assets }
-                    .getOrElse(MultiAsset.empty)
-              )
-            )
+    /** A transaction with only the fields that FeesOkValidator reads. It spends no input: the min
+      * fee resolves the inputs against the UTxO, and an unresolved input fails the rule for another
+      * reason. The rule computes the min fee from this transaction.
+      */
+    private def collateralTx(
+        collateralInputs: Seq[TransactionInput],
+        collateralReturn: Option[TransactionOutput],
+        totalCollateral: Option[Coin],
+        fee: Coin = Coin.ada(10),
+        redeemers: Seq[Redeemer] = Seq(redeemer)
+    ): Transaction =
+        Transaction(
+          emptyBody.copy(
+            fee = fee,
+            collateralInputs = TaggedSortedSet.from(collateralInputs),
+            collateralReturnOutput = collateralReturn.map(output => Sized(output)),
+            totalCollateral = totalCollateral
+          ),
+          TransactionWitnessSet.empty.copy(redeemers =
+              Option.when(redeemers.nonEmpty)(KeepRaw(Redeemers.Array(redeemers.toIndexedSeq)))
           )
         )
 
-        val result = FeesOkValidator.validate(context, state, transaction)
+    /** The UTxOs of the collateral inputs `input(1)` and `input(2)`, at key addresses. */
+    private def collateralUtxos(
+        first: Value = Value.ada(30),
+        second: Value = Value.ada(30)
+    ): Utxos =
+        Map(input(1) -> Output(keyAddress(1), first), input(2) -> Output(keyAddress(2), second))
+
+    test("FeesOkValidator rule success") {
+        val transaction = collateralTx(
+          Seq(input(1), input(2)),
+          Some(Output(keyAddress(3), Value(Coin.ada(20), token))),
+          // totalCollateral = net collateral (inputs - return)
+          // 30000000 + 30000000 - 20000000 = 40000000
+          Some(Coin(40000000L))
+        )
+        // The return takes the token back, so only ada stays in the collateral.
+        val utxos = collateralUtxos(second = Value(Coin.ada(30), token))
+
+        val result = validate(FeesOkValidator, utxos, transaction)
         assert(result.isRight)
     }
 
     test(
       "FeesOkValidator If the total ExUnits are 0 in both Memory and Steps, no further part needs to be checked"
     ) {
-        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
-          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
-        )
+        // No collateral input: the rule would fail at part 7 if it checked further.
+        val transaction = collateralTx(Seq.empty, None, None, redeemers = Seq.empty)
 
-        val context = Context()
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.empty,
-                  collateralReturnOutput = None,
-                  totalCollateral = None,
-                  fee = Coin(10000000L),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  mint = None,
-                  votingProcedures = None,
-                  withdrawals = None,
-                  proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              auxiliaryData = None,
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet.empty,
-                  bootstrapWitnesses = TaggedSortedSet.empty,
-                  nativeScripts = TaggedSortedMap.empty,
-                  plutusV1Scripts = TaggedSortedStrictMap.empty,
-                  plutusV2Scripts = TaggedSortedStrictMap.empty,
-                  plutusV3Scripts = TaggedSortedStrictMap.empty,
-                  plutusData = KeepRaw(TaggedSortedMap.empty),
-                  redeemers = None
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val result = validate(FeesOkValidator, Map.empty, transaction)
         assert(result.isRight)
     }
 
     test("FeesOkValidator feePaidIsGreeterOrEqualThanMinimumFee rule failure") {
-        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
-          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
+        val transaction = collateralTx(
+          Seq(input(1), input(2)),
+          Some(Output(keyAddress(3), Value(Coin.ada(20)))),
+          Some(Coin.ada(40)),
+          fee = Coin(1L)
         )
+        val utxos = collateralUtxos()
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
-                  collateralReturnOutput = Some(
-                    Sized(
-                      Output(
-                        Arbitrary.arbitrary[ShelleyAddress].sample.get,
-                        Value(Coin(20000000L))
-                      )
-                    )
-                  ),
-                  totalCollateral = Some(Coin(60000000L)),
-                  fee = Coin(1L),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  mint = None,
-                  votingProcedures = None,
-                  withdrawals = None,
-                  proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              auxiliaryData = None,
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet.empty,
-                  bootstrapWitnesses = TaggedSortedSet.empty,
-                  nativeScripts = TaggedSortedMap.empty,
-                  plutusV1Scripts = TaggedSortedStrictMap.empty,
-                  plutusV2Scripts = TaggedSortedStrictMap.empty,
-                  plutusV3Scripts = TaggedSortedStrictMap.empty,
-                  plutusData = KeepRaw(TaggedSortedMap.empty),
-                  redeemers = Some(
-                    KeepRaw(
-                      Redeemers.Array(
-                        IndexedSeq(
-                          Redeemer(
-                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                            index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.uplc.builtin.Data.unit,
-                            exUnits = genScriptExUnits.sample.get
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            )
-          )
-        )
-
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val result = validate(FeesOkValidator, utxos, transaction)
         assert(result.isLeft)
     }
 
     test("FeesOkValidator collateralConsistsOnlyOfVKeyAddress rule failure") {
-        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
-          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
+        val transaction = collateralTx(Seq(input(1), input(2)), None, None)
+        val utxos = Map(
+          input(1) -> Output(keyAddress(1), Value(Coin.ada(20))),
+          input(2) -> Output(scriptAddress(scriptHash(2)), Value(Coin.ada(20)))
         )
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
-                  collateralReturnOutput = None,
-                  totalCollateral = None,
-                  fee = Coin(10000000L),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  mint = None,
-                  votingProcedures = None,
-                  withdrawals = None,
-                  proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              auxiliaryData = None,
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet.empty,
-                  bootstrapWitnesses = TaggedSortedSet.empty,
-                  nativeScripts = TaggedSortedMap.empty,
-                  plutusV1Scripts = TaggedSortedStrictMap.empty,
-                  plutusV2Scripts = TaggedSortedStrictMap.empty,
-                  plutusV3Scripts = TaggedSortedStrictMap.empty,
-                  plutusData = KeepRaw(TaggedSortedMap.empty),
-                  redeemers = Some(
-                    KeepRaw(
-                      Redeemers.Array(
-                        IndexedSeq(
-                          Redeemer(
-                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                            index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.uplc.builtin.Data.unit,
-                            exUnits = genScriptExUnits.sample.get
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(20000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Script(
-                        Arbitrary.arbitrary[ScriptHash].sample.get
-                      )
-                  ),
-              Value(Coin(20000000L))
-            )
-          )
-        )
-
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val result = validate(FeesOkValidator, utxos, transaction)
         assert(result.isLeft)
     }
 
     test(
       "FeesOkValidator collateralDoesNotContainAnyNonADA rule failure when collateralReturnOutput has more tokens than collaterals"
     ) {
-        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
-          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
+        val transaction = collateralTx(
+          Seq(input(1), input(2)),
+          Some(Output(keyAddress(3), Value(Coin.ada(20), token))),
+          Some(Coin.ada(40))
         )
+        val utxos = collateralUtxos()
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
-                  collateralReturnOutput = Some(
-                    Sized(
-                      Output(
-                        Arbitrary.arbitrary[ShelleyAddress].sample.get,
-                        Value(
-                          Coin(20000000L),
-                          genMultiAsset(
-                            minPolicies = 1,
-                            maxPolicies = 4,
-                            minAssets = 1,
-                            maxAssets = 4
-                          ).sample.get
-                        )
-                      )
-                    )
-                  ),
-                  totalCollateral = Some(Coin(60000000L)),
-                  fee = Coin(10000000L),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  mint = None,
-                  votingProcedures = None,
-                  withdrawals = None,
-                  proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              auxiliaryData = None,
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet.empty,
-                  bootstrapWitnesses = TaggedSortedSet.empty,
-                  nativeScripts = TaggedSortedMap.empty,
-                  plutusV1Scripts = TaggedSortedStrictMap.empty,
-                  plutusV2Scripts = TaggedSortedStrictMap.empty,
-                  plutusV3Scripts = TaggedSortedStrictMap.empty,
-                  plutusData = KeepRaw(TaggedSortedMap.empty),
-                  redeemers = Some(
-                    KeepRaw(
-                      Redeemers.Array(
-                        IndexedSeq(
-                          Redeemer(
-                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                            index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.uplc.builtin.Data.unit,
-                            exUnits = genScriptExUnits.sample.get
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            )
-          )
-        )
-
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val result = validate(FeesOkValidator, utxos, transaction)
         assert(result.isLeft)
     }
 
     test(
       "FeesOkValidator collateralDoesNotContainAnyNonADA rule failure when collateralReturnOutput has less tokens than collaterals"
     ) {
-        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
-          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
+        val transaction = collateralTx(
+          Seq(input(1), input(2)),
+          Some(Output(keyAddress(3), Value(Coin.ada(20)))),
+          Some(Coin.ada(40))
         )
+        val utxos = collateralUtxos(second = Value(Coin.ada(30), token))
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
-                  collateralReturnOutput = Some(
-                    Sized(
-                      Output(
-                        Arbitrary.arbitrary[ShelleyAddress].sample.get,
-                        Value(
-                          Coin(20000000L)
-                        )
-                      )
-                    )
-                  ),
-                  totalCollateral = Some(Coin(60000000L)),
-                  fee = Coin(10000000L),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  mint = None,
-                  votingProcedures = None,
-                  withdrawals = None,
-                  proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              auxiliaryData = None,
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet.empty,
-                  bootstrapWitnesses = TaggedSortedSet.empty,
-                  nativeScripts = TaggedSortedMap.empty,
-                  plutusV1Scripts = TaggedSortedStrictMap.empty,
-                  plutusV2Scripts = TaggedSortedStrictMap.empty,
-                  plutusV3Scripts = TaggedSortedStrictMap.empty,
-                  plutusData = KeepRaw(TaggedSortedMap.empty),
-                  redeemers = Some(
-                    KeepRaw(
-                      Redeemers.Array(
-                        IndexedSeq(
-                          Redeemer(
-                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                            index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.uplc.builtin.Data.unit,
-                            exUnits = genScriptExUnits.sample.get
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(
-                Coin(30000000L),
-                genMultiAsset(
-                  minPolicies = 1,
-                  maxPolicies = 4,
-                  minAssets = 1,
-                  maxAssets = 4
-                ).sample.get
-              )
-            )
-          )
-        )
-
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val result = validate(FeesOkValidator, utxos, transaction)
         assert(result.isLeft)
     }
 
     test("FeesOkValidator totalSumOfCollateralCoinsIsSufficient rule failure") {
-        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
-          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
+        // The return takes all 60 ada back, so the net collateral is 0.
+        val transaction = collateralTx(
+          Seq(input(1), input(2)),
+          Some(Output(keyAddress(3), Value(Coin.ada(60)))),
+          Some(Coin.zero)
         )
+        val utxos = collateralUtxos()
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
-                  collateralReturnOutput = Some(
-                    Sized(
-                      Output(
-                        Arbitrary.arbitrary[ShelleyAddress].sample.get,
-                        Value(Coin(60000000L))
-                      )
-                    )
-                  ),
-                  totalCollateral = Some(Coin(60000000L)),
-                  fee = Coin(10000000L),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  mint = None,
-                  votingProcedures = None,
-                  withdrawals = None,
-                  proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              auxiliaryData = None,
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet.empty,
-                  bootstrapWitnesses = TaggedSortedSet.empty,
-                  nativeScripts = TaggedSortedMap.empty,
-                  plutusV1Scripts = TaggedSortedStrictMap.empty,
-                  plutusV2Scripts = TaggedSortedStrictMap.empty,
-                  plutusV3Scripts = TaggedSortedStrictMap.empty,
-                  plutusData = KeepRaw(TaggedSortedMap.empty),
-                  redeemers = Some(
-                    KeepRaw(
-                      Redeemers.Array(
-                        IndexedSeq(
-                          Redeemer(
-                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                            index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.uplc.builtin.Data.unit,
-                            exUnits = genScriptExUnits.sample.get
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            )
-          )
-        )
-
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val result = validate(FeesOkValidator, utxos, transaction)
         assert(result.isLeft)
     }
 
     test("FeesOkValidator totalSumOfCollateralCoinsIsEquivalentToTotalCollateral rule failure") {
-        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
-          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
+        // The net collateral is 40 ada.
+        val transaction = collateralTx(
+          Seq(input(1), input(2)),
+          Some(Output(keyAddress(3), Value(Coin.ada(20)))),
+          Some(Coin.ada(50))
         )
+        val utxos = collateralUtxos()
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
-                  collateralReturnOutput = Some(
-                    Sized(
-                      Output(
-                        Arbitrary.arbitrary[ShelleyAddress].sample.get,
-                        Value(Coin(20000000L))
-                      )
-                    )
-                  ),
-                  totalCollateral = Some(Coin(50000000L)),
-                  fee = Coin(10000000L),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  mint = None,
-                  votingProcedures = None,
-                  withdrawals = None,
-                  proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              auxiliaryData = None,
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet.empty,
-                  bootstrapWitnesses = TaggedSortedSet.empty,
-                  nativeScripts = TaggedSortedMap.empty,
-                  plutusV1Scripts = TaggedSortedStrictMap.empty,
-                  plutusV2Scripts = TaggedSortedStrictMap.empty,
-                  plutusV3Scripts = TaggedSortedStrictMap.empty,
-                  plutusData = KeepRaw(TaggedSortedMap.empty),
-                  redeemers = Some(
-                    KeepRaw(
-                      Redeemers.Array(
-                        IndexedSeq(
-                          Redeemer(
-                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                            index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.uplc.builtin.Data.unit,
-                            exUnits = genScriptExUnits.sample.get
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            )
-          )
-        )
-
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val result = validate(FeesOkValidator, utxos, transaction)
         assert(result.isLeft)
     }
 
     test("FeesOkValidator isAtLeastOneCollateralInput rule failure") {
-        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
-          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
-        )
+        val transaction = collateralTx(Seq.empty, None, None)
 
-        val context = Context()
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.empty,
-                  collateralReturnOutput = None,
-                  totalCollateral = None,
-                  fee = Coin(10000000L),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  mint = None,
-                  votingProcedures = None,
-                  withdrawals = None,
-                  proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              auxiliaryData = None,
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet.empty,
-                  bootstrapWitnesses = TaggedSortedSet.empty,
-                  nativeScripts = TaggedSortedMap.empty,
-                  plutusV1Scripts = TaggedSortedStrictMap.empty,
-                  plutusV2Scripts = TaggedSortedStrictMap.empty,
-                  plutusV3Scripts = TaggedSortedStrictMap.empty,
-                  plutusData = KeepRaw(TaggedSortedMap.empty),
-                  redeemers = Some(
-                    KeepRaw(
-                      Redeemers.Array(
-                        IndexedSeq(
-                          Redeemer(
-                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                            index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.uplc.builtin.Data.unit,
-                            exUnits = genScriptExUnits.sample.get
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val result = validate(FeesOkValidator, Map.empty, transaction)
         assert(result.isLeft)
     }
 
@@ -860,42 +157,22 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         // Two collateral inputs hold Long.MaxValue of a token each, and the return takes one of
         // them back, so Long.MaxValue of the token stays in the collateral. The sum of the inputs
         // does not fit in a Long.
-        val (_, publicKey) = generateKeyPair()
-        val keyAddress = Arbitrary
-            .arbitrary[ShelleyAddress]
-            .sample
-            .get
-            .copy(payment = ShelleyPaymentPart.Key(Hash(platform.blake2b_224(publicKey))))
-        val token = MultiAsset.asset(
-          Arbitrary.arbitrary[PolicyId].sample.get,
-          Arbitrary.arbitrary[AssetName].sample.get,
-          Long.MaxValue
+        val maxToken =
+            MultiAsset.asset(scriptHash(1), AssetName.fromString("token"), Long.MaxValue)
+        val transaction = collateralTx(
+          Seq(input(1), input(2)),
+          Some(Output(keyAddress(1), Value(Coin.ada(20), maxToken))),
+          None,
+          redeemers = Seq(Redeemer(RedeemerTag.Spend, 0, Data.unit, ExUnits(1000, 1000)))
         )
-        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val redeemer = Redeemer(RedeemerTag.Spend, 0, Data.unit, ExUnits(1000, 1000))
-        val transaction = Transaction(
-          body = TransactionBody(
-            inputs = TaggedSortedSet.empty,
-            outputs = IndexedSeq.empty,
-            fee = Coin.ada(10),
-            collateralInputs = TaggedSortedSet(collateralInput1, collateralInput2),
-            collateralReturnOutput = Some(Sized(Output(keyAddress, Value(Coin.ada(20), token))))
-          ),
-          witnessSet = TransactionWitnessSet.empty.copy(redeemers =
-              Some(KeepRaw(Redeemers.Array(IndexedSeq(redeemer))))
-          )
-        )
-        val state = State(utxos =
-            Map(
-              collateralInput1 -> Output(keyAddress, Value(Coin.ada(30), token)),
-              collateralInput2 -> Output(keyAddress, Value(Coin.ada(30), token))
-            )
+        val utxos = Map(
+          input(1) -> Output(keyAddress(1), Value(Coin.ada(30), maxToken)),
+          input(2) -> Output(keyAddress(1), Value(Coin.ada(30), maxToken))
         )
 
-        FeesOkValidator.validate(Context(), state, transaction) match
+        validate(FeesOkValidator, utxos, transaction) match
             case Left(error: TransactionException.FeesOkException) =>
-                assert(error.remainingAssets == token)
+                assert(error.remainingAssets == maxToken)
                 assert(error.actualTotalSumOfCollateralCoins == Coin.ada(40))
             case other => fail(s"expected FeesOkException, got $other")
     }
@@ -903,7 +180,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     /** The exact script fee of `count` redeemers at `ExUnits.enormous`, as cardano-ledger
       * `txscriptfee` computes it: one ceiling over the unbounded sum.
       */
-    private def exactEnormousScriptFee(prices: ExUnitPrices, count: Int): BigInt = {
+    private def exactEnormousScriptFee(count: Int): BigInt = {
+        val prices = Context().env.params.executionUnitPrices
         val units = BigInt(Long.MaxValue) * count
         val pm = prices.priceMemory
         val ps = prices.priceSteps
@@ -915,33 +193,16 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     /** FeesOkValidator on a transaction with `count` redeemers at `ExUnits.enormous`. */
     private def validateEnormousRedeemers(count: Int): FeesOkValidator.Result = {
-        val (_, publicKey) = generateKeyPair()
-        val keyAddress = Arbitrary
-            .arbitrary[ShelleyAddress]
-            .sample
-            .get
-            .copy(payment = ShelleyPaymentPart.Key(Hash(platform.blake2b_224(publicKey))))
-        val collateralInput = Arbitrary.arbitrary[TransactionInput].sample.get
         val redeemers = IndexedSeq.tabulate(count) { index =>
             Redeemer(RedeemerTag.Spend, index, Data.unit, ExUnits.enormous)
         }
-        val transaction = Transaction(
-          body = TransactionBody(
-            inputs = TaggedSortedSet.empty,
-            outputs = IndexedSeq.empty,
-            fee = Coin.ada(10),
-            collateralInputs = TaggedSortedSet(collateralInput)
-          ),
-          witnessSet = TransactionWitnessSet.empty.copy(redeemers =
-              Some(KeepRaw(Redeemers.Array(redeemers)))
-          )
-        )
-        val state = State(utxos = Map(collateralInput -> Output(keyAddress, Value(Coin.ada(30)))))
-        FeesOkValidator.validate(Context(), state, transaction)
+        val transaction = collateralTx(Seq(input(1)), None, None, redeemers = redeemers)
+        val utxos = Map(input(1) -> Output(keyAddress(1), Value.ada(30)))
+        validate(FeesOkValidator, utxos, transaction)
     }
 
     test("FeesOkValidator reports the exact min fee for one redeemer at Long.MaxValue units") {
-        val scriptFee = exactEnormousScriptFee(Context().env.params.executionUnitPrices, 1)
+        val scriptFee = exactEnormousScriptFee(1)
         validateEnormousRedeemers(1) match
             case Left(error: TransactionException.FeesOkException) =>
                 val sizeFee = BigInt(error.minRequiredFee.value) - scriptFee
@@ -952,7 +213,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("FeesOkValidator sums redeemer units without saturation") {
         // Two redeemers at Long.MaxValue: the ledger sums them as Natural, so the script fee
         // is twice that of one redeemer, and it still fits in a Long.
-        val scriptFee = exactEnormousScriptFee(Context().env.params.executionUnitPrices, 2)
+        val scriptFee = exactEnormousScriptFee(2)
         assert(scriptFee.isValidLong)
         validateEnormousRedeemers(2) match
             case Left(error: TransactionException.FeesOkException) =>
@@ -962,7 +223,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("FeesOkValidator rejects a min fee past Long.MaxValue without an exception") {
-        val scriptFee = exactEnormousScriptFee(Context().env.params.executionUnitPrices, 20)
+        val scriptFee = exactEnormousScriptFee(20)
         assert(!scriptFee.isValidLong)
         validateEnormousRedeemers(20) match
             case Left(error: TransactionException.FeesOkException) =>

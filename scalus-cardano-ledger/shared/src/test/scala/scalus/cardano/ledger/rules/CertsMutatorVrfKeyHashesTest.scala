@@ -7,9 +7,11 @@ import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 
 /** The VRF key map of the POOL step, spec [BK-4] to [BK-6], [BK-8]. */
-class CertsMutatorVrfKeyHashesTest extends AnyFunSuite with Matchers with EitherValues {
-
-    private val cardanoInfo = CardanoInfo.preprod
+class CertsMutatorVrfKeyHashesTest
+    extends AnyFunSuite
+    with Matchers
+    with EitherValues
+    with CertsTestKit {
 
     private val vrf1 = VrfKeyHash.fromHex("a1" * 32)
     private val vrf2 = VrfKeyHash.fromHex("a2" * 32)
@@ -17,52 +19,28 @@ class CertsMutatorVrfKeyHashesTest extends AnyFunSuite with Matchers with Either
     private val operatorA = AddrKeyHash.fromHex("1" * 56)
     private val operatorB = AddrKeyHash.fromHex("2" * 56)
     private val poolA = PoolKeyHash.fromByteString(operatorA)
+    private val rewardAccount = RewardAccount(
+      StakeAddress(Network.Testnet, StakePayload.Stake(StakeKeyHash.fromHex("b" * 56)))
+    )
 
     private def registration(
         operator: AddrKeyHash,
         vrf: VrfKeyHash
     ): Certificate.PoolRegistration =
-        Certificate.PoolRegistration(
-          operator = operator,
-          vrfKeyHash = vrf,
-          pledge = Coin.ada(1),
-          cost = Coin(cardanoInfo.protocolParams.minPoolCost),
-          margin = UnitInterval.one,
-          rewardAccount = RewardAccount(
-            StakeAddress(Network.Testnet, StakePayload.Stake(StakeKeyHash.fromHex("b" * 56)))
-          ),
-          poolOwners = Set.empty,
-          relays = IndexedSeq.empty,
-          poolMetadata = None
-        )
+        poolRegistration(operator, rewardAccount, vrfKeyHash = vrf)
 
     private def run(
         major: Int,
         certState: CertState,
         certs: Certificate*
-    ): Either[TransactionException, CertState] = {
-        val params =
-            cardanoInfo.protocolParams.copy(protocolVersion = ProtocolVersion(major, 0))
-        val context = new Context(
-          env = UtxoEnv(
-            slot = 0,
-            params = params,
-            certState = certState,
-            network = Network.Testnet,
-            treasury = Coin.zero
-          ),
-          slotConfig = cardanoInfo.slotConfig
-        )
-        val tx = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.empty,
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            certificates = TaggedOrderedStrictSet.from(certs)
-          )
-        )
-        CertsMutator.transit(context, State(certState = certState), tx).map(_.certState)
-    }
+    ): Either[TransactionException, CertState] =
+        CertsMutator
+            .transit(
+              context(certState, protocolMajor = major),
+              State(certState = certState),
+              certTx(certs*)
+            )
+            .map(_.certState)
 
     private def registered(certs: Certificate*): CertState =
         run(11, CertState.empty, certs*).value

@@ -6,75 +6,38 @@ import org.scalatest.matchers.should.Matchers
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 
-class StakeCertificatesMutatorTest extends AnyFunSuite with Matchers with EitherValues {
+class StakeCertificatesMutatorTest
+    extends AnyFunSuite
+    with Matchers
+    with EitherValues
+    with CertsTestKit {
 
-    private val cardanoInfo = CardanoInfo.preprod
-    private val protocolParams = cardanoInfo.protocolParams
-    private val keyDeposit = Coin(protocolParams.stakeAddressDeposit)
     private val credential =
         Credential.KeyHash(AddrKeyHash.fromHex("b" * 56))
     private val poolId = PoolKeyHash.fromHex("2" * 56)
     private val drep = DRep.KeyHash(AddrKeyHash.fromHex("3" * 56))
 
-    private val poolRegistration: Certificate.PoolRegistration = Certificate.PoolRegistration(
-      operator = AddrKeyHash.fromHex("2" * 56),
-      vrfKeyHash = VrfKeyHash.fromHex("a" * 64),
-      pledge = Coin.ada(100),
-      cost = Coin(protocolParams.minPoolCost),
-      margin = UnitInterval.one,
-      rewardAccount = RewardAccount(
+    private val pool: Certificate.PoolRegistration = poolRegistration(
+      AddrKeyHash.fromHex("2" * 56),
+      RewardAccount(
         StakeAddress(Network.Testnet, StakePayload.Stake(StakeKeyHash.fromHex("b" * 56)))
       ),
-      poolOwners = Set.empty,
-      relays = IndexedSeq.empty,
-      poolMetadata = None
+      pledge = Coin.ada(100)
     )
 
     /** The delegation targets: the pool and the DRep are registered, spec [SC-4], [SC-5]. */
-    private val targets = CertState.empty.copy(
-      vstate = VotingState.empty.copy(dreps =
-          Map(
-            Credential.KeyHash(AddrKeyHash.fromHex("3" * 56)) ->
-                DRepState(100, None, Coin(protocolParams.dRepDeposit), Set.empty)
-          )
-      ),
-      pstate = PoolsState.empty.copy(stakePools = Map(poolId -> poolRegistration))
+    private val targets = certState(
+      pools = Map(poolId -> pool),
+      dreps = Map(
+        Credential.KeyHash(AddrKeyHash.fromHex("3" * 56)) ->
+            DRepState(100, None, Coin(params.dRepDeposit), Set.empty)
+      )
     )
-
-    private val emptyInputs = TaggedSortedSet.empty[TransactionInput]
-    private val emptyOutputs = IndexedSeq.empty[Sized[TransactionOutput]]
-
-    private def mkContext(certState: CertState): Context =
-        new Context(
-          env = UtxoEnv(
-            slot = 0,
-            params = protocolParams,
-            certState = certState,
-            network = Network.Testnet,
-            treasury = Coin.zero
-          ),
-          slotConfig = cardanoInfo.slotConfig
-        )
-
-    private def toTx(certs: Seq[Certificate]): Transaction =
-        Transaction(
-          TransactionBody(
-            inputs = emptyInputs,
-            outputs = emptyOutputs,
-            fee = Coin.zero,
-            certificates = TaggedOrderedStrictSet.from(certs)
-          )
-        )
 
     private def runMutator(
         certs: Seq[Certificate],
-        certState: CertState = CertState.empty
-    ) =
-        CertsMutator.transit(
-          mkContext(certState),
-          State(certState = certState),
-          toTx(certs)
-        )
+        state: CertState = CertState.empty
+    ) = CertsMutator.transit(context(state), State(certState = state), certTx(certs*))
 
     test("register certificate adds an account with the deposit and a zero balance") {
         val result =
@@ -96,9 +59,7 @@ class StakeCertificatesMutatorTest extends AnyFunSuite with Matchers with Either
 
     test("delegation updates without changing the deposit or the balance") {
         val initialState = targets.copy(
-          dstate = DelegationState(
-            Map(credential -> ConwayAccountState(Coin(5), keyDeposit, None, None))
-          )
+          dstate = DelegationState(Map(credential -> accountState(Coin(5))))
         )
         val result =
             runMutator(Seq(Certificate.StakeDelegation(credential, poolId)), initialState).value
@@ -108,10 +69,8 @@ class StakeCertificatesMutatorTest extends AnyFunSuite with Matchers with Either
     }
 
     test("deregistration removes the account") {
-        val initialState = CertState.empty.copy(
-          dstate = DelegationState(
-            Map(credential -> ConwayAccountState(Coin.zero, keyDeposit, Some(poolId), Some(drep)))
-          )
+        val initialState = certState(accounts =
+            Map(credential -> accountState(Coin.zero, Some(poolId), Some(drep)))
         )
 
         val result =

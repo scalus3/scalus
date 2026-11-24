@@ -1,642 +1,200 @@
 package scalus.cardano.ledger
 package rules
 
-import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.{Address, Network, ShelleyAddress}
-import scalus.uplc.builtin.platform
+import scalus.testing.kit.Party
+import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import TransactionWitnessSet.given
 
 class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("NativeScriptsValidator success with no native scripts") {
-        val context = Context()
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            referenceInputs = TaggedSortedSet.empty,
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero
-          )
-        )
-        val state = State(utxos = utxo)
 
-        val result = NativeScriptsValidator.validate(context, state, transaction)
-        assert(result.isRight)
+    /** The UTxO that the transactions of this suite spend, locked by `script`. */
+    private def lockedBy(script: Timelock): Utxos =
+        Map(scriptUtxo(input(0), script.scriptHash))
+
+    /** A transaction with `body` that provides `script` and a signature of each of `signers` over
+      * its id.
+      */
+    private def withScript(body: TransactionBody, script: Timelock, signers: Party*) = {
+        val unsigned = Transaction(
+          body,
+          TransactionWitnessSet(nativeScripts = TaggedSortedMap(Script.Native(script)))
+        )
+        signers.foldLeft(unsigned)((tx, party) => party.signer.sign(tx))
     }
 
-    test("NativeScriptsValidator success with valid Signature native script") {
-        val context = Context()
-        val (privateKey, publicKey) = generateKeyPair()
-        val hash = AddrKeyHash(platform.blake2b_224(publicKey))
-        val nativeScript = Timelock.Signature(hash)
+    private val spendBody: TransactionBody = emptyBody.copy(inputs = TaggedSortedSet(input(0)))
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
+    /** A transaction that spends the UTxO of `script` and is signed by `signers`. */
+    private def spending(script: Timelock, signers: Party*): Transaction =
+        withScript(spendBody, script, signers*)
 
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(Set(input)),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  fee = Coin.zero
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey, platform.signEd25519(privateKey, tx.id))
-                  ),
-                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-                )
-              )
-            )
-        }
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
-        assert(result.isRight)
-    }
-
-    test("NativeScriptsValidator failure with invalid Signature native script") {
-        val context = Context()
-        val (_, publicKey) = generateKeyPair()
-        val hash = AddrKeyHash(platform.blake2b_224(publicKey))
-        val nativeScript = Timelock.Signature(hash)
-
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            referenceInputs = TaggedSortedSet.empty,
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero
-          ),
-          TransactionWitnessSet(
-            nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-          )
-        )
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
+    private def assertNativeScriptsFailure(result: NativeScriptsValidator.Result): Unit = {
         assert(result.isLeft)
         assert(
           result.left.exists(_.isInstanceOf[TransactionException.NativeScriptsException])
         )
     }
 
+    test("NativeScriptsValidator success with no native scripts") {
+        val utxo = Map(input(0) -> Output(keyAddress(1), Value(Coin(1000000L))))
+        val transaction = Transaction(spendBody)
+
+        val result = validate(NativeScriptsValidator, utxo, transaction)
+        assert(result.isRight)
+    }
+
+    test("NativeScriptsValidator success with valid Signature native script") {
+        val nativeScript = Timelock.Signature(Alice.addrKeyHash)
+
+        val result =
+            validate(NativeScriptsValidator, lockedBy(nativeScript), spending(nativeScript, Alice))
+        assert(result.isRight)
+    }
+
+    test("NativeScriptsValidator failure with invalid Signature native script") {
+        val nativeScript = Timelock.Signature(Alice.addrKeyHash)
+
+        val result =
+            validate(NativeScriptsValidator, lockedBy(nativeScript), spending(nativeScript))
+        assertNativeScriptsFailure(result)
+    }
+
     test("NativeScriptsValidator success with AllOf native script") {
-        val context = Context()
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-        val hash1 = AddrKeyHash(platform.blake2b_224(publicKey1))
-        val hash2 = AddrKeyHash(platform.blake2b_224(publicKey2))
-
         val nativeScript = Timelock.AllOf(
-          IndexedSeq(
-            Timelock.Signature(hash1),
-            Timelock.Signature(hash2)
-          )
+          IndexedSeq(Timelock.Signature(Alice.addrKeyHash), Timelock.Signature(Bob.addrKeyHash))
         )
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
+        val result = validate(
+          NativeScriptsValidator,
+          lockedBy(nativeScript),
+          spending(nativeScript, Alice, Bob)
         )
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(Set(input)),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  fee = Coin.zero
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
-                  ),
-                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-                )
-              )
-            )
-        }
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
         assert(result.isRight)
     }
 
     test(
       "NativeScriptsValidator failure with AllOf native script missing one signature"
     ) {
-        val context = Context()
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (_, publicKey2) = generateKeyPair()
-        val hash1 = AddrKeyHash(platform.blake2b_224(publicKey1))
-        val hash2 = AddrKeyHash(platform.blake2b_224(publicKey2))
-
         val nativeScript = Timelock.AllOf(
-          IndexedSeq(
-            Timelock.Signature(hash1),
-            Timelock.Signature(hash2)
-          )
+          IndexedSeq(Timelock.Signature(Alice.addrKeyHash), Timelock.Signature(Bob.addrKeyHash))
         )
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(Set(input)),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  fee = Coin.zero
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
-                  ),
-                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-                )
-              )
-            )
-        }
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
-        assert(result.isLeft)
-        assert(
-          result.left.exists(_.isInstanceOf[TransactionException.NativeScriptsException])
-        )
+        val result =
+            validate(NativeScriptsValidator, lockedBy(nativeScript), spending(nativeScript, Alice))
+        assertNativeScriptsFailure(result)
     }
 
     test("NativeScriptsValidator success with AnyOf native script") {
-        val context = Context()
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (_, publicKey2) = generateKeyPair()
-        val hash1 = AddrKeyHash(platform.blake2b_224(publicKey1))
-        val hash2 = AddrKeyHash(platform.blake2b_224(publicKey2))
-
         val nativeScript = Timelock.AnyOf(
-          IndexedSeq(
-            Timelock.Signature(hash1),
-            Timelock.Signature(hash2)
-          )
+          IndexedSeq(Timelock.Signature(Alice.addrKeyHash), Timelock.Signature(Bob.addrKeyHash))
         )
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(Set(input)),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  fee = Coin.zero
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
-                  ),
-                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-                )
-              )
-            )
-        }
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
+        val result =
+            validate(NativeScriptsValidator, lockedBy(nativeScript), spending(nativeScript, Alice))
         assert(result.isRight)
     }
 
     test(
       "NativeScriptsValidator failure with AnyOf native script no matching signatures"
     ) {
-        val context = Context()
-        val (_, publicKey1) = generateKeyPair()
-        val (_, publicKey2) = generateKeyPair()
-        val hash1 = AddrKeyHash(platform.blake2b_224(publicKey1))
-        val hash2 = AddrKeyHash(platform.blake2b_224(publicKey2))
-
         val nativeScript = Timelock.AnyOf(
-          IndexedSeq(
-            Timelock.Signature(hash1),
-            Timelock.Signature(hash2)
-          )
+          IndexedSeq(Timelock.Signature(Alice.addrKeyHash), Timelock.Signature(Bob.addrKeyHash))
         )
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            referenceInputs = TaggedSortedSet.empty,
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero
-          ),
-          TransactionWitnessSet(
-            nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-          )
-        )
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
-        assert(result.isLeft)
-        assert(
-          result.left.exists(_.isInstanceOf[TransactionException.NativeScriptsException])
-        )
+        val result =
+            validate(NativeScriptsValidator, lockedBy(nativeScript), spending(nativeScript))
+        assertNativeScriptsFailure(result)
     }
 
     test("NativeScriptsValidator success with MOf native script") {
-        val context = Context()
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-        val (_, publicKey3) = generateKeyPair()
-        val hash1 = AddrKeyHash(platform.blake2b_224(publicKey1))
-        val hash2 = AddrKeyHash(platform.blake2b_224(publicKey2))
-        val hash3 = AddrKeyHash(platform.blake2b_224(publicKey3))
-
         val nativeScript = Timelock.MOf(
           2,
           IndexedSeq(
-            Timelock.Signature(hash1),
-            Timelock.Signature(hash2),
-            Timelock.Signature(hash3)
+            Timelock.Signature(Alice.addrKeyHash),
+            Timelock.Signature(Bob.addrKeyHash),
+            Timelock.Signature(Charles.addrKeyHash)
           )
         )
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
+        val result = validate(
+          NativeScriptsValidator,
+          lockedBy(nativeScript),
+          spending(nativeScript, Alice, Bob)
         )
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(Set(input)),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  fee = Coin.zero
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
-                  ),
-                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-                )
-              )
-            )
-        }
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
         assert(result.isRight)
     }
 
     test("NativeScriptsValidator failure with MOf native script insufficient signatures") {
-        val context = Context()
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (_, publicKey2) = generateKeyPair()
-        val (_, publicKey3) = generateKeyPair()
-        val hash1 = AddrKeyHash(platform.blake2b_224(publicKey1))
-        val hash2 = AddrKeyHash(platform.blake2b_224(publicKey2))
-        val hash3 = AddrKeyHash(platform.blake2b_224(publicKey3))
-
         val nativeScript = Timelock.MOf(
           2,
           IndexedSeq(
-            Timelock.Signature(hash1),
-            Timelock.Signature(hash2),
-            Timelock.Signature(hash3)
+            Timelock.Signature(Alice.addrKeyHash),
+            Timelock.Signature(Bob.addrKeyHash),
+            Timelock.Signature(Charles.addrKeyHash)
           )
         )
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(Set(input)),
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq.empty,
-                  fee = Coin.zero
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
-                  ),
-                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-                )
-              )
-            )
-        }
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
-        assert(result.isLeft)
-        assert(
-          result.left.exists(_.isInstanceOf[TransactionException.NativeScriptsException])
-        )
+        val result =
+            validate(NativeScriptsValidator, lockedBy(nativeScript), spending(nativeScript, Alice))
+        assertNativeScriptsFailure(result)
     }
 
     test("NativeScriptsValidator success with TimeStart script within validity interval") {
-        val context = Context()
         val nativeScript = Timelock.TimeStart(100L)
+        val transaction =
+            withScript(spendBody.copy(validityStartSlot = Some(150L)), nativeScript)
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            referenceInputs = TaggedSortedSet.empty,
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            validityStartSlot = Some(150L)
-          ),
-          TransactionWitnessSet(
-            nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-          )
-        )
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
+        val result = validate(NativeScriptsValidator, lockedBy(nativeScript), transaction)
         assert(result.isRight)
     }
 
     test("NativeScriptsValidator failure with TimeStart script outside validity interval") {
-        val context = Context()
         val nativeScript = Timelock.TimeStart(100L)
+        val transaction =
+            withScript(spendBody.copy(validityStartSlot = Some(50L)), nativeScript)
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            validityStartSlot = Some(50L)
-          ),
-          TransactionWitnessSet(
-            nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-          )
-        )
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
-        assert(result.isLeft)
-        assert(
-          result.left.exists(_.isInstanceOf[TransactionException.NativeScriptsException])
-        )
+        val result = validate(NativeScriptsValidator, lockedBy(nativeScript), transaction)
+        assertNativeScriptsFailure(result)
     }
 
     test("NativeScriptsValidator success with TimeExpire script within validity interval") {
-        val context = Context()
         val nativeScript = Timelock.TimeExpire(200L)
+        val transaction = withScript(spendBody.copy(ttl = Some(150L)), nativeScript)
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            ttl = Some(150L)
-          ),
-          TransactionWitnessSet(
-            nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-          )
-        )
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
+        val result = validate(NativeScriptsValidator, lockedBy(nativeScript), transaction)
         assert(result.isRight)
     }
 
     test("NativeScriptsValidator failure with TimeExpire script outside validity interval") {
-        val context = Context()
         val nativeScript = Timelock.TimeExpire(100L)
+        val transaction = withScript(spendBody.copy(ttl = Some(150L)), nativeScript)
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            ttl = Some(150L)
-          ),
-          TransactionWitnessSet(
-            nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-          )
-        )
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
-        assert(result.isLeft)
-        assert(
-          result.left.exists(_.isInstanceOf[TransactionException.NativeScriptsException])
-        )
+        val result = validate(NativeScriptsValidator, lockedBy(nativeScript), transaction)
+        assertNativeScriptsFailure(result)
     }
 
     test("NativeScriptsValidator success with empty AllOf script") {
-        val context = Context()
         val nativeScript = Timelock.AllOf(IndexedSeq.empty)
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero
-          ),
-          TransactionWitnessSet(
-            nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-          )
-        )
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
+        val result =
+            validate(NativeScriptsValidator, lockedBy(nativeScript), spending(nativeScript))
         assert(result.isRight)
     }
 
     test("NativeScriptsValidator failure with empty AnyOf script") {
-        val context = Context()
         val nativeScript = Timelock.AnyOf(IndexedSeq.empty)
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero
-          ),
-          TransactionWitnessSet(
-            nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-          )
-        )
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
-        assert(result.isLeft)
-        assert(
-          result.left.exists(_.isInstanceOf[TransactionException.NativeScriptsException])
-        )
+        val result =
+            validate(NativeScriptsValidator, lockedBy(nativeScript), spending(nativeScript))
+        assertNativeScriptsFailure(result)
     }
 
     test("NativeScriptsValidator success with MOf script where m=0") {
-        val context = Context()
-        val (_, publicKey) = generateKeyPair()
-        val hash = AddrKeyHash(platform.blake2b_224(publicKey))
-        val nativeScript = Timelock.MOf(0, IndexedSeq(Timelock.Signature(hash)))
+        val nativeScript = Timelock.MOf(0, IndexedSeq(Timelock.Signature(Alice.addrKeyHash)))
 
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero
-          ),
-          TransactionWitnessSet(
-            nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
-          )
-        )
-
-        val state = State(utxos = utxo)
-
-        val result = NativeScriptsValidator.validate(context, state, transaction)
+        val result =
+            validate(NativeScriptsValidator, lockedBy(nativeScript), spending(nativeScript))
         assert(result.isRight)
     }
 }

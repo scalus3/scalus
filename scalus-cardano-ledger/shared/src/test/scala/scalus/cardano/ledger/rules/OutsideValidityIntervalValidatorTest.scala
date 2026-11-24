@@ -4,6 +4,17 @@ package rules
 import org.scalatest.funsuite.AnyFunSuite
 
 class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
+
+    // Each test sets its own slot, so it calls the validator with its own context, spec
+    // [kit.rules.own-context]. The rule reads only the validity interval of the transaction.
+    private def txWithin(validityInterval: ValidityInterval): Transaction =
+        txSpending(input(0))(TransactionWitnessSet.empty).withBody(
+          _.copy(
+            validityStartSlot = validityInterval.invalidBefore,
+            ttl = validityInterval.invalidHereafter
+          )
+        )
+
     test("OutsideValidityIntervalValidator ValidityInterval(None, None) success") {
         val context = Context()
 
@@ -12,17 +23,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
           invalidHereafter = None
         )
 
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  validityStartSlot = validityInterval.invalidBefore,
-                  ttl = validityInterval.invalidHereafter
-                )
-              )
-            )
-        }
+        val transaction = txWithin(validityInterval)
 
         val state = State()
 
@@ -40,17 +41,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
           invalidHereafter = Some(1000L)
         )
 
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  validityStartSlot = validityInterval.invalidBefore,
-                  ttl = validityInterval.invalidHereafter
-                )
-              )
-            )
-        }
+        val transaction = txWithin(validityInterval)
 
         val state = State()
 
@@ -68,17 +59,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
           invalidHereafter = Some(1000L)
         )
 
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  validityStartSlot = validityInterval.invalidBefore,
-                  ttl = validityInterval.invalidHereafter
-                )
-              )
-            )
-        }
+        val transaction = txWithin(validityInterval)
 
         val state = State()
 
@@ -96,17 +77,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
           invalidHereafter = None
         )
 
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  validityStartSlot = validityInterval.invalidBefore,
-                  ttl = validityInterval.invalidHereafter
-                )
-              )
-            )
-        }
+        val transaction = txWithin(validityInterval)
 
         val state = State()
 
@@ -124,17 +95,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
           invalidHereafter = None
         )
 
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  validityStartSlot = validityInterval.invalidBefore,
-                  ttl = validityInterval.invalidHereafter
-                )
-              )
-            )
-        }
+        val transaction = txWithin(validityInterval)
 
         val state = State()
 
@@ -152,17 +113,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
           invalidHereafter = Some(1000L)
         )
 
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  validityStartSlot = validityInterval.invalidBefore,
-                  ttl = validityInterval.invalidHereafter
-                )
-              )
-            )
-        }
+        val transaction = txWithin(validityInterval)
 
         val state = State()
 
@@ -180,17 +131,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
           invalidHereafter = Some(1000L)
         )
 
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  validityStartSlot = validityInterval.invalidBefore,
-                  ttl = validityInterval.invalidHereafter
-                )
-              )
-            )
-        }
+        val transaction = txWithin(validityInterval)
 
         val state = State()
 
@@ -208,17 +149,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
           invalidHereafter = Some(1000L)
         )
 
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  validityStartSlot = validityInterval.invalidBefore,
-                  ttl = validityInterval.invalidHereafter
-                )
-              )
-            )
-        }
+        val transaction = txWithin(validityInterval)
 
         val state = State()
 

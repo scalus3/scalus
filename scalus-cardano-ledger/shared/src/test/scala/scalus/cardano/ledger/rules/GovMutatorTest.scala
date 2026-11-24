@@ -17,19 +17,25 @@ import scala.collection.immutable.SortedMap
   * committee of two members, one with a hot key and one with a hot script, and one InfoAction that
   * expires after epoch 14.
   */
-class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with OptionValues {
+class GovMutatorTest
+    extends AnyFunSuite
+    with Matchers
+    with EitherValues
+    with OptionValues
+    with CertsTestKit {
 
-    private val slotConfig =
+    override lazy val slotConfig: SlotConfig =
         SlotConfig(zeroTime = 0, zeroSlot = 0, slotLength = 1000, epochLength = 100, zeroEpoch = 0)
-    private val baseParams = CardanoInfo.preprod.protocolParams.copy(govActionLifetime = 6)
-    private val deposit = Coin(baseParams.govActionDeposit)
+    override lazy val params: ProtocolParams =
+        CardanoInfo.preprod.protocolParams.copy(govActionLifetime = 6)
+    private val deposit = Coin(params.govActionDeposit)
 
-    private def rewardAccount(hex: String, network: Network = Network.Testnet): RewardAccount =
+    private def accountOf(hex: String, network: Network): RewardAccount =
         RewardAccount(StakeAddress(network, StakePayload.Stake(StakeKeyHash.fromHex(hex * 56))))
 
-    private val returnAccount = rewardAccount("e")
-    private val unregisteredAccount = rewardAccount("7")
-    private val mainnetReturnAccount = rewardAccount("e", Network.Mainnet)
+    private val returnAccount = accountOf("e", Network.Testnet)
+    private val unregisteredAccount = accountOf("7", Network.Testnet)
+    private val mainnetReturnAccount = accountOf("e", Network.Mainnet)
 
     private val drepA = Credential.KeyHash(AddrKeyHash.fromHex("a" * 56))
     private val drepB = Credential.KeyHash(AddrKeyHash.fromHex("b" * 56))
@@ -39,7 +45,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     private val scriptDRepHash = ScriptHash.fromHex("d" * 56)
     private val scriptDRep = Credential.ScriptHash(scriptDRepHash)
     private val scriptDRepVoter = Voter.DRepScript(scriptDRepHash)
-    private val drepState = DRepState(100, None, Coin(baseParams.dRepDeposit), Set.empty)
+    private val drepState = DRepState(100, None, Coin(params.dRepDeposit), Set.empty)
 
     private val operator = AddrKeyHash.fromHex("1" * 56)
     private val poolId = PoolKeyHash.fromByteString(operator)
@@ -59,11 +65,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
 
     private val guardrails = ScriptHash.fromHex("9" * 56)
     private val otherScript = ScriptHash.fromHex("8" * 56)
-    private val anchor = Anchor("https://example.com", DataHash.fromHex("0" * 64))
     private val constitution = Constitution(anchor, Some(guardrails))
-
-    private def actionId(n: Int): GovActionId =
-        GovActionId(TransactionHash.fromHex(f"$n%064x"), 0)
 
     private def pending(
         id: GovActionId,
@@ -75,24 +77,15 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
           Map.empty,
           Map.empty,
           Map.empty,
-          ProposalProcedure(deposit, returnAccount, action, anchor),
+          propose(action),
           expiresAfter - 6,
           expiresAfter
         )
 
-    private val infoId = actionId(1)
+    private val infoId = govActionId(1)
 
-    private val poolRegistration: Certificate.PoolRegistration = Certificate.PoolRegistration(
-      operator = operator,
-      vrfKeyHash = VrfKeyHash.fromHex("a1" * 32),
-      pledge = Coin.ada(1),
-      cost = Coin(baseParams.minPoolCost),
-      margin = UnitInterval.one,
-      rewardAccount = returnAccount,
-      poolOwners = Set.empty,
-      relays = IndexedSeq.empty,
-      poolMetadata = None
-    )
+    private val pool =
+        poolRegistration(operator, returnAccount, vrfKeyHash = VrfKeyHash.fromHex("a1" * 32))
 
     private val baseState: State = State(
       certState = CertState(
@@ -105,22 +98,13 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
           )
         ),
         pstate = PoolsState(
-          Map[PoolKeyHash, Certificate.PoolRegistration](poolId -> poolRegistration),
+          Map[PoolKeyHash, Certificate.PoolRegistration](poolId -> pool),
           Map.empty,
           Map.empty,
-          Map[PoolKeyHash, Coin](poolId -> Coin(baseParams.stakePoolDeposit)),
+          Map[PoolKeyHash, Coin](poolId -> Coin(params.stakePoolDeposit)),
           Map.empty
         ),
-        dstate = DelegationState(
-          Map(
-            returnAccount.address.credential -> ConwayAccountState(
-              Coin.zero,
-              Coin(baseParams.stakeAddressDeposit),
-              None,
-              None
-            )
-          )
-        )
+        dstate = DelegationState(Map(returnAccount.address.credential -> accountState(Coin.zero)))
       ),
       govState = GovState(
         Vector(pending(infoId, GovAction.InfoAction)),
@@ -133,11 +117,15 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     private def withGov(f: GovState => GovState): State =
         baseState.copy(govState = f(baseState.govState))
 
-    private def proposal(
+    /** Not the kit's `proposal`: the deposit is `govActionDeposit` and the default return account
+      * is registered.
+      */
+    private def propose(
         action: GovAction,
         account: RewardAccount = returnAccount
-    ): ProposalProcedure = ProposalProcedure(deposit, account, action, anchor)
+    ): ProposalProcedure = proposal(action, account, deposit)
 
+    /** `govTx` with the votes as (voter, action, vote) triples. */
     private def tx(
         proposals: Seq[ProposalProcedure] = Seq.empty,
         votes: Seq[(Voter, GovActionId, Vote)] = Seq.empty,
@@ -153,32 +141,8 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
                     })
                   )
                 )
-        Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.empty,
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            certificates =
-                if certs.isEmpty then TaggedOrderedStrictSet.empty
-                else TaggedOrderedStrictSet.from(certs),
-            votingProcedures = votingProcedures,
-            proposalProcedures =
-                if proposals.isEmpty then TaggedOrderedSet.empty
-                else TaggedOrderedSet.from(proposals)
-          )
-        )
+        govTx(proposals, votingProcedures, certs)
     }
-
-    private def context(state: State, major: Int, epoch: Long): Context = new Context(
-      env = UtxoEnv(
-        slot = slotConfig.firstSlotOfEpoch(epoch),
-        params = baseParams.copy(protocolVersion = ProtocolVersion(major, 0)),
-        certState = state.certState,
-        network = Network.Testnet,
-        treasury = Coin.zero
-      ),
-      slotConfig = slotConfig
-    )
 
     private def run(
         transaction: Transaction,
@@ -186,7 +150,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
         major: Int = 11,
         epoch: Long = 10
     ): Either[TransactionException, State] =
-        GovMutator.transit(context(state, major, epoch), state, transaction)
+        GovMutator.transit(context(state.certState, epochStart(epoch), major), state, transaction)
 
     /** A tx id for the tests of a vote or a parent that names a proposal of the same tx. A real tx
       * cannot name its own id, which is the hash of its body, so these tests give GOV the id.
@@ -197,7 +161,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
         transaction: Transaction,
         state: State = baseState
     ): Either[TransactionException, State] =
-        GovMutator.transit(context(state, 11, 10), state, transaction, fakeTxId)
+        GovMutator.transit(context(state.certState, epochStart(10)), state, transaction, fakeTxId)
 
     /** CERTS, then GOV, as in the LEDGER rule, spec [GV-2a]. */
     private def runWithCerts(
@@ -206,7 +170,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     ): Either[TransactionException, State] =
         STS.Mutator.transit[TransactionException](
           Seq(CertsMutator, GovMutator),
-          context(state, 11, 10),
+          context(state.certState, epochStart(10)),
           state,
           transaction
         )
@@ -228,7 +192,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
 
     test("spec [GV-4], [GV-5]: proposals get the ids (txId, index) and the epochs of the tx") {
         val transaction =
-            tx(proposals = Seq(proposal(GovAction.InfoAction), proposal(ppChange(validUpdate))))
+            tx(proposals = Seq(propose(GovAction.InfoAction), propose(ppChange(validUpdate))))
         val stored = run(transaction).value.govState.proposals
         stored.map(_.id) shouldBe Vector(
           infoId,
@@ -240,7 +204,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
           Map.empty,
           Map.empty,
           Map.empty,
-          proposal(GovAction.InfoAction),
+          propose(GovAction.InfoAction),
           10,
           16
         )
@@ -248,8 +212,8 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     }
 
     test("spec [GV-6]: a parent is the purpose root or a pending proposal of the same purpose") {
-        val rootId = actionId(2)
-        val pendingPp = actionId(3)
+        val rootId = govActionId(2)
+        val pendingPp = govActionId(3)
         val state = withGov(g =>
             g.copy(
               proposals = g.proposals :+ pending(pendingPp, ppChange(validUpdate)),
@@ -257,31 +221,31 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
             )
         )
         run(
-          tx(proposals = Seq(proposal(ppChange(validUpdate, Some(rootId))))),
+          tx(proposals = Seq(propose(ppChange(validUpdate, Some(rootId))))),
           state
         ).isRight shouldBe true
         run(
-          tx(proposals = Seq(proposal(ppChange(validUpdate, Some(pendingPp))))),
+          tx(proposals = Seq(propose(ppChange(validUpdate, Some(pendingPp))))),
           state
         ).isRight shouldBe true
         // a proposal of the same tx can be a parent
         val chained = tx(proposals =
             Seq(
-              proposal(ppChange(validUpdate, Some(rootId))),
-              proposal(ppChange(validUpdate, Some(GovActionId(fakeTxId, 0))))
+              propose(ppChange(validUpdate, Some(rootId))),
+              propose(ppChange(validUpdate, Some(GovActionId(fakeTxId, 0))))
             )
         )
         runAs(chained, state).isRight shouldBe true
         // no parent while the root is set
-        val orphan = proposal(ppChange(validUpdate, None))
+        val orphan = propose(ppChange(validUpdate, None))
         failureOf(run(tx(proposals = Seq(orphan)), state)) shouldBe
             GovFailure.InvalidPrevGovActionId(orphan)
         // a parent of another purpose
-        val wrongPurpose = proposal(GovAction.NoConfidence(Some(pendingPp)))
+        val wrongPurpose = propose(GovAction.NoConfidence(Some(pendingPp)))
         failureOf(run(tx(proposals = Seq(wrongPurpose)), state)) shouldBe
             GovFailure.InvalidPrevGovActionId(wrongPurpose)
         // an unknown parent
-        val unknown = proposal(ppChange(validUpdate, Some(actionId(99))))
+        val unknown = propose(ppChange(validUpdate, Some(govActionId(99))))
         failureOf(run(tx(proposals = Seq(unknown)), state)) shouldBe
             GovFailure.InvalidPrevGovActionId(unknown)
     }
@@ -304,21 +268,21 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
         )
         for update <- zeros do
             withClue(update) {
-                failureOf(run(tx(proposals = Seq(proposal(ppChange(update)))))) shouldBe
+                failureOf(run(tx(proposals = Seq(propose(ppChange(update)))))) shouldBe
                     GovFailure.MalformedProposal(ppChange(update))
             }
         // a zero in a field the check does not cover is well formed
         run(
-          tx(proposals = Seq(proposal(ppChange(ProtocolParamUpdate(keyDeposit = Some(Coin.zero))))))
+          tx(proposals = Seq(propose(ppChange(ProtocolParamUpdate(keyDeposit = Some(Coin.zero))))))
         ).isRight shouldBe true
     }
 
     test("spec [GV-7a]: nOpt = 0 is malformed from PV 11, adaPerUtxoByte = 0 from PV 10") {
-        val nOpt = proposal(ppChange(ProtocolParamUpdate(nOpt = Some(0))))
+        val nOpt = propose(ppChange(ProtocolParamUpdate(nOpt = Some(0))))
         failureOf(run(tx(proposals = Seq(nOpt)), major = 11)) shouldBe
             GovFailure.MalformedProposal(nOpt.govAction)
         run(tx(proposals = Seq(nOpt)), major = 10).isRight shouldBe true
-        val perByte = proposal(ppChange(ProtocolParamUpdate(adaPerUtxoByte = Some(Coin.zero))))
+        val perByte = propose(ppChange(ProtocolParamUpdate(adaPerUtxoByte = Some(Coin.zero))))
         failureOf(run(tx(proposals = Seq(perByte)), major = 10)) shouldBe
             GovFailure.MalformedProposal(perByte.govAction)
         run(tx(proposals = Seq(perByte)), major = 9).isRight shouldBe true
@@ -326,35 +290,35 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
 
     test("spec [GV-8]: the policy hash must equal the constitution's guardrails hash") {
         val noPolicy = ppChange(validUpdate, policy = None)
-        failureOf(run(tx(proposals = Seq(proposal(noPolicy))))) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(noPolicy))))) shouldBe
             GovFailure.InvalidGuardrailsScriptHash(None, Some(guardrails))
         val withdrawal =
             GovAction.TreasuryWithdrawals(Map(returnAccount -> Coin(5)), Some(otherScript))
-        failureOf(run(tx(proposals = Seq(proposal(withdrawal))))) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(withdrawal))))) shouldBe
             GovFailure.InvalidGuardrailsScriptHash(Some(otherScript), Some(guardrails))
         val noGuardrails = withGov(_.copy(constitution = Constitution(anchor, None)))
-        run(tx(proposals = Seq(proposal(noPolicy))), noGuardrails).isRight shouldBe true
-        failureOf(run(tx(proposals = Seq(proposal(ppChange(validUpdate)))), noGuardrails)) shouldBe
+        run(tx(proposals = Seq(propose(noPolicy))), noGuardrails).isRight shouldBe true
+        failureOf(run(tx(proposals = Seq(propose(ppChange(validUpdate)))), noGuardrails)) shouldBe
             GovFailure.InvalidGuardrailsScriptHash(Some(guardrails), None)
     }
 
     test("spec [GV-3b]: the return account and the withdrawal accounts must be registered") {
-        val p = proposal(GovAction.InfoAction, unregisteredAccount)
+        val p = propose(GovAction.InfoAction, unregisteredAccount)
         failureOf(run(tx(proposals = Seq(p)))) shouldBe
             GovFailure.ProposalReturnAccountDoesNotExist(unregisteredAccount)
         val withdrawal = GovAction.TreasuryWithdrawals(
           Map(returnAccount -> Coin(5), unregisteredAccount -> Coin(5)),
           Some(guardrails)
         )
-        failureOf(run(tx(proposals = Seq(proposal(withdrawal))))) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(withdrawal))))) shouldBe
             GovFailure.TreasuryWithdrawalReturnAccountsDoNotExist(List(unregisteredAccount))
     }
 
     test("spec [GV-2], [GV-3b]: an account registered by the same tx is a valid return account") {
         val credential = unregisteredAccount.address.credential
         val registration =
-            Certificate.RegCert(credential, Some(Coin(baseParams.stakeAddressDeposit)))
-        val p = proposal(GovAction.InfoAction, unregisteredAccount)
+            Certificate.RegCert(credential, Some(keyDeposit))
+        val p = propose(GovAction.InfoAction, unregisteredAccount)
         runWithCerts(tx(proposals = Seq(p), certs = Seq(registration))).isRight shouldBe true
     }
 
@@ -363,7 +327,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     ) {
         // `unless (hardforkConwayBootstrapPhase ...)`, Gov.hs:514-530 and :559-562, D40. The
         // ledger's own test for the first case is GovSpec.hs:90-97 (`FailPostBootstrap`).
-        val info = proposal(GovAction.InfoAction, unregisteredAccount)
+        val info = propose(GovAction.InfoAction, unregisteredAccount)
         run(tx(proposals = Seq(info)), major = 9).isRight shouldBe true
         failureOf(run(tx(proposals = Seq(info)), major = 10)) shouldBe
             GovFailure.ProposalReturnAccountDoesNotExist(unregisteredAccount)
@@ -372,19 +336,19 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
         // (`isBootstrapAction`, Gov.hs:645-650), which spec section 5.8 leaves N/A.
         val unregistered =
             GovAction.TreasuryWithdrawals(Map(unregisteredAccount -> Coin.zero), Some(guardrails))
-        run(tx(proposals = Seq(proposal(unregistered))), major = 9).isRight shouldBe true
-        failureOf(run(tx(proposals = Seq(proposal(unregistered))), major = 10)) shouldBe
+        run(tx(proposals = Seq(propose(unregistered))), major = 9).isRight shouldBe true
+        failureOf(run(tx(proposals = Seq(propose(unregistered))), major = 10)) shouldBe
             GovFailure.TreasuryWithdrawalReturnAccountsDoNotExist(List(unregisteredAccount))
         val zero = GovAction.TreasuryWithdrawals(Map(returnAccount -> Coin.zero), Some(guardrails))
-        run(tx(proposals = Seq(proposal(zero))), major = 9).isRight shouldBe true
-        failureOf(run(tx(proposals = Seq(proposal(zero))), major = 10)) shouldBe
+        run(tx(proposals = Seq(propose(zero))), major = 9).isRight shouldBe true
+        failureOf(run(tx(proposals = Seq(propose(zero))), major = 10)) shouldBe
             GovFailure.ZeroTreasuryWithdrawals(zero)
     }
 
     test(
       "spec [GV-3], [GV-3a]: ProposalProcedureNetworkIdMismatch and TreasuryWithdrawalsNetworkIdMismatch"
     ) {
-        val p = proposal(GovAction.InfoAction, mainnetReturnAccount)
+        val p = propose(GovAction.InfoAction, mainnetReturnAccount)
         failureOf(run(tx(proposals = Seq(p)))) shouldBe
             GovFailure.ProposalProcedureNetworkIdMismatch(mainnetReturnAccount, Network.Testnet)
         // only the mismatched accounts are reported (Gov.hs:552)
@@ -392,7 +356,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
           Map(mainnetReturnAccount -> Coin(5), returnAccount -> Coin(5)),
           Some(guardrails)
         )
-        failureOf(run(tx(proposals = Seq(proposal(withdrawal))))) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(withdrawal))))) shouldBe
             GovFailure.TreasuryWithdrawalsNetworkIdMismatch(
               Set(mainnetReturnAccount),
               Network.Testnet
@@ -404,10 +368,10 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     ) {
         val withdrawal =
             GovAction.TreasuryWithdrawals(Map(returnAccount -> Coin.zero), Some(guardrails))
-        failureOf(run(tx(proposals = Seq(proposal(withdrawal))))) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(withdrawal))))) shouldBe
             GovFailure.ZeroTreasuryWithdrawals(withdrawal)
         val empty = GovAction.TreasuryWithdrawals(Map.empty, Some(guardrails))
-        failureOf(run(tx(proposals = Seq(proposal(empty))))) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(empty))))) shouldBe
             GovFailure.ZeroTreasuryWithdrawals(empty)
     }
 
@@ -419,7 +383,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
               Map(newMember -> 20L),
               UnitInterval(1, 2)
             )
-        failureOf(run(tx(proposals = Seq(proposal(conflicting))))) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(conflicting))))) shouldBe
             GovFailure.ConflictingCommitteeUpdate(Set(newMember))
         // only the members whose term ends by the current epoch are reported (Gov.hs:567)
         val ending = GovAction.UpdateCommittee(
@@ -428,16 +392,16 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
           Map(newMember -> 10L, cold -> 11L),
           UnitInterval(1, 2)
         )
-        failureOf(run(tx(proposals = Seq(proposal(ending))))) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(ending))))) shouldBe
             GovFailure.ExpirationEpochTooSmall(Map(newMember -> 10L))
         val next =
             GovAction.UpdateCommittee(None, Set.empty, Map(newMember -> 11L), UnitInterval(1, 2))
-        run(tx(proposals = Seq(proposal(next)))).isRight shouldBe true
+        run(tx(proposals = Seq(propose(next)))).isRight shouldBe true
     }
 
     test("spec [GV-17]: a hard fork version must follow its predecessor") {
         def hf(major: Int, minor: Int, prev: Option[GovActionId] = None) =
-            proposal(GovAction.HardForkInitiation(prev, ProtocolVersion(major, minor)))
+            propose(GovAction.HardForkInitiation(prev, ProtocolVersion(major, minor)))
         run(tx(proposals = Seq(hf(12, 0)))).isRight shouldBe true
         run(tx(proposals = Seq(hf(11, 1)))).isRight shouldBe true
         for (major, minor) <- Seq((11, 0), (11, 2), (12, 1), (13, 0)) do
@@ -450,7 +414,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
                     )
             }
         // the predecessor is the pending hard fork the proposal names
-        val pendingHf = actionId(4)
+        val pendingHf = govActionId(4)
         val state = withGov(g =>
             g.copy(proposals =
                 g.proposals :+ pending(
@@ -476,9 +440,9 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     }
 
     test("spec [GV-17a]: a hard fork of the same tx is not a predecessor for ProposalCantFollow") {
-        val first = proposal(GovAction.HardForkInitiation(None, ProtocolVersion(12, 0)))
+        val first = propose(GovAction.HardForkInitiation(None, ProtocolVersion(12, 0)))
         // 12.5 cannot follow 12.0, but the check only looks at the proposals before the tx
-        val second = proposal(
+        val second = propose(
           GovAction.HardForkInitiation(Some(GovActionId(fakeTxId, 0)), ProtocolVersion(12, 5))
         )
         runAs(tx(proposals = Seq(first, second))).isRight shouldBe true
@@ -486,11 +450,11 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
 
     test("spec [GV-17]: the hard-fork root as parent makes the current version the predecessor") {
         // `mPrev == pgaids ^. grHardForkL`, Gov.hs:692-707
-        val root = actionId(5)
+        val root = govActionId(5)
         val state = withGov(_.copy(roots = GovRoots(None, Some(root), None, None)))
-        val next = proposal(GovAction.HardForkInitiation(Some(root), ProtocolVersion(12, 0)))
+        val next = propose(GovAction.HardForkInitiation(Some(root), ProtocolVersion(12, 0)))
         run(tx(proposals = Seq(next)), state).isRight shouldBe true
-        val skipped = proposal(GovAction.HardForkInitiation(Some(root), ProtocolVersion(12, 1)))
+        val skipped = propose(GovAction.HardForkInitiation(Some(root), ProtocolVersion(12, 1)))
         failureOf(run(tx(proposals = Seq(skipped)), state)) shouldBe
             GovFailure.ProposalCantFollow(
               Some(root),
@@ -500,43 +464,43 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     }
 
     test("spec [GV-17]: a parent that is not a pending hard fork falls to InvalidPrevGovActionId") {
-        val state = withGov(_.copy(roots = GovRoots(None, Some(actionId(5)), None, None)))
-        val noParent = proposal(GovAction.HardForkInitiation(None, ProtocolVersion(12, 0)))
+        val state = withGov(_.copy(roots = GovRoots(None, Some(govActionId(5)), None, None)))
+        val noParent = propose(GovAction.HardForkInitiation(None, ProtocolVersion(12, 0)))
         failureOf(run(tx(proposals = Seq(noParent)), state)) shouldBe
             GovFailure.InvalidPrevGovActionId(noParent)
         val infoParent =
-            proposal(GovAction.HardForkInitiation(Some(infoId), ProtocolVersion(12, 0)))
+            propose(GovAction.HardForkInitiation(Some(infoId), ProtocolVersion(12, 0)))
         failureOf(run(tx(proposals = Seq(infoParent)), state)) shouldBe
             GovFailure.InvalidPrevGovActionId(infoParent)
     }
 
     test("spec [GV-3a]: the checks of one proposal run in the ledger's order") {
-        val state = withGov(_.copy(roots = GovRoots(Some(actionId(2)), None, None, None)))
+        val state = withGov(_.copy(roots = GovRoots(Some(govActionId(2)), None, None, None)))
         // MalformedProposal before the return account, the guardrails and the parent
         val malformed =
-            proposal(ppChange(ProtocolParamUpdate(), None, None), unregisteredAccount)
+            propose(ppChange(ProtocolParamUpdate(), None, None), unregisteredAccount)
         failureOf(run(tx(proposals = Seq(malformed)), state)) shouldBe
             GovFailure.MalformedProposal(malformed.govAction)
         // the return account before the network id
-        val wrongNetwork = rewardAccount("7", Network.Mainnet)
-        failureOf(run(tx(proposals = Seq(proposal(GovAction.InfoAction, wrongNetwork))))) shouldBe
+        val wrongNetwork = accountOf("7", Network.Mainnet)
+        failureOf(run(tx(proposals = Seq(propose(GovAction.InfoAction, wrongNetwork))))) shouldBe
             GovFailure.ProposalReturnAccountDoesNotExist(wrongNetwork)
         // the return account before the withdrawal accounts (Gov.hs:518-530)
         val unregisteredWithdrawal =
             GovAction.TreasuryWithdrawals(Map(unregisteredAccount -> Coin(5)), Some(guardrails))
         failureOf(
-          run(tx(proposals = Seq(proposal(unregisteredWithdrawal, unregisteredAccount))))
+          run(tx(proposals = Seq(propose(unregisteredWithdrawal, unregisteredAccount))))
         ) shouldBe GovFailure.ProposalReturnAccountDoesNotExist(unregisteredAccount)
         // the withdrawal accounts before the return account's network id (Gov.hs:520-530, 543-546);
         // the mainnet return account is registered, as the accounts are keyed by credential
         failureOf(
-          run(tx(proposals = Seq(proposal(unregisteredWithdrawal, mainnetReturnAccount))))
+          run(tx(proposals = Seq(propose(unregisteredWithdrawal, mainnetReturnAccount))))
         ) shouldBe GovFailure.TreasuryWithdrawalReturnAccountsDoNotExist(List(unregisteredAccount))
         // the return account's network id before the withdrawals' (Gov.hs:543-555)
         val mainnetWithdrawal =
             GovAction.TreasuryWithdrawals(Map(mainnetReturnAccount -> Coin(5)), Some(guardrails))
         failureOf(
-          run(tx(proposals = Seq(proposal(mainnetWithdrawal, mainnetReturnAccount))))
+          run(tx(proposals = Seq(propose(mainnetWithdrawal, mainnetReturnAccount))))
         ) shouldBe GovFailure.ProposalProcedureNetworkIdMismatch(
           mainnetReturnAccount,
           Network.Testnet
@@ -547,7 +511,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
           Map(mainnetReturnAccount -> Coin.zero, returnAccount -> Coin.zero),
           None
         )
-        failureOf(run(tx(proposals = Seq(proposal(withdrawal))))) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(withdrawal))))) shouldBe
             GovFailure.TreasuryWithdrawalsNetworkIdMismatch(
               Set(mainnetReturnAccount),
               Network.Testnet
@@ -555,7 +519,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
         // the guardrails before the zero sum (Gov.hs:555-562)
         val zeroWithOtherScript =
             GovAction.TreasuryWithdrawals(Map(returnAccount -> Coin.zero), Some(otherScript))
-        failureOf(run(tx(proposals = Seq(proposal(zeroWithOtherScript))))) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(zeroWithOtherScript))))) shouldBe
             GovFailure.InvalidGuardrailsScriptHash(Some(otherScript), Some(guardrails))
         // ConflictingCommitteeUpdate before ExpirationEpochTooSmall (Gov.hs:563-568)
         val conflictingAndEnding =
@@ -565,33 +529,34 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
               Map(newMember -> 10L),
               UnitInterval(1, 2)
             )
-        failureOf(run(tx(proposals = Seq(proposal(conflictingAndEnding))))) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(conflictingAndEnding))))) shouldBe
             GovFailure.ConflictingCommitteeUpdate(Set(newMember))
         // ExpirationEpochTooSmall before the parent (Gov.hs:567-578); only the ending member is
         // reported
-        val committeeRoot = withGov(_.copy(roots = GovRoots(None, None, Some(actionId(2)), None)))
+        val committeeRoot =
+            withGov(_.copy(roots = GovRoots(None, None, Some(govActionId(2)), None)))
         val ending = GovAction.UpdateCommittee(
           None,
           Set.empty,
           Map(newMember -> 10L, cold -> 11L),
           UnitInterval(1, 2)
         )
-        failureOf(run(tx(proposals = Seq(proposal(ending))), committeeRoot)) shouldBe
+        failureOf(run(tx(proposals = Seq(propose(ending))), committeeRoot)) shouldBe
             GovFailure.ExpirationEpochTooSmall(Map(newMember -> 10L))
         // the guardrails before the parent
-        val badBoth = proposal(ppChange(validUpdate, None, None))
+        val badBoth = propose(ppChange(validUpdate, None, None))
         failureOf(run(tx(proposals = Seq(badBoth)), state)) shouldBe
             GovFailure.InvalidGuardrailsScriptHash(None, Some(guardrails))
         // ProposalCantFollow first
-        val hf = proposal(
+        val hf = propose(
           GovAction.HardForkInitiation(None, ProtocolVersion(13, 0)),
           unregisteredAccount
         )
         failureOf(run(tx(proposals = Seq(hf)))) shouldBe
             GovFailure.ProposalCantFollow(None, ProtocolVersion(13, 0), ProtocolVersion(11, 0))
         // the proposals are checked in tx order
-        val first = proposal(GovAction.InfoAction, unregisteredAccount)
-        val second = proposal(ppChange(ProtocolParamUpdate()))
+        val first = propose(GovAction.InfoAction, unregisteredAccount)
+        val second = propose(ppChange(ProtocolParamUpdate()))
         failureOf(run(tx(proposals = Seq(first, second)))) shouldBe
             GovFailure.ProposalReturnAccountDoesNotExist(unregisteredAccount)
     }
@@ -602,7 +567,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
         val newId = GovActionId(fakeTxId, 0)
         val transaction =
             tx(
-              proposals = Seq(proposal(GovAction.InfoAction)),
+              proposals = Seq(propose(GovAction.InfoAction)),
               votes = Seq((drepVoterA, newId, Vote.Yes))
             )
         runAs(transaction).value.govState.proposal(newId).value.drepVotes shouldBe
@@ -613,15 +578,15 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
       "spec [GV-10], [GV-10b]: an unknown DRep on an unknown action gets only VotersDoNotExist"
     ) {
         // the example of spec section 11.1
-        failureOf(run(tx(votes = Seq((unknownDRepVoter, actionId(99), Vote.Yes))))) shouldBe
+        failureOf(run(tx(votes = Seq((unknownDRepVoter, govActionId(99), Vote.Yes))))) shouldBe
             GovFailure.VotersDoNotExist(List(unknownDRepVoter))
-        failureOf(run(tx(votes = Seq((drepVoterA, actionId(99), Vote.Yes))))) shouldBe
-            GovFailure.GovActionsDoNotExist(List(actionId(99)))
+        failureOf(run(tx(votes = Seq((drepVoterA, govActionId(99), Vote.Yes))))) shouldBe
+            GovFailure.GovActionsDoNotExist(List(govActionId(99)))
         // an unknown voter and a known voter on an unknown action: VotersDoNotExist first
         failureOf(
           run(
             tx(votes =
-                Seq((unknownDRepVoter, infoId, Vote.Yes), (drepVoterA, actionId(99), Vote.Yes))
+                Seq((unknownDRepVoter, infoId, Vote.Yes), (drepVoterA, govActionId(99), Vote.Yes))
             )
           )
         ) shouldBe GovFailure.VotersDoNotExist(List(unknownDRepVoter))
@@ -679,7 +644,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
           "TreasuryWithdrawals" -> (true, true, false),
           "InfoAction" -> (true, true, true)
         )
-        val id = actionId(6)
+        val id = govActionId(6)
         for (name, action) <- actions do
             val state = withGov(g => g.copy(proposals = g.proposals :+ pending(id, action)))
             val (cc, drep, spo) = allowed(name)
@@ -713,7 +678,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
           ProtocolParamUpdate(governanceActionDeposit = Some(Coin(1))),
           ProtocolParamUpdate(minFeeRefScriptCoinsPerByte = Some(NonNegativeInterval(1)))
         )
-        val id = actionId(7)
+        val id = govActionId(7)
         for update <- security do
             val state =
                 withGov(g => g.copy(proposals = g.proposals :+ pending(id, ppChange(update))))
@@ -776,7 +741,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
 
     test("spec [GV-10b]: UnelectedCommitteeVoters is checked before the proposals") {
         val stranger = Voter.ConstitutionalCommitteeHotKey(AddrKeyHash.fromHex("c3" * 28))
-        val malformed = proposal(ppChange(ProtocolParamUpdate()))
+        val malformed = propose(ppChange(ProtocolParamUpdate()))
         failureOf(
           run(tx(proposals = Seq(malformed), votes = Seq((stranger, infoId, Vote.Yes))))
         ) shouldBe
@@ -793,11 +758,16 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     test("spec [FL-1], [FL-7]: the collecting entry reports every GOV failure in source order") {
         // Gov.hs:489-620 checks every predicate and adds a failing proposal all the same
         val stranger = Voter.ConstitutionalCommitteeHotKey(AddrKeyHash.fromHex("c3" * 28))
-        val malformed = proposal(ppChange(ProtocolParamUpdate(), None, None), unregisteredAccount)
+        val malformed = propose(ppChange(ProtocolParamUpdate(), None, None), unregisteredAccount)
         val transaction =
             tx(proposals = Seq(malformed), votes = Seq((stranger, infoId, Vote.Yes)))
         val failures = GovMutator
-            .transitAll(context(baseState, 11, 10), baseState, transaction, transaction.id)
+            .transitAll(
+              context(baseState.certState, epochStart(10)),
+              baseState,
+              transaction,
+              transaction.id
+            )
             .left
             .value
             .map(e => failureOf(Left(e)))
@@ -818,10 +788,10 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
         // ProposalDepositValidator is a validator, and transit runs every validator before any
         // mutator (D30); transitAll sorts by the ledger order, where MalformedProposal comes
         // before ProposalDepositIncorrect
-        val malformed = proposal(ppChange(ProtocolParamUpdate(), None, None))
+        val malformed = propose(ppChange(ProtocolParamUpdate(), None, None))
             .copy(deposit = deposit + Coin(1))
         val transaction = tx(proposals = Seq(malformed))
-        val ctx = context(baseState, 11, 10)
+        val ctx = context(baseState.certState, epochStart(10))
         val validators = Seq(ProposalDepositValidator)
         val mutators = Seq(GovMutator)
         val first = STS.Mutator.transit(validators, mutators, ctx, baseState, transaction)
@@ -837,14 +807,19 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     test("spec [FL-1]: a proposal that fails a check is still added for the votes and parents") {
         // Gov.hs:574-578 adds a failing proposal; curGovActionIds comes from the proposals after
         // the fold (Gov.hs:582-604), so a vote on it and a child of it name a known action
-        val malformed = proposal(ppChange(ProtocolParamUpdate(), None, None), unregisteredAccount)
-        val child = proposal(ppChange(validUpdate, Some(GovActionId(fakeTxId, 0))))
+        val malformed = propose(ppChange(ProtocolParamUpdate(), None, None), unregisteredAccount)
+        val child = propose(ppChange(validUpdate, Some(GovActionId(fakeTxId, 0))))
         val transaction = tx(
           proposals = Seq(malformed, child),
           votes = Seq((drepVoterA, GovActionId(fakeTxId, 0), Vote.Yes))
         )
         val failures = GovMutator
-            .transitAll(context(baseState, 11, 10), baseState, transaction, fakeTxId)
+            .transitAll(
+              context(baseState.certState, epochStart(10)),
+              baseState,
+              transaction,
+              fakeTxId
+            )
             .left
             .value
             .map(e => failureOf(Left(e)))
@@ -856,7 +831,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     }
 
     test("spec [GV-10b]: VotersDoNotExist, GovActionsDoNotExist, expiry, then permission") {
-        val noConfidence = actionId(8)
+        val noConfidence = govActionId(8)
         val state = withGov(g =>
             g.copy(proposals =
                 g.proposals :+ pending(noConfidence, GovAction.NoConfidence(None), 9)
@@ -866,11 +841,11 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
         failureOf(
           run(
             tx(votes =
-                Seq((drepVoterA, actionId(99), Vote.Yes), (drepVoterA, noConfidence, Vote.No))
+                Seq((drepVoterA, govActionId(99), Vote.Yes), (drepVoterA, noConfidence, Vote.No))
             ),
             state
           )
-        ) shouldBe GovFailure.GovActionsDoNotExist(List(actionId(99)))
+        ) shouldBe GovFailure.GovActionsDoNotExist(List(govActionId(99)))
         // expired and disallowed: the committee vote on an expired NoConfidence is expired first
         failureOf(run(tx(votes = Seq((ccVoter, noConfidence, Vote.Yes))), state)) shouldBe
             GovFailure.VotingOnExpiredGovAction(List(ccVoter -> noConfidence))
@@ -918,8 +893,8 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     }
 
     test("spec [GV-15]: unregistering a DRep removes its votes from every proposal") {
-        val drepDeposit = Coin(baseParams.dRepDeposit)
-        val secondId = actionId(9)
+        val drepDeposit = Coin(params.dRepDeposit)
+        val secondId = govActionId(9)
         val withB = baseState.copy(
           certState = baseState.certState.copy(vstate =
               baseState.certState.vstate.copy(dreps =
@@ -948,7 +923,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
 
     test("spec [GV-2a]: a DRep registered by the same tx can vote") {
         val registration =
-            Certificate.RegDRepCert(drepB, Coin(baseParams.dRepDeposit), None)
+            Certificate.RegDRepCert(drepB, Coin(params.dRepDeposit), None)
         val transaction = tx(certs = Seq(registration), votes = Seq((drepVoterB, infoId, Vote.Yes)))
         runWithCerts(transaction).value.govState.proposal(infoId).value.drepVotes shouldBe
             Map(drepB -> Vote.Yes)
@@ -956,12 +931,12 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
     }
 
     test("spec [GV-16]: a phase-2-failed tx changes no gov state") {
-        val bad = tx(proposals = Seq(proposal(ppChange(ProtocolParamUpdate()))))
+        val bad = tx(proposals = Seq(propose(ppChange(ProtocolParamUpdate()))))
         run(bad.copy(isValid = false)).value shouldBe baseState
     }
 
     test("spec [GV-19]: ruleName is the ledger constructor name") {
-        val id = actionId(1)
+        val id = govActionId(1)
         val failures: Seq[(GovFailure, String)] = Seq(
           GovFailure.GovActionsDoNotExist(List(id)) -> "GovActionsDoNotExist",
           GovFailure.MalformedProposal(GovAction.InfoAction) -> "MalformedProposal",
@@ -972,7 +947,7 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
           GovFailure.DisallowedVoters(List(ccVoter -> id)) -> "DisallowedVoters",
           GovFailure.ConflictingCommitteeUpdate(Set(cold)) -> "ConflictingCommitteeUpdate",
           GovFailure.ExpirationEpochTooSmall(Map(cold -> 1L)) -> "ExpirationEpochTooSmall",
-          GovFailure.InvalidPrevGovActionId(proposal(GovAction.InfoAction)) ->
+          GovFailure.InvalidPrevGovActionId(propose(GovAction.InfoAction)) ->
               "InvalidPrevGovActionId",
           GovFailure.VotingOnExpiredGovAction(List(ccVoter -> id)) -> "VotingOnExpiredGovAction",
           GovFailure.ProposalCantFollow(None, ProtocolVersion(13, 0), ProtocolVersion(11, 0)) ->

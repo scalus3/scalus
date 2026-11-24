@@ -1,771 +1,266 @@
 package scalus.cardano.ledger
 package rules
 
-import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.*
-import scalus.uplc.builtin.Data
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scalus.testing.kit.Party.Alice
+import scalus.uplc.builtin.{ByteString, Data}
 
 import TransactionWitnessSet.given
 import scala.collection.immutable.SortedMap
 
-class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
+// The verdict of the rule does not depend on the units of a redeemer, so each test that sets a
+// redeemer is a `forAll` over the wide `genExUnits`, spec `[kit.exunits.wide-forall]`.
+class ExactSetOfRedeemersValidatorTest
+    extends AnyFunSuite,
+      ScalaCheckPropertyChecks,
+      ValidatorRulesTestKit {
+
+    // The rule only hashes the scripts and never runs them, so any bytes serve.
+    private val v1Script = Script.PlutusV1(ByteString.fromHex("01" * 32))
+    private val v2Script = Script.PlutusV2(ByteString.fromHex("02" * 32))
+    private val datum = Data.I(1)
+
+    // A UTxO at a key address: spending it needs no redeemer.
+    private val keyUtxo: Utxos = Map(input(0) -> TransactionOutput(keyAddress(0), Value.ada(1)))
+
+    private def witnesses(script: Script, redeemers: Option[Redeemers]): TransactionWitnessSet =
+        TransactionWitnessSet(
+          scripts = Seq(script),
+          redeemers = redeemers,
+          vkeyWitnesses = Set.empty,
+          plutusData = Seq(datum)
+        )
+
+    private def redeemer(tag: RedeemerTag, exUnits: ExUnits): Option[Redeemers] =
+        Some(Redeemers(Redeemer(tag, 0, datum, exUnits)))
+
+    private def withdrawalOf(hash: ScriptHash): Option[Withdrawals] =
+        Some(Withdrawals(SortedMap(scriptRewardAccount(hash) -> Coin.zero)))
+
+    private def votingOf(hash: ScriptHash): Option[VotingProcedures] =
+        Some(VotingProcedures(SortedMap(Voter.DRepScript(hash) -> SortedMap.empty)))
+
+    private def proposalOf(hash: ScriptHash): TaggedOrderedSet[ProposalProcedure] =
+        TaggedOrderedSet(
+          proposal(GovAction.TreasuryWithdrawals(Map.empty, Some(hash)), rewardAccount(1))
+        )
 
     test("ExactSetOfRedeemersValidator success with no scripts") {
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val transaction = Transaction(
-          body = TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero
-          ),
-          witnessSet = TransactionWitnessSet.empty
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val transaction = txSpending(input(0))(TransactionWitnessSet.empty)
+        val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
         assert(result.isRight)
     }
 
     test("ExactSetOfRedeemersValidator success with matching spend redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(plutusScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = Some(Redeemers(Redeemer(RedeemerTag.Spend, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isRight)
+        val utxo = Map(scriptUtxo(input(0), v1Script.scriptHash))
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v1Script, redeemer(RedeemerTag.Spend, exUnits)))
+            val result = validate(ExactSetOfRedeemersValidator, utxo, transaction)
+            assert(result.isRight)
+        }
     }
 
     test("ExactSetOfRedeemersValidator failure with missing spend redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(plutusScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
+        val utxo = Map(scriptUtxo(input(0), v1Script.scriptHash))
         // Create a redeemer for a different index to test missing redeemer
         val wrongRedeemer = Redeemer(
           tag = RedeemerTag.Spend,
           index = 1, // Wrong index!
-          data = dummyData,
+          data = datum,
           exUnits = ExUnits(100000, 100000)
         )
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = Some(Redeemers.from(Seq(wrongRedeemer))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val transaction =
+            txSpending(input(0))(witnesses(v1Script, Some(Redeemers.from(Seq(wrongRedeemer)))))
+        val result = validate(ExactSetOfRedeemersValidator, utxo, transaction)
         assert(result.isLeft)
     }
 
     test("ExactSetOfRedeemersValidator failure with extra spend redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = Some(Redeemers(Redeemer(RedeemerTag.Spend, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isLeft)
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v1Script, redeemer(RedeemerTag.Spend, exUnits)))
+            val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
+            assert(result.isLeft)
+        }
     }
 
     test("ExactSetOfRedeemersValidator success with matching mint redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV2].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            mint = Some(
-              Mint(
-                MultiAsset(
-                  SortedMap(
-                    plutusScript.scriptHash -> SortedMap(AssetName.empty -> 1)
-                  )
-                )
-              )
-            ),
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = Some(Redeemers(Redeemer(RedeemerTag.Mint, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isRight)
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v2Script, redeemer(RedeemerTag.Mint, exUnits)))
+                    .withBody(_.copy(mint = Some(mintOne(v2Script.scriptHash))))
+            val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
+            assert(result.isRight)
+        }
     }
 
     test("ExactSetOfRedeemersValidator failure with missing mint redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV2].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            mint = Some(
-              Mint(
-                MultiAsset(
-                  SortedMap(
-                    plutusScript.scriptHash -> SortedMap(AssetName.empty -> 1)
-                  )
-                )
-              )
-            ),
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = None,
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val transaction =
+            txSpending(input(0))(witnesses(v2Script, None))
+                .withBody(_.copy(mint = Some(mintOne(v2Script.scriptHash))))
+        val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
         assert(result.isLeft)
     }
 
     test("ExactSetOfRedeemersValidator failure with extra mint redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV2].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            mint = None,
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = Some(Redeemers(Redeemer(RedeemerTag.Mint, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isLeft)
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v2Script, redeemer(RedeemerTag.Mint, exUnits)))
+            val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
+            assert(result.isLeft)
+        }
     }
 
     test("ExactSetOfRedeemersValidator success with matching Cert redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
+        val certificates = TaggedOrderedStrictSet[Certificate](
+          Certificate.UnregCert(Credential.ScriptHash(v1Script.scriptHash), None)
         )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            certificates = TaggedOrderedStrictSet(
-              Certificate.UnregCert(Credential.ScriptHash(plutusScript.scriptHash), None)
-            )
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = Some(Redeemers(Redeemer(RedeemerTag.Cert, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isRight)
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v1Script, redeemer(RedeemerTag.Cert, exUnits)))
+                    .withBody(_.copy(certificates = certificates))
+            val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
+            assert(result.isRight)
+        }
     }
 
     test("ExactSetOfRedeemersValidator failure with missing Cert redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
+        val certificates = TaggedOrderedStrictSet[Certificate](
+          Certificate.UnregCert(Credential.ScriptHash(v1Script.scriptHash), None)
         )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            certificates = TaggedOrderedStrictSet(
-              Certificate.UnregCert(Credential.ScriptHash(plutusScript.scriptHash), None)
-            )
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = None,
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val transaction =
+            txSpending(input(0))(witnesses(v1Script, None))
+                .withBody(_.copy(certificates = certificates))
+        val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
         assert(result.isLeft)
     }
 
     test("ExactSetOfRedeemersValidator failure with extra Cert redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            certificates = TaggedOrderedStrictSet.empty
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = Some(Redeemers(Redeemer(RedeemerTag.Cert, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isLeft)
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v1Script, redeemer(RedeemerTag.Cert, exUnits)))
+            val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
+            assert(result.isLeft)
+        }
     }
 
     test("ExactSetOfRedeemersValidator success with matching Reward redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            withdrawals = Some(
-              Withdrawals(
-                SortedMap(
-                  RewardAccount(
-                    StakeAddress(
-                      Network.Testnet,
-                      StakePayload.Script(plutusScript.scriptHash)
-                    )
-                  ) -> Coin.zero
-                )
-              )
-            )
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = Some(Redeemers(Redeemer(RedeemerTag.Reward, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isRight)
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v1Script, redeemer(RedeemerTag.Reward, exUnits)))
+                    .withBody(_.copy(withdrawals = withdrawalOf(v1Script.scriptHash)))
+            val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
+            assert(result.isRight)
+        }
     }
 
     test("ExactSetOfRedeemersValidator failure with missing Reward redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            withdrawals = Some(
-              Withdrawals(
-                SortedMap(
-                  RewardAccount(
-                    StakeAddress(
-                      Network.Testnet,
-                      StakePayload.Script(plutusScript.scriptHash)
-                    )
-                  ) -> Coin.zero
-                )
-              )
-            )
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = None,
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val transaction =
+            txSpending(input(0))(witnesses(v1Script, None))
+                .withBody(_.copy(withdrawals = withdrawalOf(v1Script.scriptHash)))
+        val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
         assert(result.isLeft)
     }
 
     test("ExactSetOfRedeemersValidator failure with extra Reward redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            withdrawals = None
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = Some(Redeemers(Redeemer(RedeemerTag.Reward, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isLeft)
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v1Script, redeemer(RedeemerTag.Reward, exUnits)))
+            val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
+            assert(result.isLeft)
+        }
     }
 
     test("ExactSetOfRedeemersValidator success with matching Voting redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            votingProcedures = Some(
-              VotingProcedures(
-                SortedMap(
-                  Voter.DRepScript(plutusScript.scriptHash) -> SortedMap.empty
-                )
-              )
-            )
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = Some(Redeemers(Redeemer(RedeemerTag.Voting, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isRight)
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v1Script, redeemer(RedeemerTag.Voting, exUnits)))
+                    .withBody(_.copy(votingProcedures = votingOf(v1Script.scriptHash)))
+            val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
+            assert(result.isRight)
+        }
     }
 
     test("ExactSetOfRedeemersValidator failure with missing Voting redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            votingProcedures = Some(
-              VotingProcedures(
-                SortedMap(
-                  Voter.DRepScript(plutusScript.scriptHash) -> SortedMap.empty
-                )
-              )
-            )
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = None,
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val transaction =
+            txSpending(input(0))(witnesses(v1Script, None))
+                .withBody(_.copy(votingProcedures = votingOf(v1Script.scriptHash)))
+        val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
         assert(result.isLeft)
     }
 
     test("ExactSetOfRedeemersValidator failure with extra Voting redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            votingProcedures = None
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = Some(Redeemers(Redeemer(RedeemerTag.Voting, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isLeft)
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v1Script, redeemer(RedeemerTag.Voting, exUnits)))
+            val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
+            assert(result.isLeft)
+        }
     }
 
     test("ExactSetOfRedeemersValidator success with matching Proposing redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            proposalProcedures = TaggedOrderedSet(
-              ProposalProcedure(
-                deposit = Arbitrary.arbitrary[Coin].sample.get,
-                rewardAccount = Arbitrary.arbitrary[RewardAccount].sample.get,
-                govAction = GovAction.TreasuryWithdrawals(Map.empty, Some(plutusScript.scriptHash)),
-                anchor = Arbitrary.arbitrary[Anchor].sample.get,
-              )
-            )
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers =
-                Some(Redeemers(Redeemer(RedeemerTag.Proposing, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isRight)
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v1Script, redeemer(RedeemerTag.Proposing, exUnits)))
+                    .withBody(_.copy(proposalProcedures = proposalOf(v1Script.scriptHash)))
+            val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
+            assert(result.isRight)
+        }
     }
 
     test("ExactSetOfRedeemersValidator failure with missing Proposing redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            proposalProcedures = TaggedOrderedSet(
-              ProposalProcedure(
-                deposit = Arbitrary.arbitrary[Coin].sample.get,
-                rewardAccount = Arbitrary.arbitrary[RewardAccount].sample.get,
-                govAction = GovAction.TreasuryWithdrawals(Map.empty, Some(plutusScript.scriptHash)),
-                anchor = Arbitrary.arbitrary[Anchor].sample.get,
-              )
-            )
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers = None,
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val transaction =
+            txSpending(input(0))(witnesses(v1Script, None))
+                .withBody(_.copy(proposalProcedures = proposalOf(v1Script.scriptHash)))
+        val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
         assert(result.isLeft)
     }
 
     test("ExactSetOfRedeemersValidator failure with extra Proposing redeemer") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Arbitrary.arbitrary[ShelleyAddress].sample.get,
-            Value(Coin(1000000L))
-          )
-        )
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            proposalProcedures = TaggedOrderedSet.empty
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(plutusScript),
-            redeemers =
-                Some(Redeemers(Redeemer(RedeemerTag.Proposing, 0, dummyData, dummyExUnits))),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isLeft)
+        forAll(genExUnits) { exUnits =>
+            val transaction =
+                txSpending(input(0))(witnesses(v1Script, redeemer(RedeemerTag.Proposing, exUnits)))
+            val result = validate(ExactSetOfRedeemersValidator, keyUtxo, transaction)
+            assert(result.isLeft)
+        }
     }
 
     test("ExactSetOfRedeemersValidator success with native scripts (no redeemers needed)") {
-        val (privateKey, publicKey) = generateKeyPair()
-        val nativeScript =
-            Timelock.Signature(Hash(scalus.uplc.builtin.platform.blake2b_224(publicKey)))
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxo = Map(
-          input -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
-        )
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            mint = Some(
-              Mint(
-                MultiAsset(
-                  SortedMap(
-                    nativeScript.scriptHash -> SortedMap(AssetName.empty -> 1)
-                  )
-                )
-              )
-            ),
-          ),
+        val nativeScript = Timelock.Signature(Alice.addrKeyHash)
+        val utxo = Map(scriptUtxo(input(0), nativeScript.scriptHash))
+        val transaction = txSpending(input(0))(
           TransactionWitnessSet(
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript)),
             redeemers = None
-          ),
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+          )
+        ).withBody(_.copy(mint = Some(mintOne(nativeScript.scriptHash))))
+        val result = validate(ExactSetOfRedeemersValidator, utxo, transaction)
         assert(result.isRight)
     }
 
     test("ExactSetOfRedeemersValidator success with mixed native and Plutus scripts") {
-        val (privateKey, publicKey) = generateKeyPair()
-        val nativeScript =
-            Timelock.Signature(Hash(scalus.uplc.builtin.platform.blake2b_224(publicKey)))
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV2].sample.get
-
-        val input1 = Input(
-          TransactionHash.fromHex(
-            "a000000000000000000000000000000000000000000000000000000000000000"
-          ),
-          0
-        )
-        val input2 = Input(
-          TransactionHash.fromHex(
-            "b000000000000000000000000000000000000000000000000000000000000000"
-          ),
-          0
-        )
-
+        val nativeScript = Timelock.Signature(Alice.addrKeyHash)
         val utxo = Map(
-          input1 -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
-            Value(Coin(1000000L))
-          ),
-          input2 -> Output(
-            Address(Network.Testnet, Credential.ScriptHash(plutusScript.scriptHash)),
-            Value(Coin(1000000L))
-          )
+          scriptUtxo(input(1), nativeScript.scriptHash),
+          scriptUtxo(input(2), v2Script.scriptHash)
         )
-
-        val dummyData = Arbitrary.arbitrary[Data].sample.get
-        val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
-
-        // Create inputs set and determine the actual index of the Plutus script input
-        val inputsSet = Set(input1, input2)
-        val sortedInputs = inputsSet.toSeq.sorted
-        val plutusInputIndex = sortedInputs.zipWithIndex
-            .find { case (input, _) =>
-                utxo.get(input).exists(_.address.scriptHashOption.contains(plutusScript.scriptHash))
-            }
-            .get
-            ._2
-
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(inputsSet),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-          ),
-          TransactionWitnessSet(
-            scripts = Seq(Script.Native(nativeScript), plutusScript),
-            redeemers = Some(
-              Redeemers(
-                // calculate the index manually for a tx where n of inputs > 1
-                Redeemer(RedeemerTag.Spend, plutusInputIndex, dummyData, dummyExUnits)
+        // The inputs are sorted: input(2), at the Plutus script, has index 1.
+        val plutusInputIndex = 1
+        forAll(genExUnits) { exUnits =>
+            val transaction = txSpending(input(1), input(2))(
+              TransactionWitnessSet(
+                scripts = Seq(Script.Native(nativeScript), v2Script),
+                redeemers = Some(
+                  Redeemers(Redeemer(RedeemerTag.Spend, plutusInputIndex, datum, exUnits))
+                ),
+                vkeyWitnesses = Set.empty,
+                plutusData = Seq(datum)
               )
-            ),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(dummyData)
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
-        assert(result.isRight)
+            )
+            val result = validate(ExactSetOfRedeemersValidator, utxo, transaction)
+            assert(result.isRight)
+        }
     }
 }

@@ -3,65 +3,32 @@ package scalus.cardano.ledger.rules
 import org.scalatest.EitherValues
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
-import scalus.cardano.address.{Network, StakeAddress, StakePayload}
+import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 import scalus.uplc.builtin.ByteString
 
-class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with EitherValues {
+class StakePoolCertificatesValidatorTest
+    extends AnyFunSuite
+    with Matchers
+    with EitherValues
+    with CertsTestKit {
 
-    private val cardanoInfo = CardanoInfo.preprod
-    private val protocolParams = cardanoInfo.protocolParams
-    private val minPoolCost = Coin(protocolParams.minPoolCost)
+    private val minPoolCost = Coin(params.minPoolCost)
 
     private val operator = AddrKeyHash.fromHex("f" * 56)
     private val poolId = PoolKeyHash.fromByteString(operator)
-    private val vrfKeyHash = VrfKeyHash.fromHex("a" * 64)
-    private val stakeKeyHash = StakeKeyHash.fromHex("b" * 56)
-    private val rewardAccount =
-        RewardAccount(StakeAddress(Network.Testnet, StakePayload.Stake(stakeKeyHash)))
 
     private def mkRegistration(cost: Coin = minPoolCost): Certificate.PoolRegistration =
-        Certificate.PoolRegistration(
-          operator = operator,
-          vrfKeyHash = vrfKeyHash,
-          pledge = Coin.ada(1),
-          cost = cost,
-          margin = UnitInterval.one,
-          rewardAccount = rewardAccount,
-          poolOwners = Set(operator),
-          relays = IndexedSeq.empty,
-          poolMetadata = None
-        )
-
-    private val zeroEpoch = cardanoInfo.slotConfig.zeroEpoch
-
-    private def mkContext(certState: CertState, epoch: Long): Context =
-        new Context(
-          env = UtxoEnv(
-            slot = cardanoInfo.slotConfig.firstSlotOfEpoch(epoch),
-            params = protocolParams,
-            certState = certState,
-            network = Network.Testnet,
-            treasury = Coin.zero
-          ),
-          slotConfig = cardanoInfo.slotConfig
-        )
+        poolRegistration(operator, rewardAccount(1), cost = cost, owners = Set(operator))
 
     private def runValidator(
         certs: Seq[Certificate],
-        certState: CertState = CertState.empty,
-        epoch: Long = zeroEpoch
+        state: CertState = CertState.empty,
+        epoch: Long = slotConfig.zeroEpoch
     ) = StakePoolCertificatesValidator.validate(
-      mkContext(certState, epoch),
-      State(certState = certState),
-      Transaction(
-        TransactionBody(
-          inputs = TaggedSortedSet.empty,
-          outputs = IndexedSeq.empty,
-          fee = Coin.zero,
-          certificates = TaggedOrderedStrictSet.from(certs)
-        )
-      )
+      context(state, slot = epochStart(epoch)),
+      State(certState = state),
+      certTx(certs*)
     )
 
     extension (error: StakePoolCertificatesValidator.Error)
@@ -82,21 +49,15 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
     test("pool re-registration succeeds") {
         // Despite what you might think, re-registration is ok.
         val existing = mkRegistration()
-        val certState = CertState.empty.copy(
-          pstate = PoolsState.empty.copy(stakePools = Map(poolId -> existing))
-        )
+        val state = certState(pools = Map(poolId -> existing))
 
         val updated = mkRegistration(cost = minPoolCost + Coin.ada(10))
-        val result = runValidator(Seq(updated), certState)
+        val result = runValidator(Seq(updated), state)
         result.isRight shouldBe true
     }
 
     test("registration fails when reward account network mismatches") {
-        val mismatched = mkRegistration().copy(
-          rewardAccount = RewardAccount(
-            StakeAddress(Network.Mainnet, StakePayload.Stake(stakeKeyHash))
-          )
-        )
+        val mismatched = mkRegistration().copy(rewardAccount = rewardAccount(1, Network.Mainnet))
 
         val error = runValidator(Seq(mismatched)).left.value.poolError
         error.rewardAccountNetworkMismatch.exists(_._1 == poolId) shouldBe true
@@ -115,15 +76,13 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
 
     test("retirement succeeds when pool is registered and epoch is valid") {
         val existing = mkRegistration()
-        val certState = CertState.empty.copy(
-          pstate = PoolsState.empty.copy(stakePools = Map(poolId -> existing))
-        )
+        val state = certState(pools = Map(poolId -> existing))
         val currentEpoch = 100L
         val validRetirementEpoch = currentEpoch + 1 // Must be > currentEpoch
 
         val result = runValidator(
           Seq(Certificate.PoolRetirement(poolId, validRetirementEpoch)),
-          certState,
+          state,
           epoch = currentEpoch
         )
         result.isRight shouldBe true
@@ -131,16 +90,14 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
 
     test("retirement fails when epoch equals current epoch") {
         val existing = mkRegistration()
-        val certState = CertState.empty.copy(
-          pstate = PoolsState.empty.copy(stakePools = Map(poolId -> existing))
-        )
+        val state = certState(pools = Map(poolId -> existing))
         val currentEpoch = 100L
 
         val error = runValidator(
           Seq(
             Certificate.PoolRetirement(poolId, currentEpoch)
           ), // epochNo == currentEpoch is invalid
-          certState,
+          state,
           epoch = currentEpoch
         ).left.value.poolError
         error.invalidRetirementEpochs should contain key poolId
@@ -148,16 +105,14 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
 
     test("retirement fails when epoch exceeds maximum allowed") {
         val existing = mkRegistration()
-        val certState = CertState.empty.copy(
-          pstate = PoolsState.empty.copy(stakePools = Map(poolId -> existing))
-        )
+        val state = certState(pools = Map(poolId -> existing))
         val currentEpoch = 100L
-        val maxRetirementEpoch = currentEpoch + protocolParams.poolRetireMaxEpoch
+        val maxRetirementEpoch = currentEpoch + params.poolRetireMaxEpoch
         val tooFarEpoch = maxRetirementEpoch + 1
 
         val error = runValidator(
           Seq(Certificate.PoolRetirement(poolId, tooFarEpoch)),
-          certState,
+          state,
           epoch = currentEpoch
         ).left.value.poolError
         error.invalidRetirementEpochs should contain key poolId

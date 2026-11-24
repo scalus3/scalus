@@ -3,7 +3,6 @@ package scalus.cardano.ledger.rules
 import org.scalatest.EitherValues
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
-import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 
 import scala.collection.immutable.SortedMap
@@ -11,12 +10,17 @@ import scala.collection.immutable.SortedMap
 /** DRep expiry and `numDormantEpochs` in the CERTS step, spec [DR-1] to [DR-4a], [DR-1a]. The
   * epochs and the `dRepActivity = 20` follow the example of spec section 10.1.
   */
-class CertsMutatorDRepExpiryTest extends AnyFunSuite with Matchers with EitherValues {
+class CertsMutatorDRepExpiryTest
+    extends AnyFunSuite
+    with Matchers
+    with EitherValues
+    with CertsTestKit {
 
-    private val slotConfig =
+    override def slotConfig: SlotConfig =
         SlotConfig(zeroTime = 0, zeroSlot = 0, slotLength = 1000, epochLength = 100, zeroEpoch = 0)
-    private val baseParams = CardanoInfo.preprod.protocolParams.copy(dRepActivity = 20)
-    private val drepDeposit = Coin(baseParams.dRepDeposit)
+    override lazy val params: ProtocolParams =
+        CardanoInfo.preprod.protocolParams.copy(dRepActivity = 20)
+    private val drepDeposit = Coin(params.dRepDeposit)
 
     private val drepA = Credential.KeyHash(AddrKeyHash.fromHex("a" * 56))
     private val drepB = Credential.KeyHash(AddrKeyHash.fromHex("b" * 56))
@@ -24,17 +28,7 @@ class CertsMutatorDRepExpiryTest extends AnyFunSuite with Matchers with EitherVa
     private val scriptDRep = Credential.ScriptHash(ScriptHash.fromHex("9" * 56))
     private val poolVoter = Voter.StakingPoolKey(AddrKeyHash.fromHex("d" * 56))
 
-    private val proposal = ProposalProcedure(
-      deposit = Coin(baseParams.govActionDeposit),
-      rewardAccount = RewardAccount(
-        StakeAddress(
-          Network.Testnet,
-          StakePayload.Stake(StakeKeyHash.fromHex("e" * 56))
-        )
-      ),
-      govAction = GovAction.InfoAction,
-      anchor = Anchor("https://example.com", DataHash.fromHex("0" * 64))
-    )
+    private val infoProposal = proposal(GovAction.InfoAction)
 
     private def voter(credential: Credential): Voter = credential match
         case Credential.KeyHash(hash)    => Voter.DRepKey(hash)
@@ -48,18 +42,6 @@ class CertsMutatorDRepExpiryTest extends AnyFunSuite with Matchers with EitherVa
         voters: Seq[Voter] = Seq.empty,
         protocolMajor: Int = 11
     ): State = {
-        val params = baseParams.copy(protocolVersion = ProtocolVersion(protocolMajor, 0))
-        val context = new Context(
-          env = UtxoEnv(
-            slot = slotConfig.firstSlotOfEpoch(epoch),
-            params = params,
-            certState = state.certState,
-            network = Network.Testnet,
-            treasury = Coin.zero
-          ),
-          slotConfig = slotConfig
-        )
-        val govActionId = GovActionId(TransactionHash.fromHex("f" * 64), 0)
         val votes =
             if voters.isEmpty then None
             else
@@ -67,26 +49,15 @@ class CertsMutatorDRepExpiryTest extends AnyFunSuite with Matchers with EitherVa
                   VotingProcedures(
                     SortedMap.from(
                       voters.map(v =>
-                          v -> SortedMap(govActionId -> VotingProcedure(Vote.Yes, None))
+                          v -> SortedMap(govActionId(1) -> VotingProcedure(Vote.Yes, None))
                       )
                     )
                   )
                 )
-        val tx = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.empty,
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            certificates =
-                if certs.isEmpty then TaggedOrderedStrictSet.empty
-                else TaggedOrderedStrictSet.from(certs),
-            votingProcedures = votes,
-            proposalProcedures =
-                if proposals.isEmpty then TaggedOrderedSet.empty
-                else TaggedOrderedSet.from(proposals)
-          )
-        )
-        CertsMutator.transit(context, state, tx).value
+        val tx = govTx(proposals, votes, certs)
+        CertsMutator
+            .transit(context(state.certState, epochStart(epoch), protocolMajor), state, tx)
+            .value
     }
 
     /** A state with `dreps` registered at the given expiries and the given dormant count. */
@@ -171,7 +142,8 @@ class CertsMutatorDRepExpiryTest extends AnyFunSuite with Matchers with EitherVa
     }
 
     test("spec [DR-2], [DR-3]: a tx with a proposal at epoch 104 adds 3 and resets the counter") {
-        val after = run(withDReps(3, drepA -> 120, drepB -> 100), 104, proposals = Seq(proposal))
+        val after =
+            run(withDReps(3, drepA -> 120, drepB -> 100), 104, proposals = Seq(infoProposal))
         expiry(after, drepA) shouldBe 123
         // 100 + 3 < 104: an expired DRep keeps its expiry (C/Rules/Certs.hs:327-333)
         expiry(after, drepB) shouldBe 100
@@ -179,7 +151,7 @@ class CertsMutatorDRepExpiryTest extends AnyFunSuite with Matchers with EitherVa
     }
 
     test("spec [DR-3]: the bump keeps a DRep whose expiry plus the dormant epochs is the epoch") {
-        val after = run(withDReps(3, drepA -> 101), 104, proposals = Seq(proposal))
+        val after = run(withDReps(3, drepA -> 101), 104, proposals = Seq(infoProposal))
         expiry(after, drepA) shouldBe 104
     }
 
@@ -193,7 +165,7 @@ class CertsMutatorDRepExpiryTest extends AnyFunSuite with Matchers with EitherVa
         val after = run(
           withDReps(3, drepA -> 110, drepB -> 120),
           104,
-          proposals = Seq(proposal),
+          proposals = Seq(infoProposal),
           voters = Seq(voter(drepA))
         )
         expiry(after, drepA) shouldBe 124
@@ -206,7 +178,7 @@ class CertsMutatorDRepExpiryTest extends AnyFunSuite with Matchers with EitherVa
           withDReps(3, drepB -> 120),
           104,
           certs = Seq(Certificate.RegDRepCert(drepA, drepDeposit, None)),
-          proposals = Seq(proposal)
+          proposals = Seq(infoProposal)
         )
         expiry(after, drepA) shouldBe 124
         expiry(after, drepB) shouldBe 123
@@ -219,7 +191,7 @@ class CertsMutatorDRepExpiryTest extends AnyFunSuite with Matchers with EitherVa
           withDReps(3, drepB -> 120),
           104,
           certs = Seq(Certificate.RegDRepCert(drepA, drepDeposit, None)),
-          proposals = Seq(proposal),
+          proposals = Seq(infoProposal),
           protocolMajor = 9
         )
         expiry(after, drepA) shouldBe 124

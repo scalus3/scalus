@@ -5,41 +5,17 @@ import org.scalatest.funsuite.AnyFunSuite
 
 class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("EmptyInputsValidator rule success") {
-        val context = Context()
-        val state = State()
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  )
-                )
-              )
-            )
-        }
+        val transaction = txSpending(input(0), input(1))(TransactionWitnessSet.empty)
 
-        val result = EmptyInputsValidator.validate(context, state, transaction)
+        val result = validate(EmptyInputsValidator, Map.empty, transaction)
         assert(result.isRight)
         assert(transaction.body.value.inputs.toSet.nonEmpty)
     }
 
     test("EmptyInputsValidator rule failure on empty inputs") {
-        val context = Context()
-        val state = State()
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty
-                )
-              )
-            )
-        }
+        val transaction = txSpending()(TransactionWitnessSet.empty)
 
-        val result = EmptyInputsValidator.validate(context, state, transaction)
+        val result = validate(EmptyInputsValidator, Map.empty, transaction)
         assert(result.isLeft)
         assert(transaction.body.value.inputs.toSet.isEmpty)
     }

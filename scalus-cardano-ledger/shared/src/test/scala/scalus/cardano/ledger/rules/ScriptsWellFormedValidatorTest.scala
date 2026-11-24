@@ -1,14 +1,13 @@
 package scalus.cardano.ledger.rules
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 import scalus.serialization.cbor.Cbor
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.{Constant, Program, ProgramFlatCodec, Term}
 
 /** `Babbage.validateScriptsWellFormed` in cardano-ledger, on a transaction from preprod. */
-class ScriptsWellFormedValidatorTest extends AnyFunSuite {
+class ScriptsWellFormedValidatorTest extends AnyFunSuite, CertsTestKit {
 
     /** Preprod transaction `aee75c1c595f90f893717d0186a96f09abf28579f08b76e412f327fa36bebf9b`, in
       * block 4,045,972 at protocol version 10. Output 0 carries a Plutus V2 reference script whose
@@ -78,20 +77,6 @@ class ScriptsWellFormedValidatorTest extends AnyFunSuite {
           .bytes
     )
 
-    private def context(protocolMajor: Int): Context = {
-        val params = CardanoInfo.preprod.protocolParams
-        Context(
-          env = UtxoEnv(
-            0,
-            params.copy(protocolVersion = ProtocolVersion(protocolMajor, 0)),
-            CertState.empty,
-            Network.Testnet,
-            Coin.zero
-          ),
-          slotConfig = CardanoInfo.preprod.slotConfig
-        )
-    }
-
     test("a Plutus V2 reference script with bytes after its CBOR byte string is well formed") {
         assert(
           preprodTx.id == TransactionHash.fromHex(
@@ -105,7 +90,11 @@ class ScriptsWellFormedValidatorTest extends AnyFunSuite {
             "5272e7132a75d7e314a75b1107b8a76a7fc0c284e48aa0b016251f7a"
           )
         )
-        assert(ScriptsWellFormedValidator.validate(context(10), State(), preprodTx).isRight)
+        assert(
+          ScriptsWellFormedValidator
+              .validate(context(protocolMajor = 10), State(), preprodTx)
+              .isRight
+        )
     }
 
     test("Babbage introduced the check: before protocol version 7 a malformed script passes") {
@@ -127,7 +116,7 @@ class ScriptsWellFormedValidatorTest extends AnyFunSuite {
             plutusData = Seq.empty
           )
         )
-        assert(ScriptsWellFormedValidator.validate(context(6), State(), tx).isRight)
-        assert(ScriptsWellFormedValidator.validate(context(7), State(), tx).isLeft)
+        assert(ScriptsWellFormedValidator.validate(context(protocolMajor = 6), State(), tx).isRight)
+        assert(ScriptsWellFormedValidator.validate(context(protocolMajor = 7), State(), tx).isLeft)
     }
 }

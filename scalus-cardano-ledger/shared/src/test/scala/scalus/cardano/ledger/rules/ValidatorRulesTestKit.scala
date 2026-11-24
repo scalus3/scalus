@@ -1,99 +1,54 @@
 package scalus.cardano.ledger
 package rules
 
-import scalus.testing.kit.KeyPairGenerator
-import org.scalacheck.Arbitrary
-import scalus.cardano.address.{Network, ShelleyAddress, ShelleyPaymentPart, StakeAddress}
 import scalus.cardano.ledger.*
-import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data
 
-import scala.collection.immutable
+trait ValidatorRulesTestKit extends ArbitraryInstances, RuleTestValues {
 
-trait ValidatorRulesTestKit extends ArbitraryInstances {
-    extension (tx: Transaction)
-        def withNetwork(network: Network): Transaction = tx.copy(
-          body = KeepRaw(
-            tx.body.value.copy(
-              networkId = Some(network.networkId),
-              outputs = tx.body.value.outputs
-                  .map(x =>
-                      Sized(
-                        Output(
-                          Arbitrary.arbitrary[ShelleyAddress].sample.get.copy(network = network),
-                          x.value.value
-                        )
-                      )
-                  )
-                  .appended(
-                    Sized(
-                      Output(
-                        Arbitrary.arbitrary[ShelleyAddress].sample.get.copy(network = network),
-                        Arbitrary.arbitrary[Value].sample.get
-                      )
-                    )
-                  ),
-              withdrawals = tx.body.value.withdrawals
-                  .map(w =>
-                      w.copy(withdrawals =
-                          w.withdrawals.map((k, v) =>
-                              (k.copy(address = k.address.copy(network = network)), v)
-                          )
-                      )
-                  )
-                  .orElse(
-                    Some(
-                      Withdrawals(
-                        immutable.SortedMap(
-                          (
-                            RewardAccount(
-                              Arbitrary.arbitrary[StakeAddress].sample.get.copy(network = network)
-                            ),
-                            Arbitrary.arbitrary[Coin].sample.get
-                          )
-                        )
-                      )
-                    )
-                  )
-            )
-          )
-        )
+    /** Spec `[kit.exunits.bounded-given]` in `docs/internal/test-refactor/d6-rules-kits.md`: a
+      * transaction under test fails only the rule under test, not `ExUnitsTooBigValidator`.
+      * `Arbitrary[Redeemers]` draws at most 3 redeemers, so their sum stays within
+      * `maxTxExecutionUnits`. A test that needs the wide units takes `genExUnits` by name, spec
+      * `[kit.exunits.wide-by-name]`.
+      */
+    given RedeemerUnits = RedeemerUnits.perTx(3)
 
-    end extension
+    /** A UTxO of 2 ada at `scriptAddress(hash)`, spec `[kit.rules.script-utxo]`. It returns a pair,
+      * so that `Map(scriptUtxo(...))` gives the `Utxos` of `validate`.
+      */
+    protected def scriptUtxo(
+        input: TransactionInput,
+        hash: ScriptHash,
+        datum: Option[DatumOption] = None,
+        scriptRef: Option[ScriptRef] = None
+    ): (TransactionInput, TransactionOutput) =
+        input -> TransactionOutput(scriptAddress(hash), Value.ada(2), datum, scriptRef)
 
-    protected def randomTransactionWithIsValidField: Transaction =
-        Arbitrary.arbitrary[Transaction].sample.get.copy(isValid = true)
+    /** A transaction that spends `inputs`, with no outputs and fee 0, spec
+      * `[kit.rules.tx-spending]`.
+      */
+    protected def txSpending(
+        inputs: TransactionInput*
+    )(witnessSet: TransactionWitnessSet): Transaction =
+        Transaction(emptyBody.copy(inputs = TaggedSortedSet.from(inputs)), witnessSet)
 
-    protected def generateKeyPair(): (ByteString, ByteString) =
-        KeyPairGenerator.generateKeyPair()
+    /** Runs `validator` on `Context()` and `State(utxos)`, spec `[kit.rules.validate]`. */
+    protected def validate(
+        validator: STS.Validator,
+        utxos: Utxos,
+        tx: Transaction
+    ): validator.Result = validator.validate(Context(), State(utxos = utxos), tx)
 
     /** A transaction that mints one token with `plutusScript`, and the UTxO it spends. */
     protected def mintTx(plutusScript: PlutusScript): (Transaction, Utxos) = {
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val utxos = Map(
-          input -> TransactionOutput(
-            // A key address: a script address would need a spending script in the transaction.
-            Arbitrary
-                .arbitrary[ShelleyAddress]
-                .sample
-                .get
-                .copy(payment = ShelleyPaymentPart.Key(AddrKeyHash.fromHex("a" * 56))),
-            Value(Coin(1_000_000L))
-          )
-        )
+        val spent = input(0)
+        // A key address: a script address would need a spending script in the transaction.
+        val utxos = Map(spent -> TransactionOutput(keyAddress(0), Value.lovelace(1_000_000L)))
         val tx = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.from(Set(input)),
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero,
-            mint = Some(
-              Mint(
-                MultiAsset(
-                  immutable.SortedMap(
-                    plutusScript.scriptHash -> immutable.SortedMap(AssetName.empty -> 1)
-                  )
-                )
-              )
-            )
+          emptyBody.copy(
+            inputs = TaggedSortedSet.from(Set(spent)),
+            mint = Some(mintOne(plutusScript.scriptHash))
           ),
           TransactionWitnessSet(
             scripts = Seq(plutusScript),

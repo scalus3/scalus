@@ -1,7 +1,6 @@
 package scalus.cardano.ledger
 package rules
 
-import org.scalacheck.Arbitrary.arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.compiler.compile
 import scalus.uplc.builtin.Data
@@ -19,8 +18,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     ) {
         val script = validPlutusV1Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -29,7 +28,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L)
           ),
@@ -54,7 +53,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -71,8 +70,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     ) {
         val script = validPlutusV2Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -81,7 +80,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L)
           ),
@@ -106,7 +105,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -121,8 +120,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusScriptsTransactionMutator success with isValid = true and valid scripts") {
         val script = validPlutusV3Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -131,7 +130,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L),
             donation = Some(Coin(500L)),
@@ -158,7 +157,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -175,7 +174,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
           index = 0
         )
         assert(
-          state.utxos.contains(input) && !newState.utxos.contains(input),
+          state.utxos.contains(spent) && !newState.utxos.contains(spent),
           "Input UTxO should be consumed"
         )
         assert(
@@ -195,21 +194,21 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusScriptsTransactionMutator success with isValid = false and invalid scripts") {
         val script = invalidPlutusV3Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val collateralInput = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val collateralInput = input(2)
+        val datum = Data.I(1)
 
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedSortedSet(input),
+              inputs = TaggedSortedSet(spent),
               collateralInputs = TaggedSortedSet(collateralInput),
               outputs = IndexedSeq.empty,
               fee = Coin(0),
               collateralReturnOutput = Some(
                 Sized(
                   Output(
-                    address = arbitrary[Address].sample.get,
+                    address = keyAddress(2),
                     value = Value.lovelace(80000)
                   )
                 )
@@ -241,13 +240,13 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
             ),
             collateralInput -> Output(
-              address = arbitrary[Address].sample.get,
+              address = keyAddress(1),
               value = Value.lovelace(100000)
             )
           )
@@ -287,24 +286,24 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     ) {
         val script = invalidPlutusV3Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val collateralInput1 = arbitrary[TransactionInput].sample.get
-        val collateralInput2 = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val collateralInput1 = input(2)
+        val collateralInput2 = input(3)
+        val datum = Data.I(1)
 
         // The inputs hold 2 * Long.MaxValue lovelace and the return takes Long.MaxValue back, so
         // Long.MaxValue lovelace is collected.
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedSortedSet(input),
+              inputs = TaggedSortedSet(spent),
               collateralInputs = TaggedSortedSet(collateralInput1, collateralInput2),
               outputs = IndexedSeq.empty,
               fee = Coin(0),
               collateralReturnOutput = Some(
                 Sized(
                   Output(
-                    address = arbitrary[Address].sample.get,
+                    address = keyAddress(2),
                     value = Value.lovelace(Long.MaxValue)
                   )
                 )
@@ -336,16 +335,13 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
             ),
-            collateralInput1 -> Output(
-              arbitrary[Address].sample.get,
-              Value.lovelace(Long.MaxValue)
-            ),
-            collateralInput2 -> Output(arbitrary[Address].sample.get, Value.lovelace(Long.MaxValue))
+            collateralInput1 -> Output(keyAddress(1), Value.lovelace(Long.MaxValue)),
+            collateralInput2 -> Output(keyAddress(1), Value.lovelace(Long.MaxValue))
           )
         )
 
@@ -369,13 +365,13 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusScriptsTransactionMutator failure with isValid = false and valid scripts") {
         val script = validPlutusV3Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedSortedSet(input),
+              inputs = TaggedSortedSet(spent),
               outputs = IndexedSeq.empty,
               fee = Coin(0),
             )
@@ -405,7 +401,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -429,12 +425,12 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusScriptsTransactionMutator failure with isValid = true and invalid scripts") {
         val script = invalidPlutusV3Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq.empty,
             fee = Coin(0),
           ),
@@ -459,7 +455,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -476,8 +472,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV1 rejects transaction with voting procedures") {
         val script = validPlutusV1Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -486,15 +482,16 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L),
             votingProcedures = Some(
               VotingProcedures(
-                arbitrary[SortedMap[Voter, SortedMap[GovActionId, VotingProcedure]]]
-                    .retryUntil(_.nonEmpty)
-                    .sample
-                    .get
+                SortedMap(
+                  Voter.DRepKey(addrKeyHash(1)) -> SortedMap(
+                    govActionId(1) -> VotingProcedure(Vote.Yes, None)
+                  )
+                )
               )
             )
           ),
@@ -519,7 +516,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -534,8 +531,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV1 rejects transaction with proposal procedures") {
         val script = validPlutusV1Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -544,10 +541,10 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L),
-            proposalProcedures = TaggedOrderedSet(arbitrary[ProposalProcedure].sample.get)
+            proposalProcedures = TaggedOrderedSet(infoProposal)
           ),
           witnessSet = TransactionWitnessSet(
             scripts = Seq(script),
@@ -570,7 +567,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -585,8 +582,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV1 rejects transaction with non-zero donation") {
         val script = validPlutusV1Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -595,7 +592,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L),
             donation = Some(Coin(500000)),
@@ -622,7 +619,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -637,8 +634,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV1 rejects transaction with current treasury value") {
         val script = validPlutusV1Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -647,7 +644,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L),
             donation = Some(Coin.zero),
@@ -674,7 +671,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -691,8 +688,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV2 rejects transaction with voting procedures") {
         val script = validPlutusV2Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -701,15 +698,16 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L),
             votingProcedures = Some(
               VotingProcedures(
-                arbitrary[SortedMap[Voter, SortedMap[GovActionId, VotingProcedure]]]
-                    .retryUntil(_.nonEmpty)
-                    .sample
-                    .get
+                SortedMap(
+                  Voter.DRepKey(addrKeyHash(1)) -> SortedMap(
+                    govActionId(1) -> VotingProcedure(Vote.Yes, None)
+                  )
+                )
               )
             )
           ),
@@ -734,7 +732,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -749,8 +747,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV2 rejects transaction with proposal procedures") {
         val script = validPlutusV2Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -759,10 +757,10 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L),
-            proposalProcedures = TaggedOrderedSet(arbitrary[ProposalProcedure].sample.get)
+            proposalProcedures = TaggedOrderedSet(infoProposal)
           ),
           witnessSet = TransactionWitnessSet(
             scripts = Seq(script),
@@ -785,7 +783,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -800,8 +798,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV2 rejects transaction with non-zero donation") {
         val script = validPlutusV2Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -810,7 +808,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L),
             donation = Some(Coin(500000)),
@@ -837,7 +835,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -852,8 +850,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV2 rejects transaction with current treasury value") {
         val script = validPlutusV2Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val datum = Data.I(1)
 
         val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -862,7 +860,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L),
             donation = Some(Coin.zero),
@@ -889,7 +887,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -906,7 +904,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV1 rejects transaction with inline datum in input") {
         val script = validPlutusV1Script
 
-        val input = arbitrary[TransactionInput].sample.get
+        val spent = input(1)
         val datum = Data.unit
 
         val output = TransactionOutput.Babbage(
@@ -918,7 +916,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L)
           ),
@@ -943,7 +941,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               inlineDatum = datum
@@ -958,8 +956,8 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV1 rejects transaction with inline datum in reference input") {
         val script = validPlutusV1Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val referenceInput = arbitrary[TransactionInput].sample.get
+        val spent = input(1)
+        val referenceInput = input(2)
         val datum = Data.unit
 
         val output = TransactionOutput.Babbage(
@@ -971,7 +969,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             referenceInputs = TaggedSortedSet(referenceInput),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L)
@@ -997,7 +995,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumOption = DatumOption.Hash(DataHash.fromByteString(datum.dataHash))
@@ -1017,7 +1015,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV1 rejects transaction with inline datum in output") {
         val script = validPlutusV1Script
 
-        val input = arbitrary[TransactionInput].sample.get
+        val spent = input(1)
         val datum = Data.unit
 
         val outputWithInlineDatum = TransactionOutput.Babbage(
@@ -1029,7 +1027,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(outputWithInlineDatum)),
             fee = Coin(1000L)
           ),
@@ -1054,7 +1052,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -1069,10 +1067,10 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV1 rejects transaction with Byron address in input") {
         val script = validPlutusV1Script
 
-        val input1 = arbitrary[TransactionInput].sample.get
-        val input2 = arbitrary[TransactionInput].sample.get
+        val input1 = input(1)
+        val input2 = input(2)
         val datum = Data.unit
-        val byronAddress = arbitrary[ByronAddress].sample.get
+        val byronAddress = ByronAddress.create(addrKeyHash(1))
 
         val output = TransactionOutput.Babbage(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -1128,10 +1126,10 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV1 rejects transaction with Byron address in reference input") {
         val script = validPlutusV1Script
 
-        val input = arbitrary[TransactionInput].sample.get
-        val referenceInput = arbitrary[TransactionInput].sample.get
+        val spent = input(1)
+        val referenceInput = input(2)
         val datum = Data.unit
-        val byronAddress = arbitrary[ByronAddress].sample.get
+        val byronAddress = ByronAddress.create(addrKeyHash(1))
 
         val output = TransactionOutput.Babbage(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -1142,7 +1140,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             referenceInputs = TaggedSortedSet(referenceInput),
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(1000L)
@@ -1168,7 +1166,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput.Babbage(
+            spent -> TransactionOutput.Babbage(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumOption = Some(DatumOption.Hash(DataHash.fromByteString(datum.dataHash))),
@@ -1191,9 +1189,9 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val script = validPlutusV1Script
 
-        val input = arbitrary[TransactionInput].sample.get
+        val spent = input(1)
         val datum = Data.unit
-        val byronAddress = arbitrary[ByronAddress].sample.get
+        val byronAddress = ByronAddress.create(addrKeyHash(1))
 
         val outputWithByronAddress = TransactionOutput.Babbage(
           address = byronAddress,
@@ -1204,7 +1202,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val tx = Transaction(
           body = TransactionBody(
-            inputs = TaggedSortedSet(input),
+            inputs = TaggedSortedSet(spent),
             outputs = IndexedSeq(Sized(outputWithByronAddress)),
             fee = Coin(1000L)
           ),
@@ -1229,7 +1227,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput.Babbage(
+            spent -> TransactionOutput.Babbage(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumOption = Some(DatumOption.Hash(DataHash.fromByteString(datum.dataHash))),
@@ -1246,7 +1244,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         // transTxCertV1V2 (eras/conway/impl/src/Cardano/Ledger/Conway/TxInfo.hs:390-397):
         // CollectErrors [BadTranslation (CertificateNotSupported txCert)]
         val (spend, state, _, _) = spendAndReference(validPlutusV2Script, isValid = true)
-        val drep = arbitrary[Credential].sample.get
+        val drep = Credential.KeyHash(addrKeyHash(1))
         val tx = spend.withBody(
           _.copy(
             referenceInputs = TaggedSortedSet.empty,
@@ -1264,7 +1262,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         output: TransactionOutput
     ): (Transaction, State) = {
         val (spend, state, _, _) = spendAndReference(validPlutusV1Script, isValid = true)
-        val referenceInput = arbitrary[TransactionInput].sample.get
+        val referenceInput = input(3) // input(2) is the collateral of spendAndReference
         val tx = spend.withBody(
           _.copy(
             referenceInputs = TaggedSortedSet(referenceInput),
@@ -1285,7 +1283,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     test("PlutusV1 checks the reference inputs before the outputs, spec [FL-10]") {
         // The Conway PlutusV1 TxInfo translates the inputs, the reference inputs, then the outputs
         // (eras/conway/impl/src/Cardano/Ledger/Conway/TxInfo.hs:405-412)
-        val byron = arbitrary[ByronAddress].sample.get
+        val byron = ByronAddress.create(addrKeyHash(1))
         val shelley = Address(Testnet, Credential.ScriptHash(validPlutusV1Script.scriptHash))
         val (tx, state) = plutusV1With(
           reference = babbageOutput(byron, inline = false),
@@ -1297,7 +1295,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
     test("PlutusV1 checks the inline datum of an output before its address, spec [FL-10]") {
         // transTxOutV1 (eras/conway/impl/src/Cardano/Ledger/Conway/TxInfo.hs:315-321)
-        val byron = arbitrary[ByronAddress].sample.get
+        val byron = ByronAddress.create(addrKeyHash(1))
         val shelley = Address(Testnet, Credential.ScriptHash(validPlutusV1Script.scriptHash))
         val (tx, state) = plutusV1With(
           reference = babbageOutput(shelley, inline = false),
@@ -1326,19 +1324,19 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
             case other =>
                 fail(s"expected CollectErrors [BadTranslation ($constructor ...)], got $other")
 
-    /** A tx that spends `input`, locked by `script`, and also has it in its reference inputs. */
+    /** A tx that spends `spent`, locked by `script`, and also has it in its reference inputs. */
     private def spendAndReference(
         script: PlutusScript,
         isValid: Boolean
     ): (Transaction, State, TransactionInput, TransactionInput) = {
-        val input = arbitrary[TransactionInput].sample.get
-        val collateralInput = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val spent = input(1)
+        val collateralInput = input(2)
+        val datum = Data.I(1)
         val tx = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedSortedSet(input),
-              referenceInputs = TaggedSortedSet(input),
+              inputs = TaggedSortedSet(spent),
+              referenceInputs = TaggedSortedSet(spent),
               collateralInputs = TaggedSortedSet(collateralInput),
               outputs = IndexedSeq.empty,
               fee = Coin(0)
@@ -1368,23 +1366,23 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         )
         val state = State(
           utxos = Map(
-            input -> Output(
+            spent -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
             ),
             collateralInput -> Output(
-              address = arbitrary[Address].sample.get,
+              address = keyAddress(1),
               value = Value.lovelace(100000)
             )
           )
         )
-        (tx, state, input, collateralInput)
+        (tx, state, spent, collateralInput)
     }
 
     private def assertRejectedForOverlap(
         result: PlutusScriptsTransactionMutator.Result,
-        input: TransactionInput
+        spent: TransactionInput
     ) =
         result match
             // CollectErrors [BadTranslation (ReferenceInputsNotDisjointFromInputs ...)], spec [FL-10]
@@ -1395,7 +1393,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   )
                 ) =>
                 assert(message.contains("ReferenceInputsNotDisjointFromInputs"), e)
-                assert(message.contains(input.toString), e)
+                assert(message.contains(spent.toString), e)
                 assert(SubmitError.fromException(e).rule == "CollectErrors")
             case other => fail(s"expected a rejection for the overlap, got $other")
 
@@ -1404,10 +1402,10 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     ) {
         // CollectErrors (ReferenceInputsNotDisjointFromInputs), C/TxInfo.hs:488-493
         assert(Context().env.params.protocolVersion.major == 11)
-        val (tx, state, input, _) = spendAndReference(validPlutusV3Script, isValid = true)
+        val (tx, state, spent, _) = spendAndReference(validPlutusV3Script, isValid = true)
         assertRejectedForOverlap(
           PlutusScriptsTransactionMutator.transit(Context(), state, tx),
-          input
+          spent
         )
     }
 
@@ -1416,17 +1414,17 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     ) {
         // The script fails, but the context cannot be built, so UTXOS fails in phase 1 and no
         // collateral is taken, whatever isValid says.
-        val (tx, state, input, _) = spendAndReference(invalidPlutusV3Script, isValid = false)
+        val (tx, state, spent, _) = spendAndReference(invalidPlutusV3Script, isValid = false)
         assertRejectedForOverlap(
           PlutusScriptsTransactionMutator.transit(Context(), state, tx),
-          input
+          spent
         )
     }
 
     test("a PlutusV2 spend of a UTxO that is also a reference input passes at PV 11, spec [TX-1]") {
-        val (tx, state, input, _) = spendAndReference(validPlutusV2Script, isValid = true)
+        val (tx, state, spent, _) = spendAndReference(validPlutusV2Script, isValid = true)
         val result = PlutusScriptsTransactionMutator.transit(Context(), state, tx)
-        assert(result.map(_.utxos.contains(input)) == Right(false), result)
+        assert(result.map(_.utxos.contains(spent)) == Right(false), result)
     }
 
     test(
@@ -1436,16 +1434,12 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         // (eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Plutus/Evaluate.hs:157-214), so the PlutusV3
         // collect error wins over the PlutusV2 failure that would collect the collateral. Spend
         // redeemers run before Mint ones, so the PlutusV2 spend would fail first.
-        val (spend, state, input, _) = spendAndReference(invalidPlutusV2Script, isValid = false)
+        val (spend, state, spent, _) = spendAndReference(invalidPlutusV2Script, isValid = false)
         val mint = validPlutusV3Script
         import TransactionWitnessSet.given
         val tx = spend
             .withBody(
-              _.copy(mint =
-                  Some(
-                    Mint(MultiAsset(SortedMap(mint.scriptHash -> SortedMap(AssetName.empty -> 1))))
-                  )
-              )
+              _.copy(mint = Some(mintOne(mint.scriptHash)))
             )
             .withWitness(ws =>
                 ws.copy(
@@ -1467,7 +1461,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
             )
         assertRejectedForOverlap(
           PlutusScriptsTransactionMutator.transit(Context(), state, tx),
-          input
+          spent
         )
     }
 
@@ -1492,18 +1486,16 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         // Two spends of a PlutusV3 script without a cost model, then a mint without a redeemer.
         // After the first error only NoRedeemer errors are added, each in front
         // (eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Plutus/Evaluate.hs:196-214).
-        val (spend, state, input, _) = spendAndReference(validPlutusV3Script, isValid = true)
-        val second = arbitrary[TransactionInput].sample.get
+        val (spend, state, spent, _) = spendAndReference(validPlutusV3Script, isValid = true)
+        val second = input(3)
         val mint = invalidPlutusV3Script
         import TransactionWitnessSet.given
         val tx = spend
             .withBody(
               _.copy(
-                inputs = TaggedSortedSet(input, second),
+                inputs = TaggedSortedSet(spent, second),
                 referenceInputs = TaggedSortedSet.empty,
-                mint = Some(
-                  Mint(MultiAsset(SortedMap(mint.scriptHash -> SortedMap(AssetName.empty -> 1))))
-                )
+                mint = Some(mintOne(mint.scriptHash))
               )
             )
             .withWitness(ws =>
@@ -1521,7 +1513,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   )
                 )
             )
-        val withSecond = state.copy(utxos = state.utxos + (second -> state.utxos(input)))
+        val withSecond = state.copy(utxos = state.utxos + (second -> state.utxos(spent)))
         val result = PlutusScriptsTransactionMutator.transit(noCostModels, withSecond, tx)
         assert(
           result == Left(
@@ -1542,14 +1534,17 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         // in sorted-input order (eras/alonzo/impl/src/Cardano/Ledger/Alonzo/UTxO.hs:290-296)
         // and merge adds each NoRedeemer in front, so the list is index 7 down to 0. A Set of
         // more than 4 elements is a HashSet, which loses that order.
-        val (spend, state, input, _) = spendAndReference(validPlutusV3Script, isValid = true)
-        val inputs = input +: Seq.fill(7)(arbitrary[TransactionInput].sample.get)
+        val (spend, state, spent, _) = spendAndReference(validPlutusV3Script, isValid = true)
+        val inputs = spent +: (3 to 9).map(input)
+        // The inputs are fixed, so check that a HashSet of them iterates in another order:
+        // otherwise this test could not fail for the bug it guards.
+        assert(inputs.toSet.toSeq != inputs.sorted)
         val tx = spend
             .withBody(
               _.copy(inputs = TaggedSortedSet.from(inputs), referenceInputs = TaggedSortedSet.empty)
             )
             .withWitness(_.copy(redeemers = None))
-        val utxos = state.utxos ++ inputs.map(_ -> state.utxos(input))
+        val utxos = state.utxos ++ inputs.map(_ -> state.utxos(spent))
         val result =
             PlutusScriptsTransactionMutator.transit(noCostModels, state.copy(utxos = utxos), tx)
         assert(
@@ -1572,7 +1567,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val mint = invalidPlutusV3Script
         val reward = validPlutusV2Script
         val cert = validPlutusV1Script
-        val account = RewardAccount(StakeAddress(Testnet, StakePayload.Script(reward.scriptHash)))
+        val account = scriptRewardAccount(reward.scriptHash)
         import TransactionWitnessSet.given
         val tx = spend
             .withBody(
@@ -1596,20 +1591,16 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   VotingProcedures(
                     SortedMap(
                       Voter.DRepScript(validPlutusV3Script.scriptHash) -> SortedMap(
-                        arbitrary[GovActionId].sample.get -> VotingProcedure(Vote.Yes, None)
+                        govActionId(1) -> VotingProcedure(Vote.Yes, None)
                       )
                     )
                   )
                 ),
                 proposalProcedures = TaggedOrderedSet(
-                  ProposalProcedure(
-                    Coin.zero,
+                  proposal(
+                    GovAction.TreasuryWithdrawals(Map.empty, Some(validPlutusV3Script.scriptHash)),
                     account,
-                    GovAction.TreasuryWithdrawals(
-                      Map.empty,
-                      Some(validPlutusV3Script.scriptHash)
-                    ),
-                    arbitrary[Anchor].sample.get
+                    Coin.zero
                   )
                 )
               )
@@ -1644,6 +1635,9 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
           result
         )
     }
+
+    /** A proposal with no script: only the PlutusV1/V2 field guard can reject it. */
+    private val infoProposal = proposal(GovAction.InfoAction, rewardAccount(1), Coin.zero)
 
     private def noCostModels: Context = {
         val context = Context()

@@ -13,6 +13,24 @@ import scala.collection.immutable
 import scala.collection.immutable.SortedMap
 
 object ArbitraryInstances extends ArbitraryInstances
+
+/** The units that the generators of `Redeemer` and `Redeemers` draw. The default is in the
+  * companion, so it has the lowest priority: a suite's own `given RedeemerUnits` wins. A distinct
+  * type, not `Arbitrary[ExUnits]`: a given `Arbitrary[ExUnits]` that outranks the inherited givens
+  * makes a call whose type the compiler infers, such as `genMapOfSizeFromArbitrary(0, 4)`, infer
+  * `ExUnits`.
+  */
+final case class RedeemerUnits(gen: Gen[ExUnits])
+
+object RedeemerUnits {
+
+    /** Any units, `genExUnits`, also above `maxTxExecutionUnits`. */
+    given any: RedeemerUnits = RedeemerUnits(ArbitraryInstances.genExUnits)
+
+    /** Units such that `n` redeemers fit in `maxTxExecutionUnits` together. */
+    def perTx(n: Int): RedeemerUnits = RedeemerUnits(ArbitraryInstances.genExUnitsOf(n))
+}
+
 trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
 
     /** `[gen.cover.optional-empty]`, `[gen.cover.no-gen-option]`: `None` in 50 % of samples. */
@@ -154,13 +172,13 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
 
     given Arbitrary[ExUnits] = Arbitrary(genExUnits)
 
-    /** The units of one script in a transaction that a ledger rule accepts: 0 to the
-      * `maxTxExecutionUnits` of the parameter snapshot (`[gen.size.params-source]`). A rule test
-      * takes it instead of `Arbitrary[ExUnits]`, whose wide part reaches `Long.MaxValue`.
+    /** Units that `n` scripts of one transaction can all spend: each field from 0 to `1 / n` of the
+      * `maxTxExecutionUnits` of the parameter snapshot (`[gen.size.params-source]`).
       */
-    def genScriptExUnits: Gen[ExUnits] = {
+    def genExUnitsOf(n: Int): Gen[ExUnits] = {
+        require(n > 0, s"n must be positive, got $n")
         val max = maxTxExUnits
-        Gen.zip(Gen.choose(0L, max.memory), Gen.choose(0L, max.steps)).map(ExUnits(_, _))
+        Gen.zip(Gen.choose(0L, max.memory / n), Gen.choose(0L, max.steps / n)).map(ExUnits(_, _))
     }
 
     given Arbitrary[ExUnitPrices] = autoDerived
@@ -581,19 +599,23 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
     // A derived enum of case objects fell back to `Gen.fail` at size 0 ([gen.size.derived-fallback])
     given Arbitrary[RedeemerTag] = Arbitrary(Gen.oneOf(RedeemerTag.values.toSeq))
 
-    given Arbitrary[Redeemer] = Arbitrary {
+    // The redeemer chain (Redeemer, Redeemers, TransactionWitnessSet, Transaction, Block,
+    // BlockFile) takes `RedeemerUnits` as a parameter, so a suite's own given reaches it. A plain
+    // given resolves `RedeemerUnits` here, where only the companion default is in scope.
+    given arbRedeemer(using units: RedeemerUnits): Arbitrary[Redeemer] = Arbitrary {
         for
             tag <- arbitrary[RedeemerTag]
             index <- Gen.choose(0, Int.MaxValue)
             data <- arbitrary[Data]
-            exUnits <- arbitrary[ExUnits]
+            exUnits <- units.gen
         yield Redeemer(tag, index, data, exUnits)
     }
 
-    given Arbitrary[Redeemers] = Arbitrary {
+    given arbRedeemers(using units: RedeemerUnits): Arbitrary[Redeemers] = Arbitrary {
         Gen.oneOf(
           genVectorOfSizeFromArbitrary[Redeemer](1, 3).map(Redeemers.Array.apply), {
               given Arbitrary[Int] = Arbitrary(Gen.choose(0, Int.MaxValue))
+              given Arbitrary[ExUnits] = Arbitrary(units.gen)
               genMapOfSizeFromArbitrary[(RedeemerTag, Int), (Data, ExUnits)](1, 3)
                   .map(Redeemers.Map.apply)
           }
@@ -648,7 +670,8 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
       genSetOfSizeFromArbitrary(1, 3).map(TaggedSortedStrictMap.from[K, A])
     )
 
-    given Arbitrary[TransactionWitnessSet] = autoDerived
+    given arbTransactionWitnessSet(using RedeemerUnits): Arbitrary[TransactionWitnessSet] =
+        autoDerived
 
     given Arbitrary[UnitInterval] = Arbitrary {
         for
@@ -847,7 +870,10 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
 
     given Arbitrary[TransactionBody] = Arbitrary(genTransactionBody)
 
-    given Arbitrary[Block] = Arbitrary {
+    given arbBlock(using RedeemerUnits): Arbitrary[Block] = Arbitrary {
+        // Derived once per summon, not once per draw.
+        given Arbitrary[KeepRaw[TransactionWitnessSet]] =
+            Arbitrary(arbitrary[TransactionWitnessSet].map(KeepRaw(_)))
         for
             header <- arbitrary[BlockHeader]
             transactionBodies <- genVectorOfSizeFromArbitrary[KeepRaw[TransactionBody]](1, 4)
@@ -884,12 +910,14 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         )
     }
 
-    given Arbitrary[BlockFile] = autoDerived
+    given arbBlockFile(using RedeemerUnits): Arbitrary[BlockFile] = autoDerived
 
-    given Arbitrary[Transaction] = Arbitrary {
+    given arbTransaction(using RedeemerUnits): Arbitrary[Transaction] = Arbitrary {
+        // Derived once per summon, not once per draw.
+        val genWitnessSet = arbitrary[TransactionWitnessSet]
         for
             body <- arbitrary[KeepRaw[TransactionBody]]
-            witnessSet <- arbitrary[TransactionWitnessSet]
+            witnessSet <- genWitnessSet
             isValid <- arbitrary[Boolean]
             auxiliaryData <- genOptional(arbitrary[KeepRaw[AuxiliaryData]])
         yield Transaction(body, KeepRaw(witnessSet), isValid, auxiliaryData)

@@ -3,55 +3,45 @@ package scalus.cardano.ledger.rules
 import org.scalatest.EitherValues
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
-import scalus.cardano.ledger.AddrKeyHash
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 
-class StakeCertificatesValidatorTest extends AnyFunSuite with Matchers with EitherValues {
-
-    private val cardanoInfo = CardanoInfo.preprod
-    private val protocolParams = cardanoInfo.protocolParams
-    private val keyDeposit = Coin(protocolParams.stakeAddressDeposit)
+class StakeCertificatesValidatorTest
+    extends AnyFunSuite
+    with Matchers
+    with EitherValues
+    with CertsTestKit {
 
     private val credential =
         Credential.KeyHash(AddrKeyHash.fromHex("a" * 56))
     private val poolId = PoolKeyHash.fromHex("1" * 56)
 
     private val poolOperator = AddrKeyHash.fromHex("1" * 56)
-    private val pool: Certificate.PoolRegistration = Certificate.PoolRegistration(
-      operator = poolOperator,
-      vrfKeyHash = VrfKeyHash.fromHex("a" * 64),
-      pledge = Coin.ada(100),
-      cost = Coin(protocolParams.minPoolCost),
-      margin = UnitInterval.one,
-      rewardAccount = RewardAccount(
+    private val pool: Certificate.PoolRegistration = poolRegistration(
+      poolOperator,
+      RewardAccount(
         StakeAddress(Network.Testnet, StakePayload.Stake(StakeKeyHash.fromHex("b" * 56)))
       ),
-      poolOwners = Set(poolOperator),
-      relays = IndexedSeq.empty,
-      poolMetadata = None
+      pledge = Coin.ada(100),
+      owners = Set(poolOperator)
     )
-    private val drepDeposit = Coin(protocolParams.dRepDeposit)
+    private val drepDeposit = Coin(params.dRepDeposit)
     private val drepCredential = Credential.KeyHash(AddrKeyHash.fromHex("c" * 56))
     private val drep = DRep.KeyHash(AddrKeyHash.fromHex("c" * 56))
     private val scriptDRepHash = ScriptHash.fromHex("d" * 56)
     private val scriptDRep = DRep.ScriptHash(scriptDRepHash)
 
     /** Only the pool is registered. */
-    private val poolOnly =
-        CertState.empty.copy(pstate = PoolsState.empty.copy(stakePools = Map(poolId -> pool)))
+    private val poolOnly = certState(pools = Map(poolId -> pool))
 
     /** The account, the pool and both DReps are registered. */
-    private val registered = CertState(
-      vstate = VotingState.empty.copy(dreps =
-          Map(
-            drepCredential -> DRepState(100, None, drepDeposit, Set.empty),
-            Credential.ScriptHash(scriptDRepHash) -> DRepState(100, None, drepDeposit, Set.empty)
-          )
-      ),
-      pstate = PoolsState.empty.copy(stakePools = Map(poolId -> pool)),
-      dstate =
-          DelegationState(Map(credential -> ConwayAccountState(Coin.zero, keyDeposit, None, None)))
+    private val registered = certState(
+      accounts = Map(credential -> accountState(Coin.zero)),
+      pools = Map(poolId -> pool),
+      dreps = Map(
+        drepCredential -> DRepState(100, None, drepDeposit, Set.empty),
+        Credential.ScriptHash(scriptDRepHash) -> DRepState(100, None, drepDeposit, Set.empty)
+      )
     )
     private val accountOnly =
         registered.copy(vstate = VotingState.empty, pstate = PoolsState.empty)
@@ -74,38 +64,14 @@ class StakeCertificatesValidatorTest extends AnyFunSuite with Matchers with Eith
       Certificate.StakeVoteRegDelegCert(newCredential, poolId, target, keyDeposit)
     )
 
-    private val emptyInputs = TaggedSortedSet.empty[TransactionInput]
-    private val emptyOutputs = IndexedSeq.empty[Sized[TransactionOutput]]
-
-    private def mkContext(certState: CertState): Context =
-        new Context(
-          env = UtxoEnv(
-            slot = 0,
-            params = protocolParams,
-            certState = certState,
-            network = Network.Testnet,
-            treasury = Coin.zero
-          ),
-          slotConfig = cardanoInfo.slotConfig
-        )
-
     private def runValidator(
         certs: Seq[Certificate],
-        certState: CertState = CertState.empty
-    ) = {
-        val txBody = TransactionBody(
-          inputs = emptyInputs,
-          outputs = emptyOutputs,
-          fee = Coin.zero,
-          certificates = TaggedOrderedStrictSet.from(certs)
-        )
-        val tx = Transaction(txBody)
-        StakeCertificatesValidator.validate(
-          mkContext(certState),
-          State(certState = certState),
-          tx
-        )
-    }
+        state: CertState = CertState.empty
+    ) = StakeCertificatesValidator.validate(
+      context(state),
+      State(certState = state),
+      certTx(certs*)
+    )
 
     test("registering a new credential succeeds") {
         val result = runValidator(Seq(Certificate.RegCert(credential, None)))
@@ -113,11 +79,7 @@ class StakeCertificatesValidatorTest extends AnyFunSuite with Matchers with Eith
     }
 
     test("registering an already registered credential fails") {
-        val existingState = CertState.empty.copy(
-          dstate = DelegationState(
-            Map(credential -> ConwayAccountState(Coin.zero, keyDeposit, None, None))
-          )
-        )
+        val existingState = certState(accounts = Map(credential -> accountState(Coin.zero)))
 
         val error =
             runValidator(Seq(Certificate.RegCert(credential, None)), existingState).left.value
@@ -126,11 +88,7 @@ class StakeCertificatesValidatorTest extends AnyFunSuite with Matchers with Eith
     }
 
     test("deregistration requires zero rewards") {
-        val state = CertState.empty.copy(
-          dstate = DelegationState(
-            Map(credential -> ConwayAccountState(Coin.ada(5), keyDeposit, None, None))
-          )
-        )
+        val state = certState(accounts = Map(credential -> accountState(Coin.ada(5))))
 
         val error =
             runValidator(Seq(Certificate.UnregCert(credential, Some(keyDeposit))), state).left.value
@@ -139,11 +97,7 @@ class StakeCertificatesValidatorTest extends AnyFunSuite with Matchers with Eith
     }
 
     test("deregistration with incorrect refund is rejected") {
-        val state = CertState.empty.copy(
-          dstate = DelegationState(
-            Map(credential -> ConwayAccountState(Coin.zero, keyDeposit, None, None))
-          )
-        )
+        val state = certState(accounts = Map(credential -> accountState(Coin.zero)))
 
         val error =
             runValidator(

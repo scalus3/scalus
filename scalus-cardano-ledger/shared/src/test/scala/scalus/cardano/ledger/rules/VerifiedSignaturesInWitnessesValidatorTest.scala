@@ -2,143 +2,87 @@ package scalus.cardano.ledger
 package rules
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.platform
+import scalus.testing.kit.Party
+import scalus.testing.kit.Party.{Alice, Bob, Charles}
+import scalus.uplc.builtin.ByteString
 
 class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("VerifiedSignaturesInWitnessesValidator VkeyWitnesses rule success") {
-        val context = Context()
-        val transaction = {
-            val (privateKey1, publicKey1) = generateKeyPair()
-            val (privateKey2, publicKey2) = generateKeyPair()
-            val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomTransactionWithIsValidField
-            tx.withWitness(
-              _.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id)),
-                  VKeyWitness(publicKey3, platform.signEd25519(privateKey3, tx.id))
-                ),
-                bootstrapWitnesses = TaggedSortedSet.empty
-              )
-            )
-        }
-        val state = State()
 
-        val result = VerifiedSignaturesInWitnessesValidator.validate(context, state, transaction)
+    private val signers = Seq(Alice, Bob, Charles)
+
+    // The rule reads only the witnesses, so any fixed body serves.
+    private val unsigned = txSpending(input(0))(TransactionWitnessSet.empty)
+
+    private def key(party: Party): ByteString = party.account.paymentKeyPair.verificationKey
+
+    private def signature(party: Party): ByteString =
+        party.account.paymentKeyPair.sign(unsigned.id)
+
+    private def corrupt(signature: ByteString): ByteString = {
+        val bytes = signature.bytes.clone()
+        bytes(0) = (bytes(0) + 1).toByte
+        ByteString.fromArray(bytes)
+    }
+
+    // A bootstrap witness checks only the Ed25519 signature; the chain code and the Byron
+    // attributes do not reach this rule, so fixed bytes serve.
+    private def bootstrap(party: Party, sig: ByteString): BootstrapWitness =
+        BootstrapWitness(
+          key(party),
+          sig,
+          ByteString.fromHex("cc" * 32),
+          ByteString.fromHex("aa" * 32)
+        )
+
+    private def withVkeys(witnesses: VKeyWitness*): Transaction =
+        unsigned.withWitness(
+          _.copy(
+            vkeyWitnesses = TaggedSortedSet(witnesses*),
+            bootstrapWitnesses = TaggedSortedSet.empty
+          )
+        )
+
+    private def withBootstraps(witnesses: BootstrapWitness*): Transaction =
+        unsigned.withWitness(
+          _.copy(
+            vkeyWitnesses = TaggedSortedSet.empty,
+            bootstrapWitnesses = TaggedSortedSet(witnesses*)
+          )
+        )
+
+    test("VerifiedSignaturesInWitnessesValidator VkeyWitnesses rule success") {
+        val transaction = withVkeys(signers.map(p => VKeyWitness(key(p), signature(p)))*)
+
+        val result = validate(VerifiedSignaturesInWitnessesValidator, Map.empty, transaction)
         assert(result.isRight)
     }
 
     test("VerifiedSignaturesInWitnessesValidator VkeyWitnesses rule failure") {
-        val context = Context()
-        val transaction = {
-            val (privateKey1, publicKey1) = generateKeyPair()
-            val (privateKey2, publicKey2) = generateKeyPair()
-            val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomTransactionWithIsValidField
-            tx.withWitness(
-              _.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id)),
-                  VKeyWitness(
-                    publicKey3, {
-                        val signature = platform.signEd25519(privateKey3, tx.id)
-                        signature.bytes(0) =
-                            (signature.bytes(0) + 1).toByte // Intentionally corrupt the signature
-                        signature
-                    }
-                  )
-                ),
-                bootstrapWitnesses = TaggedSortedSet.empty
-              )
-            )
-        }
-        val state = State()
+        val transaction = withVkeys(
+          VKeyWitness(key(Alice), signature(Alice)),
+          VKeyWitness(key(Bob), signature(Bob)),
+          VKeyWitness(key(Charles), corrupt(signature(Charles)))
+        )
 
-        val result = VerifiedSignaturesInWitnessesValidator.validate(context, state, transaction)
+        val result = validate(VerifiedSignaturesInWitnessesValidator, Map.empty, transaction)
         assert(result.isLeft)
     }
 
     test("VerifiedSignaturesInWitnessesValidator BootstrapWitnesses rule success") {
-        val context = Context()
-        val transaction = {
-            val (privateKey1, publicKey1) = generateKeyPair()
-            val (privateKey2, publicKey2) = generateKeyPair()
-            val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomTransactionWithIsValidField
-            tx.withWitness(
-              _.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet(
-                  BootstrapWitness(
-                    publicKey1,
-                    platform.signEd25519(privateKey1, tx.id),
-                    genByteStringOfN(32).sample.get,
-                    genByteStringOfN(32).sample.get
-                  ),
-                  BootstrapWitness(
-                    publicKey2,
-                    platform.signEd25519(privateKey2, tx.id),
-                    genByteStringOfN(32).sample.get,
-                    genByteStringOfN(32).sample.get
-                  ),
-                  BootstrapWitness(
-                    publicKey3,
-                    platform.signEd25519(privateKey3, tx.id),
-                    genByteStringOfN(32).sample.get,
-                    genByteStringOfN(32).sample.get
-                  )
-                )
-              )
-            )
-        }
-        val state = State()
+        val transaction = withBootstraps(signers.map(p => bootstrap(p, signature(p)))*)
 
-        val result = VerifiedSignaturesInWitnessesValidator.validate(context, state, transaction)
+        val result = validate(VerifiedSignaturesInWitnessesValidator, Map.empty, transaction)
         assert(result.isRight)
     }
 
     test("VerifiedSignaturesInWitnessesValidator BootstrapWitnesses rule failure") {
-        val context = Context()
-        val transaction = {
-            val (privateKey1, publicKey1) = generateKeyPair()
-            val (privateKey2, publicKey2) = generateKeyPair()
-            val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomTransactionWithIsValidField
-            tx.withWitness(
-              _.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet(
-                  BootstrapWitness(
-                    publicKey1,
-                    platform.signEd25519(privateKey1, tx.id),
-                    genByteStringOfN(32).sample.get,
-                    genByteStringOfN(32).sample.get
-                  ),
-                  BootstrapWitness(
-                    publicKey2,
-                    platform.signEd25519(privateKey2, tx.id),
-                    genByteStringOfN(32).sample.get,
-                    genByteStringOfN(32).sample.get
-                  ),
-                  BootstrapWitness(
-                    publicKey3, {
-                        val signature = platform.signEd25519(privateKey3, tx.id)
-                        signature.bytes(0) =
-                            (signature.bytes(0) + 1).toByte // Intentionally corrupt the signature
-                        signature
-                    },
-                    genByteStringOfN(32).sample.get,
-                    genByteStringOfN(32).sample.get
-                  )
-                )
-              )
-            )
-        }
-        val state = State()
+        val transaction = withBootstraps(
+          bootstrap(Alice, signature(Alice)),
+          bootstrap(Bob, signature(Bob)),
+          bootstrap(Charles, corrupt(signature(Charles)))
+        )
 
-        val result = VerifiedSignaturesInWitnessesValidator.validate(context, state, transaction)
+        val result = validate(VerifiedSignaturesInWitnessesValidator, Map.empty, transaction)
         assert(result.isLeft)
     }
 }

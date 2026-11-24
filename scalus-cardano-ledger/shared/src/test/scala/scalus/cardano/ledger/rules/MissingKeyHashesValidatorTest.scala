@@ -1,805 +1,219 @@
 package scalus.cardano.ledger
 package rules
 
-import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.{StakeAddress, StakePayload}
-import scalus.uplc.builtin.platform
+import scalus.cardano.address.{Network, StakeAddress, StakePayload}
+import scalus.testing.kit.Party
+import scalus.testing.kit.Party.{Alice, Bob, Charles}
 
 import scala.collection.immutable.SortedMap
 
 class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
+
+    /** Adds a vkey witness of each party. The rule reads only the key hashes of the witnesses, but
+      * each party signs the transaction id, as a real witness does.
+      */
+    private def signedBy(transaction: Transaction, parties: Party*): Transaction =
+        parties.foldLeft(transaction)((t, party) => party.signer.sign(t))
+
+    // The outputs stay at stake addresses (F-35 is out of scope): the rule takes the key hash of
+    // any address, so the stake key hash of `party` is the hash that must have a witness.
+    private def stakeUtxo(
+        input: TransactionInput,
+        party: Party
+    ): (TransactionInput, TransactionOutput) =
+        input -> Output(
+          StakeAddress(Network.Testnet, StakePayload.Stake(Hash.stakeKeyHash(party.addrKeyHash))),
+          Value(Coin(1000000L))
+        )
+
+    // The rule reads only the voters, so each voter casts no vote.
+    private def votingProcedures(
+        committee: AddrKeyHash,
+        pool: AddrKeyHash,
+        drep: AddrKeyHash
+    ): VotingProcedures = {
+        val noVotes = SortedMap.empty[GovActionId, VotingProcedure]
+        VotingProcedures(
+          SortedMap(
+            Voter.ConstitutionalCommitteeHotKey(committee) -> noVotes,
+            Voter.StakingPoolKey(pool) -> noVotes,
+            Voter.DRepKey(drep) -> noVotes,
+            Voter.ConstitutionalCommitteeHotScript(scriptHash(1)) -> noVotes,
+            Voter.DRepScript(scriptHash(2)) -> noVotes
+          )
+        )
+    }
+
+    private def withdrawals(parties: Party*): Withdrawals =
+        Withdrawals(
+          SortedMap.from(parties.zipWithIndex.map { (party, i) =>
+              RewardAccount(
+                StakeAddress(
+                  Network.Testnet,
+                  StakePayload.Stake(Hash.stakeKeyHash(party.addrKeyHash))
+                )
+              ) -> Coin(1000000L * (i + 1))
+          })
+        )
+
+    // One certificate of each kind, each with the key of `party` where the rule takes a key hash.
+    // The registrations carry a deposit: a `RegCert` without one needs no witness.
+    private def certificates(party: Party): TaggedOrderedStrictSet[Certificate] = {
+        val keyHash = party.addrKeyHash
+        val credential = Credential.KeyHash(keyHash)
+        val drep = DRep.KeyHash(addrKeyHash(2))
+        val deposit = Coin.ada(2)
+        TaggedOrderedStrictSet(
+          Certificate.StakeDelegation(credential, poolKeyHash(1)),
+          Certificate.PoolRegistration(
+            keyHash,
+            VrfKeyHash.fromHex("a" * 64),
+            Coin.ada(1),
+            Coin.ada(340),
+            UnitInterval.one,
+            rewardAccount(1),
+            Set(keyHash),
+            IndexedSeq.empty,
+            None
+          ),
+          Certificate.PoolRetirement(PoolKeyHash.fromByteString(keyHash), 1),
+          Certificate.RegCert(credential, Some(deposit)),
+          Certificate.UnregCert(credential, Some(deposit)),
+          Certificate.VoteDelegCert(credential, drep),
+          Certificate.StakeVoteDelegCert(credential, poolKeyHash(1), drep),
+          Certificate.StakeRegDelegCert(credential, poolKeyHash(1), deposit),
+          Certificate.VoteRegDelegCert(credential, drep, deposit),
+          Certificate.StakeVoteRegDelegCert(credential, poolKeyHash(1), drep, deposit),
+          Certificate.AuthCommitteeHotCert(credential, Credential.KeyHash(addrKeyHash(3))),
+          Certificate.ResignCommitteeColdCert(credential, None),
+          Certificate.RegDRepCert(credential, deposit, None),
+          Certificate.UnregDRepCert(credential, deposit),
+          Certificate.UpdateDRepCert(credential, None)
+        )
+    }
+
     test(
       "MissingKeyHashesValidator success for no inputs, collateralInputs, votingProcedures, certificates, withdrawals, requiredSigners"
     ) {
-        val context = Context()
-        val state = State()
-        val transaction = Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.empty,
-            collateralInputs = TaggedSortedSet.empty,
-            votingProcedures = None,
-            certificates = TaggedOrderedStrictSet.empty,
-            withdrawals = None,
-            requiredSigners = TaggedSortedSet.empty,
-            outputs = IndexedSeq.empty,
-            fee = Coin.zero
-          )
-        )
+        val transaction = Transaction(emptyBody)
 
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, Map.empty, transaction)
         assert(result.isRight)
     }
 
     test("MissingKeyHashesValidator Inputs rule success") {
-        val context = Context()
+        val unsigned = txSpending(input(1), input(2))(TransactionWitnessSet.empty)
+        val transaction = signedBy(unsigned, Alice, Bob)
+        val utxos = Map(stakeUtxo(input(1), Alice), stakeUtxo(input(2), Bob))
 
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val input1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val input2 = Arbitrary.arbitrary[TransactionInput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.withWitness(
-              _.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
-                )
-              )
-            ).copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(Set(input1, input2)),
-                  collateralInputs = TaggedSortedSet.empty,
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = None,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  withdrawals = None,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              )
-            )
-        }
-
-        val state = State(
-          utxos = Map(
-            input1 -> Output(
-              Arbitrary
-                  .arbitrary[StakeAddress]
-                  .sample
-                  .get
-                  .copy(payload = StakePayload.Stake(Hash(platform.blake2b_224(publicKey1)))),
-              Value(Coin(1000000L))
-            ),
-            input2 -> Output(
-              Arbitrary
-                  .arbitrary[StakeAddress]
-                  .sample
-                  .get
-                  .copy(
-                    payload = StakePayload.Stake(
-                      Hash(platform.blake2b_224(publicKey2))
-                    )
-                  ),
-              Value(Coin(1000000L))
-            )
-          )
-        )
-
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, utxos, transaction)
         assert(result.isRight)
     }
 
     test("MissingKeyHashesValidator Inputs rule failure") {
-        val context = Context()
+        val unsigned = txSpending(input(1), input(2))(TransactionWitnessSet.empty)
+        val transaction = signedBy(unsigned, Alice)
+        val utxos = Map(stakeUtxo(input(1), Alice), stakeUtxo(input(2), Bob))
 
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val input1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val input2 = Arbitrary.arbitrary[TransactionInput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.withWitness(
-              _.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
-                )
-              )
-            ).copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(Set(input1, input2)),
-                  collateralInputs = TaggedSortedSet.empty,
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = None,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  withdrawals = None,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              )
-            )
-        }
-
-        val state = State(
-          utxos = Map(
-            input1 -> Output(
-              Arbitrary
-                  .arbitrary[StakeAddress]
-                  .sample
-                  .get
-                  .copy(
-                    payload = StakePayload.Stake(
-                      Hash(platform.blake2b_224(publicKey1))
-                    )
-                  ),
-              Value(Coin(1000000L))
-            ),
-            input2 -> Output(
-              Arbitrary
-                  .arbitrary[StakeAddress]
-                  .sample
-                  .get
-                  .copy(
-                    payload = StakePayload.Stake(
-                      Hash(platform.blake2b_224(publicKey2))
-                    )
-                  ),
-              Value(Coin(1000000L))
-            )
-          )
-        )
-
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, utxos, transaction)
         assert(result.isLeft)
     }
 
     test("MissingKeyHashesValidator CollateralInputs rule success") {
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.withWitness(
-              _.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
-                )
-              )
-            ).copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = None,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  withdrawals = None,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              )
-            )
-        }
-
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[StakeAddress]
-                  .sample
-                  .get
-                  .copy(
-                    payload = StakePayload.Stake(
-                      Hash(platform.blake2b_224(publicKey1))
-                    )
-                  ),
-              Value(Coin(1000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[StakeAddress]
-                  .sample
-                  .get
-                  .copy(
-                    payload = StakePayload.Stake(
-                      Hash(platform.blake2b_224(publicKey2))
-                    )
-                  ),
-              Value(Coin(1000000L))
-            )
-          )
+        val unsigned = Transaction(
+          emptyBody.copy(collateralInputs = TaggedSortedSet(input(1), input(2)))
         )
+        val transaction = signedBy(unsigned, Alice, Bob)
+        val utxos = Map(stakeUtxo(input(1), Alice), stakeUtxo(input(2), Bob))
 
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, utxos, transaction)
         assert(result.isRight)
     }
 
     test("MissingKeyHashesValidator CollateralInputs rule failure") {
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
-        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = None,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  withdrawals = None,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[StakeAddress]
-                  .sample
-                  .get
-                  .copy(
-                    payload = StakePayload.Stake(
-                      Hash(platform.blake2b_224(publicKey1))
-                    )
-                  ),
-              Value(Coin(1000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[StakeAddress]
-                  .sample
-                  .get
-                  .copy(payload = StakePayload.Stake(Hash(platform.blake2b_224(publicKey2)))),
-              Value(Coin(1000000L))
-            )
-          )
+        val unsigned = Transaction(
+          emptyBody.copy(collateralInputs = TaggedSortedSet(input(1), input(2)))
         )
+        val transaction = signedBy(unsigned, Alice)
+        val utxos = Map(stakeUtxo(input(1), Alice), stakeUtxo(input(2), Bob))
 
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, utxos, transaction)
         assert(result.isLeft)
     }
 
     test("MissingKeyHashesValidator VotingProcedures success") {
-        val context = Context()
+        val unsigned = Transaction(
+          emptyBody.copy(votingProcedures =
+              Some(votingProcedures(Alice.addrKeyHash, Bob.addrKeyHash, Charles.addrKeyHash))
+          )
+        )
+        val transaction = signedBy(unsigned, Alice, Bob, Charles)
 
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-        val (privateKey3, publicKey3) = generateKeyPair()
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.empty,
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = Some(
-                    VotingProcedures(
-                      SortedMap(
-                        Voter.ConstitutionalCommitteeHotKey(
-                          Hash(platform.blake2b_224(publicKey1))
-                        ) -> SortedMap.from(genMapOfSizeFromArbitrary(0, 4).sample.get),
-                        Voter.StakingPoolKey(
-                          Hash(platform.blake2b_224(publicKey2))
-                        ) -> SortedMap.from(genMapOfSizeFromArbitrary(0, 4).sample.get),
-                        Voter.DRepKey(
-                          Hash(platform.blake2b_224(publicKey3))
-                        ) -> SortedMap.from(genMapOfSizeFromArbitrary(0, 4).sample.get),
-                        Voter.ConstitutionalCommitteeHotScript(
-                          Arbitrary.arbitrary[ScriptHash].sample.get
-                        ) -> SortedMap.from(genMapOfSizeFromArbitrary(0, 4).sample.get),
-                        Voter.DRepScript(
-                          Arbitrary.arbitrary[ScriptHash].sample.get
-                        ) -> SortedMap.from(genMapOfSizeFromArbitrary(0, 4).sample.get)
-                      )
-                    )
-                  ),
-                  certificates = TaggedOrderedStrictSet.empty,
-                  withdrawals = None,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id)),
-                    VKeyWitness(publicKey3, platform.signEd25519(privateKey3, tx.id))
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, Map.empty, transaction)
         assert(result.isRight)
     }
 
     test("MissingKeyHashesValidator VotingProcedures failure") {
-        val context = Context()
+        val unsigned = Transaction(
+          emptyBody.copy(votingProcedures =
+              Some(votingProcedures(Alice.addrKeyHash, Bob.addrKeyHash, Charles.addrKeyHash))
+          )
+        )
+        val transaction = signedBy(unsigned, Alice, Bob)
 
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-        val (privateKey3, publicKey3) = generateKeyPair()
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.empty,
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = Some(
-                    VotingProcedures(
-                      SortedMap(
-                        Voter.ConstitutionalCommitteeHotKey(
-                          Hash(platform.blake2b_224(publicKey1))
-                        ) -> SortedMap.from(genMapOfSizeFromArbitrary(0, 4).sample.get),
-                        Voter.StakingPoolKey(
-                          Hash(platform.blake2b_224(publicKey2))
-                        ) -> SortedMap.from(genMapOfSizeFromArbitrary(0, 4).sample.get),
-                        Voter.DRepKey(
-                          Hash(platform.blake2b_224(publicKey3))
-                        ) -> SortedMap.from(genMapOfSizeFromArbitrary(0, 4).sample.get),
-                        Voter.ConstitutionalCommitteeHotScript(
-                          Arbitrary.arbitrary[ScriptHash].sample.get
-                        ) -> SortedMap.from(genMapOfSizeFromArbitrary(0, 4).sample.get),
-                        Voter.DRepScript(
-                          Arbitrary.arbitrary[ScriptHash].sample.get
-                        ) -> SortedMap.from(genMapOfSizeFromArbitrary(0, 4).sample.get)
-                      )
-                    )
-                  ),
-                  certificates = TaggedOrderedStrictSet.empty,
-                  withdrawals = None,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, Map.empty, transaction)
         assert(result.isLeft)
     }
 
     test("MissingKeyHashesValidator Withdrawals rule success") {
-        val context = Context()
+        val unsigned = Transaction(emptyBody.copy(withdrawals = Some(withdrawals(Alice, Bob))))
+        val transaction = signedBy(unsigned, Alice, Bob)
 
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.empty,
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = None,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  withdrawals = Some(
-                    Withdrawals(
-                      SortedMap(
-                        RewardAccount(
-                          Arbitrary
-                              .arbitrary[StakeAddress]
-                              .sample
-                              .get
-                              .copy(
-                                payload = StakePayload.Stake(
-                                  Hash(platform.blake2b_224(publicKey1))
-                                )
-                              )
-                        ) -> Coin(1000000L),
-                        RewardAccount(
-                          Arbitrary
-                              .arbitrary[StakeAddress]
-                              .sample
-                              .get
-                              .copy(
-                                payload = StakePayload.Stake(
-                                  Hash(platform.blake2b_224(publicKey2))
-                                )
-                              )
-                        ) -> Coin(2000000L)
-                      )
-                    )
-                  ),
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, Map.empty, transaction)
         assert(result.isRight)
     }
 
     test("MissingKeyHashesValidator Withdrawals rule failure") {
-        val context = Context()
+        val unsigned = Transaction(emptyBody.copy(withdrawals = Some(withdrawals(Alice, Bob))))
+        val transaction = signedBy(unsigned, Alice)
 
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.empty,
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = None,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  withdrawals = Some(
-                    Withdrawals(
-                      SortedMap(
-                        RewardAccount(
-                          Arbitrary
-                              .arbitrary[StakeAddress]
-                              .sample
-                              .get
-                              .copy(
-                                payload = StakePayload.Stake(
-                                  Hash(platform.blake2b_224(publicKey1))
-                                )
-                              )
-                        ) -> Coin(1000000L),
-                        RewardAccount(
-                          Arbitrary
-                              .arbitrary[StakeAddress]
-                              .sample
-                              .get
-                              .copy(
-                                payload = StakePayload.Stake(
-                                  Hash(platform.blake2b_224(publicKey2))
-                                )
-                              )
-                        ) -> Coin(2000000L)
-                      )
-                    )
-                  ),
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, Map.empty, transaction)
         assert(result.isLeft)
     }
 
     test("MissingKeyHashesValidator Certificates rule success") {
-        val context = Context()
+        val unsigned = Transaction(emptyBody.copy(certificates = certificates(Alice)))
+        val transaction = signedBy(unsigned, Alice)
 
-        val (privateKey, publicKey) = generateKeyPair()
-        val credential = Credential.KeyHash(
-          Hash(platform.blake2b_224(publicKey))
-        )
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.empty,
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = None,
-                  certificates = TaggedOrderedStrictSet(
-                    Certificate
-                        .StakeDelegation(credential, Arbitrary.arbitrary[PoolKeyHash].sample.get),
-                    Certificate.PoolRegistration(
-                      Hash(platform.blake2b_224(publicKey)),
-                      Arbitrary.arbitrary[VrfKeyHash].sample.get,
-                      Arbitrary.arbitrary[Coin].sample.get,
-                      Arbitrary.arbitrary[Coin].sample.get,
-                      Arbitrary.arbitrary[UnitInterval].sample.get,
-                      Arbitrary.arbitrary[RewardAccount].sample.get,
-                      Set(Hash(platform.blake2b_224(publicKey))),
-                      Arbitrary.arbitrary[IndexedSeq[Relay]].sample.get,
-                      Arbitrary.arbitrary[Option[PoolMetadata]].sample.get
-                    ),
-                    Certificate
-                        .PoolRetirement(Hash(platform.blake2b_224(publicKey)), 1),
-                    Certificate.RegCert(credential, Arbitrary.arbitrary[Option[Coin]].sample.get),
-                    Certificate.UnregCert(credential, Arbitrary.arbitrary[Option[Coin]].sample.get),
-                    Certificate.VoteDelegCert(credential, Arbitrary.arbitrary[DRep].sample.get),
-                    Certificate.StakeVoteDelegCert(
-                      credential,
-                      Arbitrary.arbitrary[PoolKeyHash].sample.get,
-                      Arbitrary.arbitrary[DRep].sample.get
-                    ),
-                    Certificate.StakeRegDelegCert(
-                      credential,
-                      Arbitrary.arbitrary[PoolKeyHash].sample.get,
-                      Arbitrary.arbitrary[Coin].sample.get
-                    ),
-                    Certificate.VoteRegDelegCert(
-                      credential,
-                      Arbitrary.arbitrary[DRep].sample.get,
-                      Arbitrary.arbitrary[Coin].sample.get
-                    ),
-                    Certificate.StakeVoteRegDelegCert(
-                      credential,
-                      Arbitrary.arbitrary[PoolKeyHash].sample.get,
-                      Arbitrary.arbitrary[DRep].sample.get,
-                      Arbitrary.arbitrary[Coin].sample.get
-                    ),
-                    Certificate.AuthCommitteeHotCert(
-                      credential,
-                      Arbitrary.arbitrary[Credential].sample.get
-                    ),
-                    Certificate.ResignCommitteeColdCert(
-                      credential,
-                      Arbitrary.arbitrary[Option[Anchor]].sample.get
-                    ),
-                    Certificate.RegDRepCert(
-                      credential,
-                      Arbitrary.arbitrary[Coin].sample.get,
-                      Arbitrary.arbitrary[Option[Anchor]].sample.get
-                    ),
-                    Certificate.UnregDRepCert(credential, Arbitrary.arbitrary[Coin].sample.get),
-                    Certificate.UpdateDRepCert(
-                      credential,
-                      Arbitrary.arbitrary[Option[Anchor]].sample.get
-                    )
-                  ),
-                  withdrawals = None,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey, platform.signEd25519(privateKey, tx.id))
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, Map.empty, transaction)
         assert(result.isRight)
     }
 
     test("MissingKeyHashesValidator Certificates rule failure") {
-        val context = Context()
+        val transaction = Transaction(emptyBody.copy(certificates = certificates(Alice)))
 
-        val (privateKey, publicKey) = generateKeyPair()
-        val credential = Credential.KeyHash(
-          Hash(platform.blake2b_224(publicKey))
-        )
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.empty,
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = None,
-                  certificates = TaggedOrderedStrictSet(
-                    Certificate
-                        .StakeDelegation(credential, Arbitrary.arbitrary[PoolKeyHash].sample.get),
-                    Certificate.PoolRegistration(
-                      Hash(platform.blake2b_224(publicKey)),
-                      Arbitrary.arbitrary[VrfKeyHash].sample.get,
-                      Arbitrary.arbitrary[Coin].sample.get,
-                      Arbitrary.arbitrary[Coin].sample.get,
-                      Arbitrary.arbitrary[UnitInterval].sample.get,
-                      Arbitrary.arbitrary[RewardAccount].sample.get,
-                      Set(Hash(platform.blake2b_224(publicKey))),
-                      Arbitrary.arbitrary[IndexedSeq[Relay]].sample.get,
-                      Arbitrary.arbitrary[Option[PoolMetadata]].sample.get
-                    ),
-                    Certificate
-                        .PoolRetirement(Hash(platform.blake2b_224(publicKey)), 1),
-                    Certificate.RegCert(credential, Arbitrary.arbitrary[Option[Coin]].sample.get),
-                    Certificate.UnregCert(credential, Arbitrary.arbitrary[Option[Coin]].sample.get),
-                    Certificate.VoteDelegCert(credential, Arbitrary.arbitrary[DRep].sample.get),
-                    Certificate.StakeVoteDelegCert(
-                      credential,
-                      Arbitrary.arbitrary[PoolKeyHash].sample.get,
-                      Arbitrary.arbitrary[DRep].sample.get
-                    ),
-                    Certificate.StakeRegDelegCert(
-                      credential,
-                      Arbitrary.arbitrary[PoolKeyHash].sample.get,
-                      Arbitrary.arbitrary[Coin].sample.get
-                    ),
-                    Certificate.VoteRegDelegCert(
-                      credential,
-                      Arbitrary.arbitrary[DRep].sample.get,
-                      Arbitrary.arbitrary[Coin].sample.get
-                    ),
-                    Certificate.StakeVoteRegDelegCert(
-                      credential,
-                      Arbitrary.arbitrary[PoolKeyHash].sample.get,
-                      Arbitrary.arbitrary[DRep].sample.get,
-                      Arbitrary.arbitrary[Coin].sample.get
-                    ),
-                    Certificate.AuthCommitteeHotCert(
-                      credential,
-                      Arbitrary.arbitrary[Credential].sample.get
-                    ),
-                    Certificate.ResignCommitteeColdCert(
-                      credential,
-                      Arbitrary.arbitrary[Option[Anchor]].sample.get
-                    ),
-                    Certificate.RegDRepCert(
-                      credential,
-                      Arbitrary.arbitrary[Coin].sample.get,
-                      Arbitrary.arbitrary[Option[Anchor]].sample.get
-                    ),
-                    Certificate.UnregDRepCert(credential, Arbitrary.arbitrary[Coin].sample.get),
-                    Certificate.UpdateDRepCert(
-                      credential,
-                      Arbitrary.arbitrary[Option[Anchor]].sample.get
-                    )
-                  ),
-                  withdrawals = None,
-                  requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet.empty
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, Map.empty, transaction)
         assert(result.isLeft)
     }
 
     test("MissingKeyHashesValidator RequiredSigners rule success") {
-        val context = Context()
+        val unsigned = Transaction(
+          emptyBody.copy(requiredSigners = TaggedSortedSet(Alice.addrKeyHash, Bob.addrKeyHash))
+        )
+        val transaction = signedBy(unsigned, Alice, Bob)
 
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.empty,
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = None,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  withdrawals = None,
-                  requiredSigners = TaggedSortedSet.from(
-                    Set(
-                      Hash(platform.blake2b_224(publicKey1)),
-                      Hash(platform.blake2b_224(publicKey2))
-                    )
-                  )
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, Map.empty, transaction)
         assert(result.isRight)
     }
 
     test("MissingKeyHashesValidator RequiredSigners rule failure") {
-        val context = Context()
+        val unsigned = Transaction(
+          emptyBody.copy(requiredSigners = TaggedSortedSet(Alice.addrKeyHash, Bob.addrKeyHash))
+        )
+        val transaction = signedBy(unsigned, Alice)
 
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.empty,
-                  collateralInputs = TaggedSortedSet.empty,
-                  referenceInputs = TaggedSortedSet.empty,
-                  votingProcedures = None,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  withdrawals = None,
-                  requiredSigners = TaggedSortedSet.from(
-                    Set(
-                      Hash(platform.blake2b_224(publicKey1)),
-                      Hash(platform.blake2b_224(publicKey2))
-                    )
-                  )
-                )
-              ),
-              witnessSetRaw = KeepRaw(
-                tx.witnessSet.copy(
-                  vkeyWitnesses = TaggedSortedSet(
-                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
-                  )
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        val result = validate(MissingKeyHashesValidator, Map.empty, transaction)
         assert(result.isLeft)
     }
 }

@@ -1,78 +1,33 @@
 package scalus.cardano.ledger
 package rules
 
-import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.ByronAddress
-
-import scala.collection.immutable.SortedSet
 
 class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("TransactionSizeValidator rule success") {
-        val context = Context()
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.withWitness(
-              _.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedStrictMap.empty,
-                plutusV2Scripts = TaggedSortedStrictMap.empty,
-                plutusV3Scripts = TaggedSortedStrictMap.empty,
-                plutusData = KeepRaw(TaggedSortedMap.empty),
-                redeemers = None
-              )
-            ).copy(
-              auxiliaryData = None,
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs =
-                      TaggedSortedSet.from(Set(Arbitrary.arbitrary[TransactionInput].sample.get)),
-                  collateralInputs = TaggedSortedSet.empty,
-                  referenceInputs = TaggedSortedSet.empty,
-                  outputs = IndexedSeq(
-                    Sized(
-                      Output(
-                        Arbitrary.arbitrary[ByronAddress].sample.get,
-                        Value(Coin(1000000L))
-                      )
-                    )
-                  ),
-                  votingProcedures = None,
-                  proposalProcedures = TaggedOrderedSet.empty,
-                  withdrawals = None,
-                  certificates = TaggedOrderedStrictSet.empty,
-                  mint = None,
-                  requiredSigners = TaggedSortedSet.empty,
-                  collateralReturnOutput = None
-                )
-              )
-            )
-        }
 
-        val result = TransactionSizeValidator.validate(context, State(), transaction)
+    private val maxTxSize = Context().env.params.maxTxSize
+
+    test("TransactionSizeValidator rule success") {
+        val transaction = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input(0))),
+            outputs = IndexedSeq(Sized(Output(keyAddress(1), Value(Coin(1000000L))))),
+            fee = Coin.zero
+          ),
+          TransactionWitnessSet.empty
+        )
+
+        val result = TransactionSizeValidator.validate(Context(), State(), transaction)
         assert(result.isRight)
+        assert(transaction.toCborForFeeCalculation.length <= maxTxSize)
     }
 
     test("TransactionSizeValidator rule failure") {
-        val context = Context()
-        val inputs = SortedSet.fill(1000) { // Arbitrary large number of inputs
-            Arbitrary.arbitrary[TransactionInput].sample.get
-        }
+        // 1000 inputs of about 37 bytes each exceed the maximum transaction size.
+        val transaction = txSpending((0 until 1000).map(input)*)(TransactionWitnessSet.empty)
 
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet(inputs)
-                )
-              )
-            )
-        }
-
-        val result = TransactionSizeValidator.validate(context, State(), transaction)
+        val result = TransactionSizeValidator.validate(Context(), State(), transaction)
         assert(result.isLeft)
+        assert(transaction.toCborForFeeCalculation.length > maxTxSize)
     }
 }

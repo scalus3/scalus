@@ -56,6 +56,7 @@ class CardanoAddressTest extends AnyFunSuite {
         assert(Network.Testnet.networkId == 0x00)
         assert(Network.Mainnet.networkId == 0x01)
         assert(Network.Other(0x05).networkId == 0x05)
+        assert(Network.Other(0x05).toString == "Other(5)")
 
         assert(Network.Mainnet.isMainnet == true)
         assert(Network.Testnet.isMainnet == false)

@@ -9,11 +9,7 @@ import scalus.cardano.ledger.*
 import scala.collection.immutable.SortedMap
 
 /** Withdrawals and certificates through the default mutator pipeline, spec 13.1. */
-class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
-
-    private val cardanoInfo = CardanoInfo.preprod
-    private val params = cardanoInfo.protocolParams
-    private val keyDeposit = Coin(params.stakeAddressDeposit)
+class WithdrawalsTest extends AnyFunSuite, Matchers, EitherValues, CertsTestKit {
 
     private val stakeKeyHash = StakeKeyHash.fromHex("b" * 56)
     private val rewardAccount =
@@ -22,56 +18,33 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
 
     private val poolOperator = AddrKeyHash.fromHex("f" * 56)
     private val poolId = PoolKeyHash.fromByteString(poolOperator)
-    private val pool: Certificate.PoolRegistration = Certificate.PoolRegistration(
-      operator = poolOperator,
-      vrfKeyHash = VrfKeyHash.fromHex("a" * 64),
+    private val pool: Certificate.PoolRegistration = poolRegistration(
+      poolOperator,
+      rewardAccount,
       pledge = Coin.ada(100),
-      cost = Coin(params.minPoolCost),
-      margin = UnitInterval.one,
-      rewardAccount = rewardAccount,
-      poolOwners = Set(poolOperator),
-      relays = IndexedSeq.empty,
-      poolMetadata = None
+      owners = Set(poolOperator)
     )
     private val drepCredential = Credential.KeyHash(AddrKeyHash.fromHex("c" * 56))
 
     /** The account holds `balance`, a pool and a DRep are registered. */
     private def stateWith(balance: Coin): State = State(certState =
-        CertState(
-          vstate = VotingState.empty.copy(dreps =
-              Map(drepCredential -> DRepState(100, None, Coin(params.dRepDeposit), Set.empty))
-          ),
-          pstate = PoolsState.empty.copy(stakePools = Map(poolId -> pool)),
-          dstate = DelegationState(
-            Map(credential -> ConwayAccountState(balance, keyDeposit, None, None))
-          )
+        certState(
+          accounts = Map(credential -> accountState(balance)),
+          pools = Map(poolId -> pool),
+          dreps = Map(drepCredential -> DRepState(100, None, Coin(params.dRepDeposit), Set.empty))
         )
     )
 
-    private def tx(withdrawal: Option[Coin], certs: Certificate*): Transaction =
-        Transaction(
-          TransactionBody(
-            inputs = TaggedSortedSet.empty[TransactionInput],
-            outputs = IndexedSeq.empty[Sized[TransactionOutput]],
-            fee = Coin.zero,
-            certificates =
-                if certs.isEmpty then TaggedOrderedStrictSet.empty
-                else TaggedOrderedStrictSet.from(certs),
-            withdrawals = withdrawal.map(amount => Withdrawals(SortedMap(rewardAccount -> amount)))
-          )
-        )
-
-    private def context(state: State): Context = Context(
-      env = UtxoEnv(0, params, state.certState, Network.Testnet, Coin.zero),
-      slotConfig = cardanoInfo.slotConfig
-    )
+    /** A transaction that withdraws `amount` from `rewardAccount`. */
+    private def withdrawTx(amount: Coin, certs: Certificate*): Transaction =
+        certTx(Map(rewardAccount -> amount), certs*)
 
     /** The certificate and withdrawal validators, then every default mutator. */
     private def step(state: State, transaction: Transaction) =
         STS.Mutator.transit[TransactionException](
           Seq(CertsValidator, StakeCertificatesValidator, StakePoolCertificatesValidator),
           DefaultMutators.all,
-          context(state),
+          context(state.certState),
           state,
           transaction
         )
@@ -81,8 +54,8 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
 
     test("withdrawing zero twice keeps the account registered with balance 0") {
         // spec [SC-3c] row 1, [SC-3]
-        val first = step(stateWith(Coin.zero), tx(Some(Coin.zero))).value
-        val second = step(first, tx(Some(Coin.zero))).value
+        val first = step(stateWith(Coin.zero), withdrawTx(Coin.zero)).value
+        val second = step(first, withdrawTx(Coin.zero)).value
         account(second) shouldBe Some(ConwayAccountState(Coin.zero, keyDeposit, None, None))
     }
 
@@ -90,16 +63,16 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         // spec [SC-3c] row 2, [SC-3a]: withdrawals drain before the certificates are checked
         val result = step(
           stateWith(Coin.ada(7)),
-          tx(Some(Coin.ada(7)), Certificate.UnregCert(credential, Some(keyDeposit)))
+          withdrawTx(Coin.ada(7), Certificate.UnregCert(credential, Some(keyDeposit)))
         ).value
         account(result) shouldBe None
     }
 
     test("delegating after the full balance was withdrawn keeps the drained balance") {
         // spec [SC-3c] row 3, [SC-2]
-        val drained = step(stateWith(Coin.ada(7)), tx(Some(Coin.ada(7)))).value
+        val drained = step(stateWith(Coin.ada(7)), withdrawTx(Coin.ada(7))).value
         val delegated =
-            step(drained, tx(None, Certificate.StakeDelegation(credential, poolId))).value
+            step(drained, certTx(Certificate.StakeDelegation(credential, poolId))).value
         account(delegated) shouldBe Some(
           ConwayAccountState(Coin.zero, keyDeposit, Some(poolId), None)
         )
@@ -107,8 +80,8 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
 
     test("withdrawing the same 7 ADA twice is rejected the second time") {
         // spec [SC-3c] row 4, [SC-1]
-        val first = step(stateWith(Coin.ada(7)), tx(Some(Coin.ada(7)))).value
-        val error = step(first, tx(Some(Coin.ada(7)))).left.value
+        val first = step(stateWith(Coin.ada(7)), withdrawTx(Coin.ada(7))).value
+        val error = step(first, withdrawTx(Coin.ada(7))).left.value
         error shouldBe a[TransactionException.WithdrawalsNotInRewardsException]
     }
 
@@ -130,40 +103,41 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
     test("a phase-2-failed tx does not apply its withdrawals") {
         // spec [SC-3b]
         val state = stateWith(Coin.ada(7))
-        val result =
-            CertsMutator.transit(context(state), state, phase2Failed(tx(Some(Coin.ada(7))))).value
+        val result = CertsMutator
+            .transit(context(state.certState), state, phase2Failed(withdrawTx(Coin.ada(7))))
+            .value
         result shouldBe state
     }
 
     test("a phase-2-failed tx does not apply its stake certificates") {
         // spec [SC-3e]
         val state = stateWith(Coin.zero)
-        val unreg = phase2Failed(tx(None, Certificate.UnregCert(credential, Some(keyDeposit))))
-        CertsMutator.transit(context(state), state, unreg).value shouldBe state
+        val unreg = phase2Failed(certTx(Certificate.UnregCert(credential, Some(keyDeposit))))
+        CertsMutator.transit(context(state.certState), state, unreg).value shouldBe state
     }
 
     test("a phase-2-failed tx does not apply its pool certificates") {
         // spec [SC-3e]
         val state = stateWith(Coin.zero)
-        val nextEpoch = cardanoInfo.slotConfig.epochOf(0) + 1
-        val retire = phase2Failed(tx(None, Certificate.PoolRetirement(poolId, nextEpoch)))
-        CertsMutator.transit(context(state), state, retire).value shouldBe state
+        val nextEpoch = slotConfig.epochOf(0) + 1
+        val retire = phase2Failed(certTx(Certificate.PoolRetirement(poolId, nextEpoch)))
+        CertsMutator.transit(context(state.certState), state, retire).value shouldBe state
     }
 
     test("a phase-2-failed tx does not apply its DRep certificates") {
         // spec [SC-3e]
         val state = stateWith(Coin.zero)
         val unreg = phase2Failed(
-          tx(None, Certificate.UnregDRepCert(drepCredential, Coin(params.dRepDeposit)))
+          certTx(Certificate.UnregDRepCert(drepCredential, Coin(params.dRepDeposit)))
         )
-        CertsMutator.transit(context(state), state, unreg).value shouldBe state
+        CertsMutator.transit(context(state.certState), state, unreg).value shouldBe state
     }
 
     test("a phase-2-failed tx skips the withdrawal check") {
         // spec [SC-3f]: Conway LEDGER checks withdrawals only when isValid is true
         val state = stateWith(Coin.ada(7))
-        val overdrawn = phase2Failed(tx(Some(Coin.ada(8))))
-        CertsValidator.validate(context(state), state, overdrawn) shouldBe Right(())
+        val overdrawn = phase2Failed(withdrawTx(Coin.ada(8)))
+        CertsValidator.validate(context(state.certState), state, overdrawn) shouldBe Right(())
     }
 
     test("a phase-2-failed tx skips the stake certificate checks") {
@@ -171,17 +145,19 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         val state = stateWith(Coin.zero)
         val unregistered = Credential.KeyHash(AddrKeyHash.fromHex("d" * 56))
         val delegation =
-            phase2Failed(tx(None, Certificate.StakeDelegation(unregistered, poolId)))
-        StakeCertificatesValidator.validate(context(state), state, delegation) shouldBe Right(())
+            phase2Failed(certTx(Certificate.StakeDelegation(unregistered, poolId)))
+        StakeCertificatesValidator.validate(context(state.certState), state, delegation) shouldBe
+            Right(())
     }
 
     test("a phase-2-failed tx skips the pool certificate checks") {
         // spec [SC-3f]: CERTS runs only when isValid is true
         val state = stateWith(Coin.zero)
         val unknownPool = PoolKeyHash.fromHex("e" * 56)
-        val nextEpoch = cardanoInfo.slotConfig.epochOf(0) + 1
-        val retire = phase2Failed(tx(None, Certificate.PoolRetirement(unknownPool, nextEpoch)))
-        StakePoolCertificatesValidator.validate(context(state), state, retire) shouldBe Right(())
+        val nextEpoch = slotConfig.epochOf(0) + 1
+        val retire = phase2Failed(certTx(Certificate.PoolRetirement(unknownPool, nextEpoch)))
+        StakePoolCertificatesValidator.validate(context(state.certState), state, retire) shouldBe
+            Right(())
     }
 
     test("applyWithdrawals subtracts the amount and keeps the account") {
@@ -195,18 +171,16 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
 
     private val drepDeposit = Coin(params.dRepDeposit)
     private val drep = DRep.KeyHash(AddrKeyHash.fromHex("c" * 56))
-    private val nextEpoch = cardanoInfo.slotConfig.epochOf(0) + 1
+    private val nextEpoch = slotConfig.epochOf(0) + 1
 
     private val newPoolOperator = AddrKeyHash.fromHex("e" * 56)
     private val newPoolId = PoolKeyHash.fromByteString(newPoolOperator)
     private val newPool = pool.copy(operator = newPoolOperator, poolOwners = Set(newPoolOperator))
 
-    private def certs(certificates: Certificate*): Transaction = tx(None, certificates*)
-
     test("a vote delegation after its DRep re-registers in the same tx is kept") {
         val result = step(
           stateWith(Coin.zero),
-          certs(
+          certTx(
             Certificate.UnregDRepCert(drepCredential, drepDeposit),
             Certificate.RegDRepCert(drepCredential, drepDeposit, None),
             Certificate.VoteDelegCert(credential, drep)
@@ -218,7 +192,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
     test("a vote delegation before its DRep unregisters and re-registers is cleared") {
         val result = step(
           stateWith(Coin.zero),
-          certs(
+          certTx(
             Certificate.VoteDelegCert(credential, drep),
             Certificate.UnregDRepCert(drepCredential, drepDeposit),
             Certificate.RegDRepCert(drepCredential, drepDeposit, None)
@@ -232,7 +206,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         // spec [SC-21]
         val result = step(
           stateWith(Coin.zero),
-          certs(
+          certTx(
             Certificate.VoteDelegCert(credential, drep),
             Certificate.UnregDRepCert(drepCredential, drepDeposit)
           )
@@ -250,14 +224,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
               vstate = VotingState.empty
                   .copy(dreps = Map(scriptDRep -> DRepState(100, None, drepDeposit, Set.empty))),
               dstate = DelegationState(
-                Map(
-                  credential -> ConwayAccountState(
-                    Coin.zero,
-                    keyDeposit,
-                    None,
-                    Some(DRep.ScriptHash(scriptHash))
-                  )
-                )
+                Map(credential -> accountState(Coin.zero, drep = Some(DRep.ScriptHash(scriptHash))))
               )
             )
         )
@@ -265,9 +232,9 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         val result = STS.Mutator
             .transit[TransactionException](
               DefaultMutators.all.filterNot(_ == PlutusScriptsTransactionMutator),
-              context(state),
+              context(state.certState),
               state,
-              certs(Certificate.UnregDRepCert(scriptDRep, drepDeposit))
+              certTx(Certificate.UnregDRepCert(scriptDRep, drepDeposit))
             )
             .value
         account(result).flatMap(_.dRepDelegation) shouldBe None
@@ -277,7 +244,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         // Haskell POOL checks the retirement against the pools after the earlier certificates
         val result = step(
           stateWith(Coin.zero),
-          certs(newPool, Certificate.PoolRetirement(newPoolId, nextEpoch))
+          certTx(newPool, Certificate.PoolRetirement(newPoolId, nextEpoch))
         ).value
         result.certState.pstate.stakePools.keySet should contain(newPoolId)
         result.certState.pstate.retiring.get(newPoolId) shouldBe Some(nextEpoch)
@@ -286,7 +253,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
     test("a pool retirement before its registration in the tx is rejected") {
         val error = step(
           stateWith(Coin.zero),
-          certs(Certificate.PoolRetirement(newPoolId, nextEpoch), newPool)
+          certTx(Certificate.PoolRetirement(newPoolId, nextEpoch), newPool)
         ).left.value
         error shouldBe a[TransactionException.StakePoolException]
     }
@@ -295,7 +262,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         // Haskell POOL only schedules the retirement; POOLREAP removes the pool at the boundary
         val result = step(
           stateWith(Coin.zero),
-          certs(
+          certTx(
             Certificate.PoolRetirement(poolId, nextEpoch),
             Certificate.StakeDelegation(credential, poolId)
           )
@@ -307,7 +274,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
     test("a delegation to a pool registered later in the same tx is rejected") {
         val error = step(
           stateWith(Coin.zero),
-          certs(Certificate.StakeDelegation(credential, newPoolId), newPool)
+          certTx(Certificate.StakeDelegation(credential, newPoolId), newPool)
         ).left.value
         error match
             case e: TransactionException.StakeCertificatesException =>

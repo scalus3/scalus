@@ -1,130 +1,69 @@
 package scalus.cardano.ledger
 package rules
 
-import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.ShelleyAddress
 import scalus.serialization.cbor.Cbor
 import scalus.uplc.builtin.ByteString
 
 import scala.collection.immutable.SortedMap
 
 class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
+
+    /** `policies` policies of `assetsPerPolicy` assets each. Each asset name has 32 bytes and each
+      * amount 5 bytes, so 10 policies of 100 assets serialize to about 39 000 bytes, far over the
+      * `maxValueSize` of `Context()`.
+      */
+    private def multiAsset(policies: Int, assetsPerPolicy: Int): MultiAsset =
+        MultiAsset.from(
+          for
+              p <- 1 to policies
+              a <- 1 to assetsPerPolicy
+          yield (scriptHash(p), AssetName(ByteString.fromHex(f"$a%064x")), 1_000_000L)
+        )
+
+    // The rule reads only the outputs and the collateral return output.
+    private def tx(
+        outputs: IndexedSeq[TransactionOutput],
+        collateralReturnOutput: Option[TransactionOutput]
+    ): Transaction =
+        txSpending(input(0))(TransactionWitnessSet.empty).withBody(
+          _.copy(
+            outputs = outputs.map(Sized(_)),
+            collateralReturnOutput = collateralReturnOutput.map(Sized(_))
+          )
+        )
+
+    private val fitting: TransactionOutput =
+        Output(keyAddress(0), Value(Coin.ada(2), multiAsset(2, 2)))
+
+    private val tooBig: TransactionOutput =
+        Output(keyAddress(0), Value(Coin(1L), multiAsset(10, 100)))
+
     test("OutputsHaveTooBigValueStorageSizeValidator TransactionOutputs success") {
-        val context = Context()
+        val transaction = tx(IndexedSeq(fitting), None)
 
-        val output = Arbitrary.arbitrary[TransactionOutput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  outputs = IndexedSeq(Sized(output)),
-                  collateralReturnOutput = None
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result =
-            OutputsHaveTooBigValueStorageSizeValidator.validate(context, state, transaction)
+        val result = validate(OutputsHaveTooBigValueStorageSizeValidator, Map.empty, transaction)
         assert(result.isRight)
     }
 
     test("OutputsHaveTooBigValueStorageSizeValidator TransactionOutputs failure") {
-        val context = Context()
+        val transaction = tx(IndexedSeq(tooBig), None)
 
-        val output = Output(
-          Arbitrary.arbitrary[ShelleyAddress].sample.get,
-          Value(
-            Coin(1L),
-            genMultiAsset(
-              minPolicies = 10,
-              maxPolicies = 10,
-              minAssets = 100,
-              maxAssets = 100
-            ).sample.get
-          )
-        )
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  outputs = IndexedSeq(Sized(output)),
-                  collateralReturnOutput = None
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result =
-            OutputsHaveTooBigValueStorageSizeValidator.validate(context, state, transaction)
+        val result = validate(OutputsHaveTooBigValueStorageSizeValidator, Map.empty, transaction)
         assert(result.isLeft)
     }
 
     test("OutputsHaveTooBigValueStorageSizeValidator CollateralReturnOutput success") {
-        val context = Context()
+        val transaction = tx(IndexedSeq.empty, Some(fitting))
 
-        val collateralReturnOutput = Arbitrary.arbitrary[TransactionOutput].sample.get
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  outputs = IndexedSeq.empty,
-                  collateralReturnOutput = Some(Sized(collateralReturnOutput))
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result =
-            OutputsHaveTooBigValueStorageSizeValidator.validate(context, state, transaction)
+        val result = validate(OutputsHaveTooBigValueStorageSizeValidator, Map.empty, transaction)
         assert(result.isRight)
     }
 
     test("OutputsHaveTooBigValueStorageSizeValidator CollateralReturnOutput failure") {
-        val context = Context()
+        val transaction = tx(IndexedSeq.empty, Some(tooBig))
 
-        val collateralReturnOutput = Output(
-          Arbitrary.arbitrary[ShelleyAddress].sample.get,
-          Value(
-            Coin(1L),
-            genMultiAsset(
-              minPolicies = 10,
-              maxPolicies = 10,
-              minAssets = 100,
-              maxAssets = 100
-            ).sample.get
-          )
-        )
-
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  outputs = IndexedSeq.empty,
-                  collateralReturnOutput = Some(Sized(collateralReturnOutput))
-                )
-              )
-            )
-        }
-
-        val state = State()
-
-        val result =
-            OutputsHaveTooBigValueStorageSizeValidator.validate(context, state, transaction)
+        val result = validate(OutputsHaveTooBigValueStorageSizeValidator, Map.empty, transaction)
         assert(result.isLeft)
     }
 
@@ -135,7 +74,7 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
     private def valueWithAssets(count: Int): Value = Value(
       Coin(2_000_000L),
       MultiAsset.fromPolicy(
-        Arbitrary.arbitrary[PolicyId].sample.get,
+        scriptHash(1),
         (0 until count).map(i =>
             AssetName(ByteString.fromArray(Array(i.toByte, (i >> 8).toByte))) -> 1L
         )
@@ -145,18 +84,14 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
     private def validateAt(value: Value, maxValueSize: Long, asCollateral: Boolean) = {
         val context = Context.testMainnet()
         val params = context.env.params.copy(maxValueSize = maxValueSize)
-        val output = Sized(
-          Output(Arbitrary.arbitrary[ShelleyAddress].sample.get, value): TransactionOutput
-        )
-        val tx = randomTransactionWithIsValidField
-        val body = tx.body.value.copy(
-          outputs = if asCollateral then IndexedSeq.empty else IndexedSeq(output),
-          collateralReturnOutput = if asCollateral then Some(output) else None
-        )
+        val output: TransactionOutput = Output(keyAddress(0), value)
+        val transaction =
+            if asCollateral then tx(IndexedSeq.empty, Some(output))
+            else tx(IndexedSeq(output), None)
         OutputsHaveTooBigValueStorageSizeValidator.validate(
           context.copy(env = context.env.copy(params = params)),
           State(),
-          tx.copy(body = KeepRaw(body))
+          transaction
         )
     }
 
@@ -210,9 +145,7 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
           Coin(2_000_000L),
           MultiAsset(
             SortedMap.from(
-              (0 until 256).map(_ =>
-                  Arbitrary.arbitrary[PolicyId].sample.get -> SortedMap(AssetName.empty -> 1L)
-              )
+              (0 until 256).map(i => scriptHash(i) -> SortedMap(AssetName.empty -> 1L))
             )
           )
         )
