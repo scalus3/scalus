@@ -26,7 +26,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          # One commit is enough: SCALUS_STABLE_VERSION sets the version, so sbt reads no tag,
+          # and checkDtsUpToDate compares with HEAD only. A full history took 11 s per job.
+          fetch-depth: 1
       - uses: nixbuild/nix-quick-install-action@v35
       # The Nix store of the `ci-native` shell, saved by this job alone ([ci.nix.one-saver]), with
       # a garbage collection before the save and a purge of the older entries; see ci-jvm.yml.
