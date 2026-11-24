@@ -23,6 +23,8 @@ jobs:
       matrix:
         include:
           - { name: "CI-JVM 3.3.9", task: ci-jvm-3_3_9-full, shell: ci, deps: ci-jvm-3.3.9 }
+          # [ci.jobs.docs-mima-nightly]
+          - { name: "CI-JVM docs-mima", task: ci-docs-mima-full, shell: ci, deps: ci-jvm-3.3.9 }
           - { name: "CI-JVM 3.9.0", task: ci-jvm-3_9_0-full, shell: ci, deps: ci-jvm-3.9.0 }
           - { name: "CI-JVM 3.10.1", task: ci-jvm-3_10_1-full, shell: ci, deps: ci-jvm-3.10.1 }
           # The same Test and Link limits as the push job: the runner has 16 GB.

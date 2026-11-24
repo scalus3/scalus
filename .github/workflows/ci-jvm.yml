@@ -24,11 +24,18 @@ jobs:
       matrix:
         include:
           # One job per supported compiler version. The first is the default LTS and the version
-          # the `_3` library artifacts are published from, so it also carries the format + MiMa
-          # checks.
-          - { name: "3.3.9", task: ci-jvm-3_3_9 }
-          - { name: "3.9.0", task: ci-jvm-3_9_0 }
-          - { name: "3.10.1", task: ci-jvm-3_10_1 }
+          # the `_3` library artifacts are published from.
+          # `cache`: the job whose dependency and task cache entries this job uses.
+          # `save`: whether this job saves those entries (on master).
+          - { name: "3.3.9", task: ci-jvm-3_3_9, cache: "3.3.9", save: true }
+          - { name: "3.9.0", task: ci-jvm-3_9_0, cache: "3.9.0", save: true }
+          - { name: "3.10.1", task: ci-jvm-3_10_1, cache: "3.10.1", save: true }
+          # The version-independent checks, beside the 3.3.9 job instead of inside it
+          # ([ci.jobs.format], [ci.jobs.docs-mima], [ci.jobs.docs-mima-parallel]). They restore the
+          # entries of the 3.3.9 job and save none: a save under its key races with that job
+          # ([ci.jobs.docs-mima-cache], [ci.jobs.docs-mima-no-save]).
+          - { name: "format", task: ci-format, cache: "3.3.9", save: false }
+          - { name: "docs-mima", task: ci-docs-mima, cache: "3.3.9", save: false }
     permissions:
       contents: read
       id-token: write
@@ -89,7 +96,7 @@ jobs:
       - name: Name the dependency cache
         id: deps
         run: |
-          prefix="deps-${{ runner.os }}-${{ runner.arch }}-ci-jvm-${{ matrix.name }}-$(date -u +%Y-%m)-"
+          prefix="deps-${{ runner.os }}-${{ runner.arch }}-ci-jvm-${{ matrix.cache }}-$(date -u +%Y-%m)-"
           echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
           echo "key=${prefix}${{ hashFiles('build.sbt', 'project/*.sbt', 'project/build.properties') }}" >> "$GITHUB_OUTPUT"
           mkdir -p ~/.cache/coursier ~/.sbt/boot
@@ -107,7 +114,7 @@ jobs:
         id: task
         uses: ./.github/actions/sbt-task-cache/restore
         with:
-          job: ci-jvm-${{ matrix.name }}
+          job: ci-jvm-${{ matrix.cache }}
       - name: Build and test in Nix devshell
         run: |
           set -o pipefail
@@ -118,7 +125,7 @@ jobs:
         if: always()
         run: scripts/ci/count-warnings.sh build.log "CI-JVM ${{ matrix.name }}"
       - name: Save the dependency cache
-        if: env.SAVE_CACHES == 'true' && steps.deps-restore.outputs.cache-hit != 'true'
+        if: env.SAVE_CACHES == 'true' && matrix.save && steps.deps-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -126,14 +133,14 @@ jobs:
             ~/.sbt/boot
           key: ${{ steps.deps.outputs.key }}
       - name: Delete the older dependency caches of this job
-        if: env.SAVE_CACHES == 'true'
+        if: env.SAVE_CACHES == 'true' && matrix.save
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci/prune-caches.sh "${{ steps.deps.outputs.prefix }}" "${{ steps.deps.outputs.key }}"
       # Also after a failed test: sbt caches only passing suites, and the compile outputs still help
       # the next run.
       - name: Save the task cache
-        if: ${{ !cancelled() && env.SAVE_CACHES == 'true' }}
+        if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && matrix.save }}
         uses: ./.github/actions/sbt-task-cache/save
         with:
           prefix: ${{ steps.task.outputs.prefix }}
