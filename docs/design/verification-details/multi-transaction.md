@@ -136,17 +136,18 @@ previous state but its datum. `P` is guarantee #3, which `spend` states already,
 the input. The step that keeps `I` is a fourth guarantee, that the state is carried:
 
 ```scala
-// 4. The state is carried: a withdrawal of less than everything leaves the rest in one output,
-//    under the same datum.
+// 4. The state is carried. A withdrawal of less than everything leaves the rest in one
+//    output at the address of the spent one, under the same datum, with the lovelace
+//    locked less what is withdrawn: what the next withdrawal spends.
 Spec.ensures(
   amountOf(redeemer) === lockedBy(txInfo, txOutRef) ||
-    (continuingDatum(txInfo, txOutRef) === datum
-      && continuingLovelace(txInfo, txOutRef) === lockedBy(txInfo, txOutRef) - amountOf(redeemer))
+      carriesTheRest(txInfo, txOutRef, datum, amountOf(redeemer))
 )
 ```
 
-`continuingDatum` and `continuingLovelace` are accessors as `lockedBy` is: only the clauses use
-them, and they leave the script with the clauses. The init premise is a deposit of `initialAmount`
+`carriesTheRest` finds the one output at the spent output's address and compares its inline
+datum and its lovelace. It is an accessor as `lockedBy` is: only the clauses use it, and it leaves
+the script with them. The init premise is a deposit of `initialAmount`
 under `C0`, with `initialAmount ≥ 0`.
 
 With the lemma, `P` holds of every withdrawal of the thread. Its time is the withdrawal's lower
@@ -198,6 +199,29 @@ the beneficiary's inputs and outputs. Three ways to a step Lean finishes:
    about Blaster's run of one budget ([lean-manual](../verification-overview.md#64-lean-manual)): a
    run on a longer list takes more steps than any one budget. The loops of such a proof are those of
    [function mappings](function-mappings.md), A3.
+4. **Calls as unknowns.** A clause recomputes what the validator computed, with the same functions
+   on the same arguments: #3 is the validator's bound, rearranged, over the same two walks
+   (`findInputOrFail` and `getLovelace`). Each walk over a list becomes an unknown value, one for
+   each call, shared by the validator and the clause, and the program left has no loop: one budget
+   covers every context, and a proof for every value of the unknowns holds for the values the
+   walks return. Where a clause needs more of a walk than that two calls agree, a lemma about the
+   walk is a premise: #4 needs that the lovelace of `v − lovelace(a)` is that of `v` less `a`. The
+   lemmas are proved once, by induction, for the library's functions: that each terminates, and
+   what it returns where a statement needs it. One lemma ties a program to its form with unknowns,
+   each set to what its call returns.
+
+**Measured (2026-11-24).** `VestingWalksProbeTest` states #3 of a copy of the validator written by
+hand with its walks as unknowns (`VestingWalksAsUnknowns`), of every context and every value of
+the walks. It is proved at 1174 steps in 490 s; its control, that a withdrawal takes nothing, is
+refuted in 21 s. Of the validator itself, Lean finishes #3 of no contexts. #4, with the lemma on
+`Value` as a premise over the walks' values, is proved at 1305 steps in 381 s. Without the lemma
+it is refuted in 22 s, with a value check that passes and a lovelace of the rest that does not
+follow; of the copy without its datum check it is refuted in 22 s, with the rest under another
+datum. With the walks given on
+the JVM as the functions compute them, the copy accepts and rejects six samples as the validator
+does. A counterexample of the copy may give the walks values that no context gives: its
+beneficiary was an integer, which nothing reads once the signature is an unknown. So a proof carries
+over to the validator, and a refutation is replayed on it.
 
 ## Relation to other notes
 
