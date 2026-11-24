@@ -1284,6 +1284,34 @@ object SIRType {
                 other
     }
 
+    /** The type constructor `constructor` with the type arguments `args`. `whole` is the text of
+      * the type under conversion, for the error message.
+      *
+      * With fewer arguments than parameters the result is a type lambda over the other parameters:
+      * `pair x` is `[B] =>> pair(x, B)`. Each argument is a complete type.
+      */
+    private def applyTypeConstructor(
+        constructor: SIRType,
+        args: List[SIRType],
+        whole: => String
+    ): SIRType = {
+        def notAType(reason: String): Nothing =
+            throw new IllegalArgumentException(s"$reason, so $whole is not a type")
+        args.foreach {
+            case arg: TypeLambda => notAType(s"${arg.show} needs a type argument")
+            case _               => ()
+        }
+        constructor match
+            case TypeLambda(params, body) if args.length <= params.length =>
+                val (applied, missing) = params.splitAt(args.length)
+                val env = applied.zip(args).toMap
+                if missing.isEmpty then substitute(body, env, Map.empty)
+                else substitute(TypeLambda(missing, body), env, Map.empty)
+            case _: TypeLambda =>
+                notAType(s"${constructor.show} cannot take ${args.length} type arguments")
+            case _ => notAType(s"${constructor.show} takes no type argument")
+    }
+
     def fromDefaultUni(uplcType: DefaultUni): SIRType = {
         uplcType match
             case DefaultUni.ByteString           => ByteString
@@ -1310,37 +1338,79 @@ object SIRType {
                     TypeVar("A", Some(DefaultUni.ProtoArray.hashCode()), TypeVarKind.Transparent)
                 TypeLambda(scala.List(a), BuiltinArray(a))
             case DefaultUni.Apply(f, arg) =>
+                // A type argument is a complete type: `list list` is not a type.
+                def typeArgument(uni: DefaultUni): SIRType = fromDefaultUni(uni) match
+                    case _: TypeLambda =>
+                        throw new IllegalArgumentException(
+                          s"$uni needs a type argument, so $uplcType is not a type"
+                        )
+                    case tp => tp
                 f match
                     case DefaultUni.ProtoList =>
-                        BuiltinList(fromDefaultUni(arg))
+                        BuiltinList(typeArgument(arg))
                     case DefaultUni.ProtoArray =>
-                        BuiltinArray(fromDefaultUni(arg))
+                        BuiltinArray(typeArgument(arg))
                     case DefaultUni.Apply(DefaultUni.ProtoPair, a) =>
-                        BuiltinPair(fromDefaultUni(a), fromDefaultUni(arg))
+                        BuiltinPair(typeArgument(a), typeArgument(arg))
                     case DefaultUni.ProtoPair =>
-                        val a = TypeVar(
-                          "A",
-                          Some(DefaultUni.ProtoPair.hashCode()),
-                          TypeVarKind.Transparent
+                        // `pair arg` has its first component and waits for the second one.
+                        applyTypeConstructor(
+                          fromDefaultUni(f),
+                          scala.List(typeArgument(arg)),
+                          uplcType.toString
                         )
-                        TypeLambda(scala.List(a), BuiltinPair(a, fromDefaultUni(arg)))
                     case _ =>
-                        SIRType.Fun(fromDefaultUni(f), fromDefaultUni(arg))
+                        // Only `list`, `pair` and `array` take a type argument.
+                        throw new IllegalArgumentException(
+                          s"$f takes no type argument, so $uplcType is not a type"
+                        )
     }
 
+    /** The SIR type of a builtin, from its UPLC type scheme. The result has the form of the types
+      * in `SIRBuiltins`, up to the names of the bound type variables.
+      *
+      * The names are not unique. Each result binds the variables of its scheme (`a`, `b`) with no
+      * id, and a type variable is identified by its name and id. `SIRBuiltins` gives each builtin
+      * its own variable names. Two results in one unification environment share their variables.
+      */
     def fromUplcTypeScheme(uplcTypeSchema: UplcTypeScheme): SIRType = {
+        def typeVar(name: String): TypeVar = TypeVar(name, None, TypeVarKind.Transparent)
+
+        // `All(a, All(b, t))` is one type lambda with the parameters `a` and `b`. A type lambda
+        // in a type lambda is not the same type here: `calculateApplyType` and `SIR.$` open one
+        // type lambda only.
+        @tailrec
+        def paramsAndBody(
+            scheme: UplcTypeScheme,
+            params: List[TypeVar]
+        ): (List[TypeVar], UplcTypeScheme) = scheme match
+            case UplcTypeScheme.All(name, body) => paramsAndBody(body, typeVar(name) :: params)
+            case _                              => (params.reverse, scheme)
+
+        // `App(App(pair, a), b)` is the type constructor `pair` with the arguments `a` and `b`.
+        @tailrec
+        def constructorAndArgs(
+            scheme: UplcTypeScheme,
+            args: List[UplcTypeScheme]
+        ): (UplcTypeScheme, List[UplcTypeScheme]) = scheme match
+            case UplcTypeScheme.App(f, arg) => constructorAndArgs(f, arg :: args)
+            case _                          => (scheme, args)
+
         uplcTypeSchema match
             case UplcTypeScheme.Type(argType) => fromDefaultUni(argType)
             case UplcTypeScheme.Arrow(argType, resType) =>
                 Fun(fromUplcTypeScheme(argType), fromUplcTypeScheme(resType))
-            case UplcTypeScheme.All(typeVar, body) =>
-                TypeLambda(
-                  scala.List(TypeVar(typeVar, None, TypeVarKind.Transparent)),
-                  fromUplcTypeScheme(body)
+            case _: UplcTypeScheme.All =>
+                val (params, body) = paramsAndBody(uplcTypeSchema, Nil)
+                TypeLambda(params, fromUplcTypeScheme(body))
+            case _: UplcTypeScheme.App =>
+                val (constructor, args) = constructorAndArgs(uplcTypeSchema, Nil)
+                applyTypeConstructor(
+                  fromUplcTypeScheme(constructor),
+                  args.map(fromUplcTypeScheme),
+                  uplcTypeSchema.toString
                 )
-            case UplcTypeScheme.App(f, arg) =>
-                calculateApplyType(fromUplcTypeScheme(f), fromUplcTypeScheme(arg), Map.empty)
-            case UplcTypeScheme.TVar(name) => TypeVar(name, None, TypeVarKind.Transparent)
+            case UplcTypeScheme.TVar(name) => typeVar(name)
     }
 
     def parentsEqSeq(input: SIRType, parent: SIRType): List[SIRType] = {
