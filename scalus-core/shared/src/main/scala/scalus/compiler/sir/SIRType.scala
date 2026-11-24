@@ -212,28 +212,28 @@ object SIRType {
         override def show: String = "BuiltinValue"
     }
 
+    /** True for the name of a `scala.TupleN` class. */
+    private def isTupleClassName(name: String): Boolean = {
+        val prefix = "scala.Tuple"
+        name.length > prefix.length && name.startsWith(prefix) &&
+        name.drop(prefix.length).forall(_.isDigit)
+    }
+
     case class CaseClass(
         constrDecl: ConstrDecl,
         typeArgs: scala.List[SIRType],
         parent: Option[SIRType]
     ) extends SIRType {
 
-        if constrDecl.name == "scala.Tuple3" then
-            if parent.nonEmpty then
+        // A tuple is a product type on its own, not a case of a sum type. The plugin keeps tuples
+        // out of the parent detection (`SIRTyper.isTupleClass`), and `Tuple2.unapply` matches only
+        // a tuple without a parent.
+        parent match
+            case Some(parentType) if isTupleClassName(constrDecl.name) =>
                 throw new IllegalArgumentException(
-                  s"Tuple3 cannot have parent, got $parent"
+                  s"The tuple type ${constrDecl.name} cannot have a parent type, got ${parentType.show}"
                 )
-
-        // Debug check: enum case classes should have a parent
-        if constrDecl.name.contains(
-              "scalus.testing.regression.cosmex20251107.minimized.Action$.Close"
-            )
-        then
-            if parent.isEmpty then
-                val stackTrace = new Exception().getStackTrace.nn.take(10).mkString("\n  ")
-                throw new RuntimeException(
-                  s"[DEBUG] Enum case class ${constrDecl.name} was created without parent!\nStack trace:\n  $stackTrace"
-                )
+            case _ =>
 
         override def show: String =
             if typeArgs.isEmpty then constrDecl.name

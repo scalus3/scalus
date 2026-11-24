@@ -356,12 +356,6 @@ object SIR:
         anns: AnnotationsDecl
     ) extends AnnotatedSIR {
 
-        bindings match {
-            case List(Binding("args", tp, value)) =>
-                throw RuntimeException("QQQ")
-            case _ =>
-        }
-
         override def tp: SIRType = body.tp
     }
 
@@ -507,19 +501,7 @@ object SIR:
     case class Match(scrutinee: AnnotatedSIR, cases: List[Case], tp: SIRType, anns: AnnotationsDecl)
         extends AnnotatedSIR
 
-    case class Cast(term: AnnotatedSIR, tp: SIRType, anns: AnnotationsDecl) extends AnnotatedSIR {
-
-        if anns.pos.file.contains("GeneratingUnscopedVarsTest") then
-            tp match
-                case SIRType.Fun(SIRType.Integer, tuple2Constr) =>
-                    tuple2Constr match
-                        case SIRType.CaseClass(constr, List(SIRType.Integer, SIRType.Integer), _)
-                            if constr.name == "scala.Tuple2" =>
-                            throw RuntimeException("QQQ")
-                        case _ =>
-                case _ =>
-
-    }
+    case class Cast(term: AnnotatedSIR, tp: SIRType, anns: AnnotationsDecl) extends AnnotatedSIR
 
     case class Decl(data: DataDecl, term: SIR) extends SIR {
 
