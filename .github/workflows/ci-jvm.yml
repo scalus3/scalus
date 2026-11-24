@@ -102,23 +102,12 @@ jobs:
             ~/.sbt/boot
           key: ${{ steps.deps.outputs.key }}
           restore-keys: ${{ steps.deps.outputs.prefix }}
-      # The sbt 2 task cache: compile outputs and passing test results by the hash of their inputs.
-      # With it, the alias (no `clean`, `test`) rebuilds and retests only what the push changed. One
-      # entry per job ([ci.task.key]); the flake hash in the prefix starts from an empty cache when
-      # the corpus, the JDK or `uplc` change ([ci.task.key-flake]). Never `target/`
-      # ([ci.task.no-target]).
-      - name: Name the task cache
-        id: task
-        run: |
-          prefix="sbt-task-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.nix', 'flake.lock') }}-ci-jvm-${{ matrix.name }}-$(date -u +%Y-%m)-"
-          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
-          echo "key=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
+      # The sbt task cache of this job ([ci.task.*], [ci.jobs.shared-cache-action]).
       - name: Restore the task cache
-        uses: actions/cache/restore@v6
+        id: task
+        uses: ./.github/actions/sbt-task-cache/restore
         with:
-          path: ~/.cache/sbt
-          key: ${{ steps.task.outputs.key }}
-          restore-keys: ${{ steps.task.outputs.prefix }}
+          job: ci-jvm-${{ matrix.name }}
       - name: Build and test in Nix devshell
         run: |
           set -o pipefail
@@ -145,15 +134,11 @@ jobs:
       # the next run.
       - name: Save the task cache
         if: ${{ !cancelled() && env.SAVE_CACHES == 'true' }}
-        uses: actions/cache/save@v6
+        uses: ./.github/actions/sbt-task-cache/save
         with:
-          path: ~/.cache/sbt
+          prefix: ${{ steps.task.outputs.prefix }}
           key: ${{ steps.task.outputs.key }}
-      - name: Delete the older task caches of this job
-        if: ${{ !cancelled() && env.SAVE_CACHES == 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/ci/prune-caches.sh "${{ steps.task.outputs.prefix }}" "${{ steps.task.outputs.key }}"
+          token: ${{ github.token }}
       - name: Show what the runner cached
         if: always()
         run: du -sh ~/.cache/coursier ~/.sbt/boot ~/.cache/sbt 2>/dev/null || true

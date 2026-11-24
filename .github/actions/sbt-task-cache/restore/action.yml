@@ -1,0 +1,34 @@
+name: Restore the sbt task cache
+description: >-
+  Names the sbt 2 task cache entry of one CI job and restores the newest entry of that job.
+  The task cache holds compile outputs and passing test results by the hash of their inputs, so
+  the push alias (no `clean`, `test`) rebuilds and retests only what the push changed.
+  Spec: docs/superpowers/specs/2026-11-21-ci-speed-design.md, [ci.task.*].
+inputs:
+  job:
+    description: "The job name in the key, for example `ci-jvm-3.3.9`. It must not contain `_` or `%`."
+    required: true
+outputs:
+  prefix:
+    description: The key prefix of this job; the save action prunes older entries by it.
+    value: ${{ steps.name.outputs.prefix }}
+  key:
+    description: The key of this run.
+    value: ${{ steps.name.outputs.key }}
+runs:
+  using: composite
+  steps:
+    # One entry per job ([ci.task.key]). The flake hash in the prefix starts from an empty cache
+    # when the corpus, the JDK or `uplc` change ([ci.task.key-flake]). The month starts a new
+    # entry each month, so old outputs do not pile up. Never `target/` ([ci.task.no-target]).
+    - id: name
+      shell: bash
+      run: |
+        prefix="sbt-task-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.nix', 'flake.lock') }}-${{ inputs.job }}-$(date -u +%Y-%m)-"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "key=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/sbt
+        key: ${{ steps.name.outputs.key }}
+        restore-keys: ${{ steps.name.outputs.prefix }}

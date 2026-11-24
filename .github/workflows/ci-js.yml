@@ -56,6 +56,12 @@ jobs:
           nproc
           free -m
           swapon --show
+      # The sbt task cache of this job ([ci.task.*], [ci.jobs.shared-cache-action]).
+      - name: Restore the task cache
+        id: task
+        uses: ./.github/actions/sbt-task-cache/restore
+        with:
+          job: ci-js
       # The runner VM has 16 GB. js/test runs the six Scala.js test modules at once: up to four
       # linker jobs in the sbt JVM (-Xmx8g from .jvmopts) and four Node test processes
       # (--max-old-space-size=2048 each). About one run in five died there with "The runner
@@ -64,19 +70,6 @@ jobs:
       # used memory every 20 s, so a run that still dies shows how close it came.
       # sbt 2.1's default workerMaxInstances (2) caps only forked JVM test groups; Scala.js tests
       # run Node, not a forked JVM, so this Tags.Test limit is still the only cap on them.
-      # The sbt task cache, one entry per job ([ci.task.*]); see ci-jvm.yml.
-      - name: Name the task cache
-        id: task
-        run: |
-          prefix="sbt-task-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.nix', 'flake.lock') }}-ci-js-$(date -u +%Y-%m)-"
-          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
-          echo "key=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
-      - name: Restore the task cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.cache/sbt
-          key: ${{ steps.task.outputs.key }}
-          restore-keys: ${{ steps.task.outputs.prefix }}
       - name: Build and test in Nix devshell
         run: |
           (while sleep 20; do free -m | awk '/^Mem:/ {m=$3} /^Swap:/ {s=$3} END {print "[mem] used " m " MB, swap " s " MB"}'; done) &
@@ -104,17 +97,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci/prune-caches.sh "${{ steps.deps.outputs.prefix }}" "${{ steps.deps.outputs.key }}"
+      # Also after a failed test: sbt caches only passing suites, and the compile outputs still help
+      # the next run.
       - name: Save the task cache
         if: ${{ !cancelled() && env.SAVE_CACHES == 'true' }}
-        uses: actions/cache/save@v6
+        uses: ./.github/actions/sbt-task-cache/save
         with:
-          path: ~/.cache/sbt
+          prefix: ${{ steps.task.outputs.prefix }}
           key: ${{ steps.task.outputs.key }}
-      - name: Delete the older task caches of this job
-        if: ${{ !cancelled() && env.SAVE_CACHES == 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/ci/prune-caches.sh "${{ steps.task.outputs.prefix }}" "${{ steps.task.outputs.key }}"
+          token: ${{ github.token }}
       - name: Show what the runner cached
         if: always()
         run: du -sh ~/.cache/coursier ~/.sbt/boot ~/.cache/sbt 2>/dev/null || true

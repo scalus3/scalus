@@ -1,0 +1,27 @@
+name: Save the sbt task cache
+description: >-
+  Saves the sbt 2 task cache under the key of the restore action, then deletes the older entries
+  of the same job, so each job keeps one entry ([ci.prune.after-save]). The caller decides when
+  to save: on master only, and also after a failed test, because sbt caches only passing suites
+  and the compile outputs still help the next run.
+inputs:
+  prefix:
+    description: "The `prefix` output of the restore action."
+    required: true
+  key:
+    description: "The `key` output of the restore action."
+    required: true
+  token:
+    description: "A token with `actions: write`, for the deletion of the older entries."
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache/save@v6
+      with:
+        path: ~/.cache/sbt
+        key: ${{ inputs.key }}
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: '"$GITHUB_WORKSPACE/scripts/ci/prune-caches.sh" "${{ inputs.prefix }}" "${{ inputs.key }}"'
