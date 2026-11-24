@@ -135,6 +135,23 @@ Measured on 2026-11-22, after step 9 of 6.5: 1322 entries deleted (5.34 GB). Lef
 | Lean workspace | 0.70 GB | 2 |
 | `sbt/setup-sbt` of `crypto-jni.yml` and `deploy-site.yml` | 0.35 GB | 6 |
 
+Measured on 2026-11-24, master run of df3ee3df8 (phases 2 and 3 landed). The push changed CI
+aliases, workflows and docs, and no Scala source, so each job took its compiles and its test
+passes from the task cache of the previous master commit.
+
+| Job | Phase 1 | df3ee3df8 |
+|---|---|---|
+| CI-JVM, wall time (slowest job) | 15.1 min | 4 min |
+| CI-JVM 3.3.9, 3.9.0, 3.10.1 | 15.1, 13.7, 13.4 min | 2, 2, 2 min |
+| CI-JVM format | – | 3 min |
+| CI-JVM docs-mima | – | 4 min |
+| CI-JS | 14.1 min | 6 min |
+| CI-Native | 10.5 min | 5 min |
+
+Task cache entries: 165 to 182 MB per job. A push that changes a scalus-core test, or a file
+that `scalus-plugin` compiles as a copy, reruns more; those cases wait for their first master
+push.
+
 ## 5. Approaches
 
 ### Decision: Keep the sbt task cache in the GitHub Actions cache
