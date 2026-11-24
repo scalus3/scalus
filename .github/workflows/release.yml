@@ -43,7 +43,18 @@ jobs:
             ~/.sbt/boot
           key: deps-${{ runner.os }}-${{ runner.arch }}-ci-jvm-3.3.9-
           restore-keys: deps-${{ runner.os }}-${{ runner.arch }}-ci-jvm-3.3.9-
-      - run: nix develop .#ci --accept-flake-config --command bash -c "sbt ci-release"
+      # A published artifact must carry the exact git version in BuildInfo.version: projects that
+      # use a snapshot read it to pin the Scalus compiler. SCALUS_STABLE_VERSION replaces it with
+      # a fixed one, for push CI only ([ci.alias.release-guard]).
+      - name: Check that the release uses the git version
+        run: |
+          if [[ -n "${SCALUS_STABLE_VERSION:-}" ]]; then
+            echo "::error::SCALUS_STABLE_VERSION is set, so the artifacts would not carry the git version"
+            exit 1
+          fi
+      # A published artifact comes from a clean build ([ci.alias.release-clean]). This job restores
+      # no task cache, and `clean` makes sbt ignore the global disk cache for the next command.
+      - run: nix develop .#ci --accept-flake-config --command bash -c 'sbt "clean; ci-release"'
         env:
           PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
           PGP_SECRET: ${{ secrets.PGP_SECRET }}

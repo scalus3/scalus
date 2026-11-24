@@ -10,6 +10,9 @@ env:
   # Only master saves caches; a branch restores the entries of master
   # (docs/superpowers/specs/2026-11-21-ci-speed-design.md, [ci.nix.save-on-master]).
   SAVE_CACHES: ${{ github.ref == 'refs/heads/master' }}
+  # A fixed version, so the git version in BuildInfo does not change the sources of each commit
+  # ([ci.alias.stable-version]). This job publishes nothing.
+  SCALUS_STABLE_VERSION: "1"
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -61,15 +64,33 @@ jobs:
       # used memory every 20 s, so a run that still dies shows how close it came.
       # sbt 2.1's default workerMaxInstances (2) caps only forked JVM test groups; Scala.js tests
       # run Node, not a forked JVM, so this Tags.Test limit is still the only cap on them.
+      # The sbt task cache, one entry per job ([ci.task.*]); see ci-jvm.yml.
+      - name: Name the task cache
+        id: task
+        run: |
+          prefix="sbt-task-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.nix', 'flake.lock') }}-ci-js-$(date -u +%Y-%m)-"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "key=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
+      - name: Restore the task cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/sbt
+          key: ${{ steps.task.outputs.key }}
+          restore-keys: ${{ steps.task.outputs.prefix }}
       - name: Build and test in Nix devshell
         run: |
           (while sleep 20; do free -m | awk '/^Mem:/ {m=$3} /^Swap:/ {s=$3} END {print "[mem] used " m " MB, swap " s " MB"}'; done) &
           sampler=$!
+          set -o pipefail
           nix develop .#ci --accept-flake-config --command bash -c '
             sbt "set Global / concurrentRestrictions ++= Seq(Tags.limit(Tags.Test, 2), Tags.limit(ScalaJSTags.Link, 2)); ci-js" &&
             npm --prefix scalus-cardano-ledger/js/src/main/npm run test:browser
-          '
+          ' 2>&1 | tee build.log
           kill $sampler
+      # The warnings of the files that this push compiled ([ci.alias.warnings-push]).
+      - name: Count the compiler warnings
+        if: always()
+        run: scripts/ci/count-warnings.sh build.log CI-JS
       - name: Save the dependency cache
         if: env.SAVE_CACHES == 'true' && steps.deps-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
@@ -83,6 +104,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci/prune-caches.sh "${{ steps.deps.outputs.prefix }}" "${{ steps.deps.outputs.key }}"
+      - name: Save the task cache
+        if: ${{ !cancelled() && env.SAVE_CACHES == 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/sbt
+          key: ${{ steps.task.outputs.key }}
+      - name: Delete the older task caches of this job
+        if: ${{ !cancelled() && env.SAVE_CACHES == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/prune-caches.sh "${{ steps.task.outputs.prefix }}" "${{ steps.task.outputs.key }}"
+      - name: Show what the runner cached
+        if: always()
+        run: du -sh ~/.cache/coursier ~/.sbt/boot ~/.cache/sbt 2>/dev/null || true
       - name: Report test results
         uses: sarisia/actions-status-discord@v1
         if: failure()

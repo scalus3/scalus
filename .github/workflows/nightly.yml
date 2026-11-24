@@ -1,13 +1,81 @@
 name: Nightly
-# Tests that push CI leaves out: everything tagged scalus.testing.Benchmark (budget tables,
-# optimizer impact reports, crypto benchmarks). `test` excludes the tag (excludeFromTest in
-# build.sbt); `testOnly -- -n <tag>` selects only the tagged tests.
-# Measured locally on 2026-10-21: 80 tests, 485 s wall including compilation.
+# What push CI leaves out:
+# - `full`: each push alias in its `-full` form, with `clean` and `testFull`, and with no task
+#   cache. Push CI takes passing results from the sbt task cache, so a test whose inputs sbt does
+#   not see can stay green there; this run catches it the same night ([ci.nightly.full],
+#   [ci.nightly.no-task-cache] in docs/superpowers/specs/2026-11-21-ci-speed-design.md). Its
+#   warning count is the count of the whole build ([ci.nightly.warnings]).
+# - `test`: everything tagged scalus.testing.Benchmark (budget tables, optimizer impact reports,
+#   crypto benchmarks). `test` excludes the tag (excludeFromTest in build.sbt);
+#   `testOnly -- -n <tag>` selects only the tagged tests.
+#   Measured locally on 2026-10-21: 80 tests, 485 s wall including compilation.
 on:
   workflow_dispatch:
   schedule:
     - cron: '30 05 * * *'
 jobs:
+  full:
+    name: full ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "CI-JVM 3.3.9", task: ci-jvm-3_3_9-full, shell: ci, deps: ci-jvm-3.3.9 }
+          - { name: "CI-JVM 3.9.0", task: ci-jvm-3_9_0-full, shell: ci, deps: ci-jvm-3.9.0 }
+          - { name: "CI-JVM 3.10.1", task: ci-jvm-3_10_1-full, shell: ci, deps: ci-jvm-3.10.1 }
+          # The same Test and Link limits as the push job: the runner has 16 GB.
+          - name: "CI-JS"
+            task: "set Global / concurrentRestrictions ++= Seq(Tags.limit(Tags.Test, 2), Tags.limit(ScalaJSTags.Link, 2)); ci-js-full"
+            shell: ci
+            deps: ci-js
+          - { name: "CI-Native", task: ci-native-full, shell: ci-native, deps: ci-native }
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: nixbuild/nix-quick-install-action@v35
+      # Restore only, from the entries that the push jobs save on master. No task cache
+      # ([ci.nightly.no-task-cache]).
+      - name: Restore the Nix store
+        uses: nix-community/cache-nix-action/restore@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ matrix.shell }}.${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-${{ matrix.shell }}.
+      - name: Restore the dependency cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt/boot
+          key: deps-${{ runner.os }}-${{ runner.arch }}-${{ matrix.deps }}-
+          restore-keys: deps-${{ runner.os }}-${{ runner.arch }}-${{ matrix.deps }}-
+      - name: Build and test in Nix devshell
+        run: |
+          set -o pipefail
+          nix develop .#${{ matrix.shell }} --accept-flake-config --command sbt "${{ matrix.task }}" 2>&1 | tee build.log
+      - name: Count the compiler warnings
+        id: warnings
+        if: always()
+        run: scripts/ci/count-warnings.sh build.log "nightly ${{ matrix.name }}"
+      # On failure or warnings only, so a red job does not hide among five green ones.
+      - name: Report test results
+        uses: sarisia/actions-status-discord@v1
+        if: ${{ failure() || steps.warnings.outputs.warnings > 0 }}
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "Nightly full ${{ matrix.name }} ${{ job.status == 'success' && '✅' || '❌' }} - ${{ github.ref_name }}"
+          description: "[${{ github.event_name }}] - (${{ github.sha }})${{ steps.warnings.outputs.warnings > 0 && format('\n⚠️ Warnings: {0}', steps.warnings.outputs.warnings) || '' }}"
+          url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          username: "GitHub Actions"
+          avatar_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+          nodetail: true
+          notimestamp: true
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 60

@@ -10,6 +10,9 @@ env:
   # Only master saves caches; a branch restores the entries of master
   # (docs/superpowers/specs/2026-11-21-ci-speed-design.md, [ci.nix.save-on-master]).
   SAVE_CACHES: ${{ github.ref == 'refs/heads/master' }}
+  # A fixed version, so the git version in BuildInfo does not change the sources of each commit
+  # ([ci.alias.stable-version]). This job publishes nothing.
+  SCALUS_STABLE_VERSION: "1"
 jobs:
   test:
     name: ${{ matrix.name }}
@@ -99,14 +102,32 @@ jobs:
             ~/.sbt/boot
           key: ${{ steps.deps.outputs.key }}
           restore-keys: ${{ steps.deps.outputs.prefix }}
-      - name: Build and test in Nix devshell
-        id: build
+      # The sbt 2 task cache: compile outputs and passing test results by the hash of their inputs.
+      # With it, the alias (no `clean`, `test`) rebuilds and retests only what the push changed. One
+      # entry per job ([ci.task.key]); the flake hash in the prefix starts from an empty cache when
+      # the corpus, the JDK or `uplc` change ([ci.task.key-flake]). Never `target/`
+      # ([ci.task.no-target]).
+      - name: Name the task cache
+        id: task
         run: |
+          prefix="sbt-task-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.nix', 'flake.lock') }}-ci-jvm-${{ matrix.name }}-$(date -u +%Y-%m)-"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "key=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
+      - name: Restore the task cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/sbt
+          key: ${{ steps.task.outputs.key }}
+          restore-keys: ${{ steps.task.outputs.prefix }}
+      - name: Build and test in Nix devshell
+        run: |
+          set -o pipefail
           nix develop .#ci --accept-flake-config --command bash -c "sbt ${{ matrix.task }}" 2>&1 | tee build.log
-          BUILD_EXIT_CODE=${PIPESTATUS[0]}
-          WARNINGS=$(grep -ci "warning:" build.log) || WARNINGS=0
-          echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
-          exit $BUILD_EXIT_CODE
+      # The warnings of the files that this push compiled ([ci.alias.warnings-push]).
+      - name: Count the compiler warnings
+        id: warnings
+        if: always()
+        run: scripts/ci/count-warnings.sh build.log "CI-JVM ${{ matrix.name }}"
       - name: Save the dependency cache
         if: env.SAVE_CACHES == 'true' && steps.deps-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
@@ -120,18 +141,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci/prune-caches.sh "${{ steps.deps.outputs.prefix }}" "${{ steps.deps.outputs.key }}"
+      # Also after a failed test: sbt caches only passing suites, and the compile outputs still help
+      # the next run.
+      - name: Save the task cache
+        if: ${{ !cancelled() && env.SAVE_CACHES == 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/sbt
+          key: ${{ steps.task.outputs.key }}
+      - name: Delete the older task caches of this job
+        if: ${{ !cancelled() && env.SAVE_CACHES == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/prune-caches.sh "${{ steps.task.outputs.prefix }}" "${{ steps.task.outputs.key }}"
       - name: Show what the runner cached
         if: always()
-        run: du -sh ~/.cache/coursier ~/.sbt/boot ~/.ivy2 ~/.sbt/1.0 ~/.cache/sbt 2>/dev/null || true
+        run: du -sh ~/.cache/coursier ~/.sbt/boot ~/.cache/sbt 2>/dev/null || true
       - name: Report test results
         uses: sarisia/actions-status-discord@v1
         if: always()
         env:
-          WARNINGS: ${{ steps.build.outputs.warnings }}
+          WARNINGS: ${{ steps.warnings.outputs.warnings }}
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           title: "[${{ github.event.repository.name }}] CI-JVM (${{ matrix.name }}) ${{ job.status == 'success' && '✅' || '❌' }} - ${{ github.actor }} on ${{ github.ref_name }}"
-          description: "[${{ github.event.head_commit.message }}](${{ github.event.head_commit.url }})${{ steps.build.outputs.warnings > 0 && format('\n⚠️ Warnings: {0}', steps.build.outputs.warnings) || '' }}"
+          description: "[${{ github.event.head_commit.message }}](${{ github.event.head_commit.url }})${{ steps.warnings.outputs.warnings > 0 && format('\n⚠️ Warnings: {0}', steps.warnings.outputs.warnings) || '' }}"
           url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           username: "GitHub Actions"
           avatar_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
