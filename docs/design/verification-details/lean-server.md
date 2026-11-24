@@ -99,6 +99,13 @@ Three generated checks about `Math.clamp` at a budget of 200, two leaves each, a
 - **A bad header does not end the server.** The failing import is an error on the first line,
   and the next check is answered. A changed header starts the worker anew, so the header of
   every check has to be the same text, as the tactic's is.
+- **A changed header closes the document.** Given an edit that changes the header, Lean's worker
+  asks the server for another worker by exiting from one of its threads (v4.24). On Linux that
+  `exit` waits for the lock of the worker's standard input, which the main thread holds while it
+  waits to read, so the worker ends only when the server writes to it again. A check waited
+  for it until its time limit: the AMM example's proof by hand, the first check whose header was
+  not that of Blaster's checks. A check whose header differs from the document's closes the
+  document and opens it again: a closed worker exits from its main thread.
 - **The server says which command it is at.** `$/lean/fileProgress` lists the ranges of the
   document that Lean has not finished, and the first of them starts with the command it
   elaborates: Lean takes one command after the other. Only an earlier command that leaves

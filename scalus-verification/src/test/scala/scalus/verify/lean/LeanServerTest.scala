@@ -59,6 +59,20 @@ class LeanServerTest extends AnyFunSuite with LeanProofsSuite {
         finally server.close()
     }
 
+    test("checks whose headers differ, one after the other, are each answered") {
+        // Each check after the first changes the header, so it opens the document anew. Lean's
+        // own restart of the worker on such an edit could wait until the time limit on Linux
+        // (the AMM example's proof by hand). This test does not make it wait: it shows that the
+        // checks are answered where the document is opened anew.
+        val other = "import ScalusProofs.Ledger\n" + holds
+        val server = started()
+        try
+            for round <- 1 to 20 do
+                val text = if round % 2 == 0 then holds else other
+                assert(server.check(text, Some(1.minute)) == Result.Finished(Nil), s"round $round")
+        finally server.close()
+    }
+
     test("a check that does not finish is given up at its time limit, with what it started") {
         val server = started()
         try

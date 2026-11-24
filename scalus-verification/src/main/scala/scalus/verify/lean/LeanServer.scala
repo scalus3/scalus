@@ -23,8 +23,8 @@ import scala.util.Try
   * document, which is never written to disk: the first check opens it, and every later one is an
   * edit of it. So the workspace's libraries are loaded once, and Lean elaborates again only from
   * the first command that changed. The header of every check, its imports, should be the same text:
-  * a changed header loads the libraries anew. So does the check after one that was given up or
-  * failed, because that closes the document.
+  * a check with a changed header closes the document and opens it again, which loads the libraries
+  * anew. So does the check after one that was given up or failed, because that closes the document.
   *
   * A server is created with [[LeanServer.start]], for a workspace directory, and ended with
   * [[close]]. One that is not closed is closed when the JVM exits.
@@ -50,6 +50,11 @@ final class LeanServer private (
       */
     private var version = 0
     private var opened = false
+
+    /** The header of the text the document has, where it is open ([[headerOf]]). Only the check
+      * that runs changes it.
+      */
+    private var header: List[String] = Nil
 
     /** The processes below the server's own before a document was opened. What elaborates a
       * document, Lean's worker and what it starts, is not among them.
@@ -130,7 +135,23 @@ final class LeanServer private (
             Some(directory -> source(directory))
     }
 
-    private def elaborate(source: String, deadline: Option[Deadline]): Result = {
+    private def elaborate(source: String, deadline: Option[Deadline]): Result =
+        reopened(source).getOrElse(elaborateOpen(source, deadline))
+
+    /** Closes the document where `source` imports other modules than its text, so that the check
+      * opens it anew, with a new worker. Lean's worker loads its imports once: given a changed
+      * header, it asks the server to start another worker by exiting, from one of its threads (Lean
+      * v4.24). On Linux that `exit` waits for the lock of the worker's standard input, which its
+      * main thread holds while it waits to read: the worker ends only when the server writes to it
+      * again, and a check waits for it until its time limit. A worker that is closed exits from its
+      * main thread. The result of a check where the worker of the closed document did not end: then
+      * the server is closed.
+      */
+    private def reopened(source: String): Option[Result] =
+        if opened && headerOf(source) != header then dropped(startedByCheck())
+        else None
+
+    private def elaborateOpen(source: String, deadline: Option[Deadline]): Result = {
         val sent = edit(source)
         val waited =
             try await(elaborated(sent), deadline)
@@ -220,6 +241,7 @@ final class LeanServer private (
     /** Sends `source` as the next version of the document, and returns that version. */
     private def edit(source: String): Int = {
         version += 1
+        header = headerOf(source)
         if !opened then
             val document = TextDocumentItem(uri, "lean4", version, source)
             // Lean's own field. By default the server builds what the document imports, inside
@@ -480,6 +502,16 @@ object LeanServer {
                     up = refused.isEmpty
                     refused.toLeft(server)
                 finally if !up then server.close()
+    }
+
+    /** The header of a check's text: its lines up to the first that is neither empty nor of the
+      * header (`module`, `prelude`, an `import`), trimmed and without the empty ones. A header with
+      * a comment in it ends at the comment: a change after it is then left to Lean.
+      */
+    private[lean] def headerOf(text: String): List[String] = {
+        def ofTheHeader(line: String): Boolean =
+            line == "module" || line == "prelude" || line.split("\\s+").contains("import")
+        text.linesIterator.map(_.trim).filter(_.nonEmpty).takeWhile(ofTheHeader).toList
     }
 
     /** The time the server gets to start the conversation. */
