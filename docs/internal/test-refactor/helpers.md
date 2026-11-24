@@ -697,6 +697,9 @@ only equal values per address. When all values are equal,
 
 ### E. Ledger rules kits
 
+*Superseded in part (2026-11-24):* D6 (`d6-rules-kits.md`) amends H-23, H-24, H-25 and H-50, and
+moves H-38 to D8; where the two disagree, the D6 note wins.
+
 **H-23 `ValidatorRulesTestKit` builders** – `new` members. Location
 `scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValidatorRulesTestKit.scala`.
 Signatures: `def scriptAddress(hash: ScriptHash): Address`, `def scriptUtxo(hash: ScriptHash, datum: Option[DatumOption], scriptRef: Option[ScriptRef]): Utxo`,

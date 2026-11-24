@@ -429,6 +429,14 @@ get lost; the pilot found two (F-33, F-34).
   4 in 90 % of samples, 5 to 16 in 10 %. Run count stays 10; an off-chain law first runs
   `forAll(Table(edges))`, an on-chain law takes its edges through the `Table` form of `checkEval`.
   The quality gate is a seeded CI test (`ArbitraryInstancesQualityTest`); GenStats stays the report.
+
+  *Decisions (2026-11-24), D6:* the owner approved every recommendation of
+  `docs/internal/test-refactor/d6-rules-kits.md`. The certificate suites share a `CertsTestKit`
+  without generators, with one context builder by slot. `ValidatorRulesTestKit` bounds the units
+  of generated redeemers to `maxTxExecutionUnits`. Example tests use fixed values and `Party`
+  keys; a law test is a `forAll`. H-50 stays in D6; H-38 moves to D8. `genValidTx` moves to the
+  `to-property` step. The `ArbitraryDerivation.split` fix waits until D6 has seeded the rule
+  suites. The fee code keeps exact `BigInt` inside the rules and the throw at `Coin`.
 - The Fable reviewer MUST choose the helper API from what the code base already has, plus
   what the findings ask for. It MUST name the existing helper that each new helper replaces or
   extends. `[P3-12]`
