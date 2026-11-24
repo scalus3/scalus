@@ -3,6 +3,7 @@ package transform
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.Term.*
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.onchain.plutus.prelude.bls12_381.{G1, G2}
 import scalus.uplc.builtin.{platform, BuiltinValue, ByteString, Data}
 import scalus.uplc.eval.PlutusVM
@@ -25,9 +26,12 @@ import scala.util.Try
   * prenex.
   *
   * Saturated cells execute the builtin, so arguments are derived structurally from the TypeScheme's
-  * argument types (type variables default to Integer). Unsaturated and ill-formed cells never
-  * execute the builtin — the CEK accumulates arguments without type-checking until saturation — so
-  * argument values are irrelevant there.
+  * argument types (the type variable `a` is Integer, `b` is ByteString). Unsaturated and ill-formed
+  * cells never execute the builtin — the CEK accumulates arguments without type-checking until
+  * saturation — so argument values are irrelevant there.
+  *
+  * A saturated cell that succeeds also checks the result type that the TypeScheme declares against
+  * the type of the constant that the CEK machine returns.
   */
 class BuiltinTypeSchemeChainTest extends AnyFunSuite:
 
@@ -54,8 +58,10 @@ class BuiltinTypeSchemeChainTest extends AnyFunSuite:
         catch case _: Exception => t.toString
 
     private def uniOf(ts: TypeScheme): DefaultUni = ts match
-        case TypeScheme.Type(u)   => u
-        case TypeScheme.TVar(_)   => DefaultUni.Integer
+        case TypeScheme.Type(u) => u
+        // Each type variable has its own type, so a scheme that names the wrong variable shows.
+        case TypeScheme.TVar("a") => DefaultUni.Integer
+        case TypeScheme.TVar("b") => DefaultUni.ByteString
         case TypeScheme.App(f, a) => DefaultUni.Apply(uniOf(f), uniOf(a))
         case other => throw new IllegalArgumentException(s"unexpected argument type: $other")
 
@@ -80,6 +86,11 @@ class BuiltinTypeSchemeChainTest extends AnyFunSuite:
         case TypeScheme.All(_, t)   => argTypes(t)
         case TypeScheme.Arrow(a, t) => a :: argTypes(t)
         case _                      => Nil
+
+    private def resultType(ts: TypeScheme): TypeScheme = ts match
+        case TypeScheme.All(_, t)   => resultType(t)
+        case TypeScheme.Arrow(_, t) => resultType(t)
+        case other                  => other
 
     // ------------------------------------------------------------------
     // Chain construction
@@ -144,6 +155,69 @@ class BuiltinTypeSchemeChainTest extends AnyFunSuite:
 
     test("all builtins are evaluable on the CEK (no silent exclusions)") {
         assert(vmUnavailable.isEmpty, s"builtins unavailable on the VM: $vmUnavailable")
+    }
+
+    test("a saturated builtin returns a constant of the result type its scheme declares") {
+        // Each type variable has the type that uniOf gives it, in the arguments and in the result.
+        def bytes(hex: String): Constant = Constant.ByteString(ByteString.fromHex(hex))
+        def int(i: Int): Constant = Constant.Integer(i)
+        def data(d: Data): Constant = Constant.Data(d)
+        val oneInteger = List(Constant.Integer(1))
+        // The message of the CIP-49 test vectors, as in CekBuiltinsTest.
+        val message = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        // These partial builtins fail on the default arguments. Each gets arguments on which it
+        // succeeds, so the result type of every builtin is checked.
+        val succeedingArgs: Map[DefaultFun, List[Constant]] = Map(
+          DefaultFun.IndexByteString -> List(bytes("00"), int(0)),
+          DefaultFun.ReadBit -> List(bytes("01"), int(0)),
+          DefaultFun.VerifyEd25519Signature -> List(
+            bytes("9518c18103cbdab9c6e60b58ecc3e2eb439fef6519bb22570f391327381900a8"),
+            bytes("68656c6c6f"),
+            bytes(
+              "f13fa9acffb108114ec060561b58005fb2d69184de0a2d7400b2ea1f111c0794831cc832c92daf4807820dd9458324935e90bec855e8bf076bbbc4e42b727b07"
+            )
+          ),
+          DefaultFun.VerifyEcdsaSecp256k1Signature -> List(
+            bytes("03427d3132a06e31bf66791dda478b5ebec79bd045247126396fccdf11e42a3627"),
+            bytes(message),
+            bytes(
+              "040f5b6a2bb4e024d47eab02d4073da655af77c0cf0efdb19c6771378da175c45ffac010a1bd9b9a275ad685ea4052f4bc72c0dc27094422ba9379e7bf44b29b"
+            )
+          ),
+          DefaultFun.VerifySchnorrSecp256k1Signature -> List(
+            bytes("427d3132a06e31bf66791dda478b5ebec79bd045247126396fccdf11e42a3627"),
+            bytes(message),
+            bytes(
+              "4fd97a0c4ad719f89cba68a522e0dee13bcf656ae9c0a395404cda858a7992d8dea979dbc4c83659d695b7d380fe8a75264ba51a63a53fc2a8bd225e50f223f4"
+            )
+          ),
+          DefaultFun.HeadList -> List(Constant.List(DefaultUni.Integer, oneInteger)),
+          DefaultFun.TailList -> List(Constant.List(DefaultUni.Integer, oneInteger)),
+          DefaultFun.IndexArray ->
+              List(Constant.Array(DefaultUni.Integer, oneInteger.toIndexedSeq), int(0)),
+          DefaultFun.UnConstrData -> List(data(Data.Constr(0, PList.Nil))),
+          DefaultFun.UnMapData -> List(data(Data.Map(PList.Nil))),
+          DefaultFun.UnListData -> List(data(Data.List(PList.Nil))),
+          DefaultFun.UnBData -> List(data(Data.B(ByteString.empty))),
+          DefaultFun.UnValueData -> List(data(Data.Map(PList.Nil))),
+          DefaultFun.Bls12_381_G1_uncompress ->
+              List(Constant.ByteString(platform.bls12_381_G1_compress(g1))),
+          DefaultFun.Bls12_381_G2_uncompress ->
+              List(Constant.ByteString(platform.bls12_381_G2_compress(g2)))
+        )
+        val errors = List.newBuilder[String]
+        for Row(bn, tvs, _, defaults) <- rows do
+            val args = succeedingArgs.get(bn).map(_.map(c => Const(c): Term)).getOrElse(defaults)
+            evalEither(chain(bn, tvs, args)) match
+                case Right(Const(c, _)) =>
+                    val declared =
+                        uniOf(resultType(Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme))
+                    if c.tpe != declared then
+                        errors += s"$bn returned a ${c.tpe}, its scheme declares $declared"
+                case Right(other) => errors += s"$bn did not return a constant: ${safeShow(other)}"
+                case Left(e)      => errors += s"$bn failed, so its result type is not checked: $e"
+        val found = errors.result()
+        assert(found.isEmpty, s"${found.size} discrepancies:\n${found.mkString("\n")}")
     }
 
     test("analysis and CEK agree on every (forces, applies) chain over every builtin") {

@@ -760,7 +760,7 @@ class CardanoBuiltins(
         )
 
     val MkNilPairData: BuiltinRuntime = mkMeaning(
-      DefaultUni.Unit ->: DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data),
+      DefaultUni.Unit ->: DefaultUni.List(DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data)),
       (_: Logger, args: Seq[CekValue]) =>
           val _ = args(0).asUnit
           VCon(Constant.List(DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data), Nil))
