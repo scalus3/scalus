@@ -223,6 +223,63 @@ does. A counterexample of the copy may give the walks values that no context giv
 beneficiary was an integer, which nothing reads once the signature is an unknown. So a proof carries
 over to the validator, and a refutation is replayed on it.
 
+## Calls as unknowns in the tactic
+
+Proposed, 2026-11-24. The probe's copy of the validator is written by hand. The tactic is to make
+the same copy of the program it compiles.
+
+**Where.** On a leaf's SIR, before it is compiled to UPLC (`compileSirFunction`), so that the
+calls have their SIR types and their arguments are still terms with names. The unknowns are
+variables of the statement, so that two leaves that make the same call share one.
+
+**What a walk is.** Every loop of a program is a recursion: a recursive `Let`
+(`LetFlags.Recursivity`), as an inline helper's local `go`, applied to arguments, or an application
+of a module function that is recursive, as `List.filter`. A call is made an unknown where its
+arguments are terms of the statement's variables and of earlier unknowns, and not of a variable
+that a lambda binds. A call inside a walk goes with it. A call that cannot be made an unknown
+stays, and the tactic says which.
+
+**The same call.** A key of the call: its function, by name or, for a recursive `Let`, by its body
+with the bound names numbered, and its arguments in a normal form, over the statement's variables
+and the unknowns. The validator and the clause each have their own copy of an inline walk, with
+the same key. Where two calls the program makes with equal arguments get different keys, the
+proof may fail; it is never wrong: an equal key is the same function on the same values.
+
+**The unknown.** A variable of the call's result type, as an `Option` where the call can fail: at
+the call, `None` fails as the walk would. Lean has it as any variable of its type.
+
+**Lemmas.** A fact of a library function, stated as a statement of Scalus over its arguments, as
+`(x === v - Value.lovelace(a)) ==>: x.getLovelace == v.getLovelace - a`, with a pattern of calls.
+Where a statement's calls match the pattern, the fact of their unknowns is a premise. A lemma is
+proved once, by induction (`lean-manual`), and a proof that uses it cites it.
+
+**Refutations.** A counterexample is replayed on the program with its walks, as every
+counterexample is. Where the walks do not return the unknowns' values on its context, it is
+spurious, and the result says so; the probe's counterexamples were of that kind.
+
+**The result.** A proof with unknowns says which calls it made unknowns and which lemmas it
+assumed; the clause it checks is checked of every context, resting on them. The tie of the
+program to its form with unknowns is trusted at first, and tested: on the statement's samples, the
+two programs, with each unknown set to what its walk returns, end alike. A lemma of the rewrite,
+proved in Lean with each walk's termination, replaces the trust.
+
+### Its steps
+
+1. **The rewrite**, on SIR, with the keys, and the check on samples; an option of the tactic.
+   Vesting's #3 proved of every context with it, as the probe is.
+2. **Lemmas**: their statements, patterns and the premises they give; vesting's #4.
+3. **The proofs of the lemmas** and of each walk's termination, by induction.
+4. **The rewrite's lemma** in Lean.
+
+### Open questions
+
+1. **Every loop, or the library's.** Every loop gives the most; a contract's own loop whose result
+   a claim needs, as a sum, then needs a lemma of the contract's author.
+2. **The default.** On for every statement over script contexts, or an option. With it, limits of
+   lengths are needed only where a claim reads what a walk returns.
+3. **Calls under a lambda,** as the walks of a `forall`: an unknown there is a function, which a
+   program of UPLC cannot take as a value Lean quantifies over.
+
 ## Relation to other notes
 
 - [Protocol steps](protocol-steps.md): a model's theorem over many steps, as
