@@ -1614,7 +1614,8 @@ ciCommand(
   "js/testFull",
   "js/doc",
   "mima-js",
-  "scalusTsExporter/testFull",
+  // No scalusTsExporter tests here: it is a JVM project in the `jvm` aggregate, so the
+  // ci-jvm-3_3_9 job already runs them, with the tsc check of GoldenTest.
   "scalusCardanoLedgerJS/checkDtsUpToDate",
   "scalusCardanoLedgerJS/runNpmTests"
 )
