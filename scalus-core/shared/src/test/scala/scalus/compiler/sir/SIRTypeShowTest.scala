@@ -1,7 +1,8 @@
 package scalus.compiler.sir
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.compiler.sir.SIRType.{Fun, TypeLambda, TypeVar, TypeVarKind}
+import scalus.compiler.sir.SIRType.{Annotated, Fun, TypeLambda, TypeVar, TypeVarKind}
+import scalus.uplc.Constant
 
 class SIRTypeShowTest extends AnyFunSuite {
 
@@ -32,5 +33,15 @@ class SIRTypeShowTest extends AnyFunSuite {
       "showDebug tells a type lambda in argument position from a type lambda over the function"
     ) {
         assert(takesTypeLambda.showDebug != typeLambdaOverFunction.showDebug)
+    }
+
+    test("show tells an annotated argument from an annotated function") {
+        val repr = SIR.Const(Constant.String("Data"), SIRType.String, AnnotationsDecl.empty)
+        val anns = AnnotationsDecl.empty + ("uplcRepr" -> repr)
+        // (@[uplcRepr] Int) -> Boolean
+        val takesAnnotated = Fun(Annotated(SIRType.Integer, anns), SIRType.Boolean)
+        // @[uplcRepr] (Int -> Boolean)
+        val annotatedFunction = Annotated(Fun(SIRType.Integer, SIRType.Boolean), anns)
+        assert(takesAnnotated.show != annotatedFunction.show)
     }
 }

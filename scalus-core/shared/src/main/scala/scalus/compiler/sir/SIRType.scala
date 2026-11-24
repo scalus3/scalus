@@ -261,9 +261,11 @@ object SIRType {
 
         override def show: String = {
             in match
-                // Without parentheses `([A] =>> A) -> Int` prints as `[A] =>> (A -> Int)`.
-                case _: Fun | _: SIRType.TypeLambda => s"(${in.show}) -> ${out.show}"
-                case _                              => s"${in.show} -> ${out.show}"
+                // Without parentheses `([A] =>> A) -> Int` prints as `[A] =>> (A -> Int)`, and
+                // `(@[a] Int) -> Int` prints as `@[a] (Int -> Int)`.
+                case _: Fun | _: SIRType.TypeLambda | _: SIRType.Annotated =>
+                    s"(${in.show}) -> ${out.show}"
+                case _ => s"${in.show} -> ${out.show}"
         }
 
         override def showDebug: String = {
