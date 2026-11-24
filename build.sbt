@@ -80,7 +80,8 @@ ThisBuild / versionScheme := Some("early-semver")
 // cache ([ci.alias.stable-version]). release.yml fails when it is set, so a published
 // BuildInfo.version is always the git version ([ci.alias.release-guard]).
 ThisBuild / version := {
-    if sys.env.contains("SCALUS_STABLE_VERSION") then s"$scalusStableVersion-SNAPSHOT"
+    // `if (...)`, not `if ... then`: scalafmt reads .sbt files in its sbt dialect, which rejects it.
+    if (sys.env.contains("SCALUS_STABLE_VERSION")) s"$scalusStableVersion-SNAPSHOT"
     else (ThisBuild / version).value
 }
 
@@ -713,7 +714,8 @@ lazy val scalusTsExporter = project
       // The suites read the fixture classes by the paths above, so sbt does not see them as
       // inputs. Their content goes into the key of each cached result ([ci.alias.path-inputs]).
       Test / extraTestDigests ++=
-          (scalusTsExporterFixtures / Compile / fullClasspath).value.map(entry => Digest(entry.data)),
+          (scalusTsExporterFixtures / Compile / fullClasspath).value
+              .map(entry => Digest(entry.data)),
       // GoldenTest type-checks the generated fixtures with `node_modules/.bin/tsc` and
       // `assume`s the check away when tsc is missing, which scalatest reports as a canceled
       // test inside a green suite. ci-jvm runs these tests through the `jvm` aggregate, which
