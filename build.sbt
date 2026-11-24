@@ -1586,25 +1586,23 @@ val crossVersionCiTasks = {
 // One CI job per supported compiler version; the alias name carries the version, so a version bump
 // renames the alias here and its matrix entry in .github/workflows/ci-jvm.yml. Keep the `++`
 // arguments in sync with scala3LtsVersion / scala3NextLtsVersion / scala3LatestVersion above.
-// The default LTS, and the only build that publishes the `_3` library artifacts. Carries the
-// format and MiMa checks too: they are version-independent, so they run in this job only
-// (the Scala.js half of MiMa runs in ci-js, see `mima-js`). The last two steps build Scaladoc as
-// Release publishes it (per module) and as the site publishes it (unidoc). Doc warnings do not
-// fail the build, but a crash or an error does.
+// The default LTS, and the only build that publishes the `_3` library artifacts.
 ciCommand(
   "ci-jvm-3_3_9",
   "++3.3.9",
   "clean",
-  "docs/clean",
-  "scalafmtCheckAll",
-  "scalafmtSbtCheck",
   "jvm/Test/compile",
   "scalusCardanoLedgerIt/Test/compile",
-  "jvm/testFull",
-  "mima-jvm",
-  "jvm/doc",
-  "docs/unidoc"
+  "jvm/testFull"
 )
+// The version-independent checks, each in its own CI-JVM job beside the test jobs, so they do not
+// add to the time of the 3.3.9 job ([ci.jobs.format], [ci.jobs.docs-mima]). The format check
+// compiles nothing ([ci.jobs.format-no-compile]). MiMa runs on the default LTS (the Scala.js half
+// runs in ci-js, see `mima-js`). The last two steps build Scaladoc as Release publishes it (per
+// module) and as the site publishes it (unidoc). Doc warnings do not fail the build, but a crash
+// or an error does.
+commandSequence("ci-format", "scalafmtCheckAll", "scalafmtSbtCheck")
+ciCommand("ci-docs-mima", "++3.3.9", "clean", "docs/clean", "mima-jvm", "jvm/doc", "docs/unidoc")
 ciCommand("ci-jvm-3_9_0", ("++3.9.0" +: crossVersionCiTasks) *)
 ciCommand("ci-jvm-3_10_1", ("++3.10.1" +: crossVersionCiTasks) *)
 // Convenience name for the default-version job.
@@ -1623,7 +1621,7 @@ ciCommand(
 ciCommand("ci-native", "clean", "native/Test/compile", "native/testFull")
 // The CI jobs for the default Scala version in one command. Do not build it on the root aggregate:
 // that links the deliberately bad scalusTsExporterFixtures and always fails.
-commandSequence("ci", "ci-jvm", "ci-js", "ci-native")
+commandSequence("ci", "ci-format", "ci-jvm", "ci-docs-mima", "ci-js", "ci-native")
 addCommandAlias("benchmark", "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*")
 addCommandAlias(
   "benchmark-jit",
@@ -1684,7 +1682,7 @@ usefulTasks := Seq(
   UsefulTask("precommit", "Format all, clean compile and test everything on JVM").noAlias,
   UsefulTask(
     "ci",
-    "ci-jvm, ci-js, ci-native: format check, MiMa, tests on JVM, JS and Native"
+    "ci-format, ci-jvm, ci-docs-mima, ci-js, ci-native: format, MiMa, docs, tests on all platforms"
   ).noAlias,
   UsefulTask("benchmark", "Run benchmarks").noAlias,
   UsefulTask("mima", "Check binary compatibility with the previous version using MiMa").noAlias,

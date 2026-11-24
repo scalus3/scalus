@@ -25,7 +25,7 @@ Run sbt inside the nix shell. The build uses sbt 2.1. In a git worktree, also re
 |------------------|------------------------------------------------------|
 | `sbt quick`      | Format, compile, jvm/testQuick (fast iteration)      |
 | `sbt testQuick`  | Run only tests affected by recent changes            |
-| `sbt ci`         | Full CI (`ci-jvm`, `ci-js`, `ci-native`): format, mima, all platforms |
+| `sbt ci`         | Full CI (`ci-format`, `ci-jvm`, `ci-docs-mima`, `ci-js`, `ci-native`): format, mima, docs, all platforms |
 | `sbt it`         | Integration tests (requires Docker)                  |
 
 **Compilation:**

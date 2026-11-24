@@ -569,7 +569,8 @@ enforces that. A Scala 3.9.0 project therefore consumes the 3.3.9-built artifact
 one built by its own compiler.
 
 Build and test one version locally with `sbt ci-jvm-3_3_9`, `sbt ci-jvm-3_9_0` or
-`sbt ci-jvm-3_10_1`. The CI-JVM workflow runs one job per version, named after it.
+`sbt ci-jvm-3_10_1`. The CI-JVM workflow runs one job per version, named after it, and two jobs
+for the version-independent checks: `sbt ci-format` and `sbt ci-docs-mima` (MiMa and Scaladoc).
 
 ### Adding or bumping a version
 
