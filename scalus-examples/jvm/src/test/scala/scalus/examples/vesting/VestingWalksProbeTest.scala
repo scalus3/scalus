@@ -9,7 +9,7 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.{Budget, CallsAsUnknowns, LeanProofsSuite, UplcBlaster}
+import scalus.verify.uplcblaster.{Budget, CallsAsUnknowns, LeanProofs, LeanProofsSuite, UplcBlaster}
 
 import java.nio.file.Path
 import scala.concurrent.duration.*
@@ -29,6 +29,22 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
     import VestingWalksProbeTest.*
 
     override protected def leanWorkspace: Path = VestingVerificationTest.workspace
+
+    /** The results are kept beside this file: each check takes Lean minutes, up to 25. */
+    override protected def keptResultsFile: Option[Path] = Some(
+      LeanProofs
+          .inSources(
+            "scalus-examples",
+            "jvm",
+            "src",
+            "test",
+            "scala",
+            "scalus",
+            "examples",
+            "vesting"
+          )
+          .resolve("VestingWalksProbeTest.proofs.json")
+    )
 
     // spend: Spec.ensures(lockedBy(txInfo, txOutRef) - amountOf(redeemer) >=
     //            configOf(datum).initialAmount - linearVesting(configOf(datum), validFrom))

@@ -119,6 +119,12 @@ enum ProofKind {
       * trusts that optimization, which Lean does not check, and no solver.
       */
     case LeanKernelOfOptimizedRuns
+
+    /** Closed by Blaster through Z3, as [[Blaster]], of the statement with its walks over lists as
+      * unknowns ([[scalus.verify.uplcblaster.CallsAsUnknowns]]). It also trusts the tie of each
+      * program to its form with unknowns, which no proof checks yet.
+      */
+    case BlasterOfUnknowns
 }
 
 /** Backend-specific proof material retained with a theorem.

@@ -5,7 +5,9 @@ import scalus.compiler.sir.transform.EraseSpecifications
 import scalus.uplc.Constant
 import scalus.verify.*
 
+import java.nio.file.Files
 import scala.collection.mutable
+import scala.util.hashing.MurmurHash3
 
 /** [[UplcBlaster]] on a statement whose walks over lists are unknowns: the tactic of calls as
   * unknowns (docs/design/verification-details/multi-transaction.md).
@@ -18,7 +20,8 @@ import scala.collection.mutable
   * refutation may give the unknowns values that the walks do not return: it is replayed on the
   * statement as written, and where the statement holds there, it is spurious.
   *
-  * The tie of a program to its form with unknowns is trusted: see [[CallsAsUnknowns.rewrite]].
+  * The tie of a program to its form with unknowns is trusted: see [[CallsAsUnknowns.rewrite]]. A
+  * proof says so by its kind, [[ProofKind.BlasterOfUnknowns]].
   *
   * @param inner
   *   the tactic that checks the statement with unknowns
@@ -33,10 +36,16 @@ final class CallsAsUnknowns(val inner: UplcBlaster, library: String => Boolean) 
 
     override type Prepared = CallsAsUnknowns.Prepared
 
-    override val name: String = s"${inner.name}, calls as unknowns"
+    override val name: String = s"${inner.name}-unknowns"
+
+    /** The same tactic over `f` of its inner one: as a suite gives its own mapping and the
+      * directory of its checks to every tactic it runs.
+      */
+    def withInner(f: UplcBlaster => UplcBlaster): CallsAsUnknowns =
+        new CallsAsUnknowns(f(inner), library)
 
     override def prepare(goal: Goal): Either[CompatibilityReport, Prepared] =
-        CallsAsUnknowns.rewrite(goal.statement.prop, library) match
+        CallsAsUnknowns.rewrite(goal.statement.prop, library) match {
             case Left(reason) =>
                 Left(
                   CompatibilityReport(
@@ -60,74 +69,65 @@ final class CallsAsUnknowns(val inner: UplcBlaster, library: String => Boolean) 
                 tactic
                     .prepare(goal.copy(statement = statement))
                     .map(lowered =>
-                        CallsAsUnknowns.Prepared(
+                        new CallsAsUnknowns.Prepared(
                           tactic,
                           CallsAsUnknowns.unrestricted(lowered, rewritten.unknowns),
                           inner.prepare(goal).toOption,
                           rewritten.unknowns
                         )
                     )
+        }
 
     override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult =
-        prepared.tactic.run(prepared.lowered, earlier) match
-            case refuted @ VerificationResult.Refuted(proof) =>
-                CallsAsUnknowns.replayed(prepared, proof).getOrElse(refuted)
-            case other => other
+        CallsAsUnknowns.finished(prepared, prepared.tactic.run(prepared.lowered, earlier))
+
+    // The statement with unknowns is the one checked, and its programs are what a result rests on.
+    // Its plan is the statement's own, and no test's: the unknowns of records are `Data`.
 
     override def fingerprint(prepared: Prepared): Option[Fingerprint] =
-        prepared.tactic.fingerprint(prepared.lowered)
+        prepared.tactic.servers.workspace
+            .filter(workspace => Files.isRegularFile(workspace.resolve("lean-toolchain")))
+            .map(UplcBlaster.fingerprint(prepared.lowered, _))
 
     override def identity(prepared: Prepared): Option[(String, List[String])] =
-        prepared.tactic.identity(prepared.lowered)
+        Some(UplcBlaster.identity(prepared.lowered))
+
+    override def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] =
+        UplcBlaster.kept(prepared.lowered, result)
+
+    override def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] =
+        UplcBlaster.restored(prepared.lowered, kept).map(CallsAsUnknowns.finished(prepared, _))
+
+    override def restoreOnAnotherSide(
+        prepared: Prepared,
+        kept: Kept
+    ): Either[String, ExecutionResult] =
+        UplcBlaster
+            .restoredOnAnotherSide(prepared.lowered, kept)
+            .map(CallsAsUnknowns.finished(prepared, _))
 }
 
 object CallsAsUnknowns {
 
     /** A statement prepared with its walks as unknowns.
       *
+      * @param tactic
+      *   the inner tactic, with the unknowns of records as `Data`
       * @param lowered
-      *   the statement with unknowns, lowered by the inner tactic
-      * @param asWritten
+      *   the statement with unknowns, lowered by `tactic`
+      * @param lowerAsWritten
       *   the statement as written, lowered, on which a refutation is replayed; none where it cannot
-      *   be lowered, and then no refutation is taken
+      *   be lowered, and then no refutation is taken. It is lowered only for a refutation.
       * @param unknowns
       *   the calls made unknowns
       */
-    final case class Prepared(
-        tactic: UplcBlaster,
-        lowered: UplcBlaster.Lowered,
-        asWritten: Option[UplcBlaster.Lowered],
-        unknowns: List[Unknown]
-    )
-
-    /** Whether a value of `tp` is one Lean variable: an integer, a Boolean, a byte string, a string
-      * or the unit. Another type's unknown is one `Data`.
-      */
-    private def isScalar(tp: SIRType): Boolean = SirTypes.unwrap(tp) match
-        case SIRType.Integer | SIRType.Boolean | SIRType.ByteString | SIRType.String |
-            SIRType.Unit =>
-            true
-        case _ => false
-
-    /** `lowered` with no premise of the unknowns' types: a statement of every value of an unknown,
-      * of its type or not, holds of the values its call returns, which are of the type. Lean then
-      * walks no list of an unknown's value to check that it is one of the type's.
-      */
-    private def unrestricted(
-        lowered: UplcBlaster.Lowered,
-        unknowns: List[Unknown]
-    ): UplcBlaster.Lowered = {
-        val names = unknowns.map(_.ident.name).toSet
-        def ofUnknown(name: String): Boolean =
-            names.exists(n => name == n || name.startsWith(s"$n."))
-        def freed(goal: UplcBlaster.Lowered): UplcBlaster.Lowered =
-            goal.copy(predicates =
-                goal.predicates.zipWithIndex.map((premise, index) =>
-                    if goal.binders.lift(index).exists(binder => ofUnknown(binder.name)) then None
-                    else premise
-                )
-            )
-        freed(lowered).copy(unrewritten = lowered.unrewritten.map(freed))
+    final class Prepared(
+        val tactic: UplcBlaster,
+        val lowered: UplcBlaster.Lowered,
+        lowerAsWritten: => Option[UplcBlaster.Lowered],
+        val unknowns: List[Unknown]
+    ) {
+        lazy val asWritten: Option[UplcBlaster.Lowered] = lowerAsWritten
     }
 
     /** A call made an unknown: the statement's variable, of an `Option` of the call's type, which
@@ -144,10 +144,15 @@ object CallsAsUnknowns {
     def inLibrary(name: String): Boolean =
         name.startsWith("scalus.cardano.onchain.plutus.") || name.startsWith("scalus.uplc.")
 
-    /** What a call computes, of the statement's variables: two calls of one key compute one value.
-      * Variables bound in the key itself are numbered by depth ([[Key.Bound]]), so that two copies
-      * of one function have one key. A key with a [[Key.Free]] variable, bound by a lambda outside
-      * the call, is of no value of the statement's variables, and no unknown is made of it.
+    /** What a call computes, of the statement's variables: two calls of one key compute one value,
+      * or both fail. A key keeps what may fail of a call: a `let` inside it is one ([[Bind]]),
+      * whether its body uses it or not. Variables bound in the key itself are numbered by depth
+      * ([[Bound]]), so that two copies of one function have one key. A key with a [[Free]]
+      * variable, bound by a lambda outside the call, is of no value of the statement's variables,
+      * and one of no variable is of a constant: no unknown is made of either ([[hoistable]]).
+      *
+      * Keys share their parts, as the program's `let`s do, so a key caches its hash and what it has
+      * of variables, which a walk over it would otherwise visit once for each path to a part.
       */
     enum Key {
         case Variable(name: String)
@@ -162,6 +167,13 @@ object CallsAsUnknowns {
         case Construct(constructor: String, arguments: List[Key])
         case Lambda(arity: Int, body: Key)
         case Recursive(function: Key, body: Key)
+        case Bind(value: Key, body: Key)
+
+        /** `toData` of a value of the type `tp` ([[SirTypes.typeKey]]). */
+        case Encoded(of: Key, tp: String)
+
+        /** `fromData` to the type `tp`, of a `Data` that is not one of that type encoded. */
+        case Decoded(of: Key, tp: String)
         case Choice(condition: Key, ifTrue: Key, ifFalse: Key)
         case Cases(scrutinee: Key, cases: List[(String, Key)])
         case Conjunction(a: Key, b: Key)
@@ -169,23 +181,41 @@ object CallsAsUnknowns {
         case Negation(a: Key)
         case Failure
 
-        /** Whether the key is of the statement's variables alone. */
-        def isOfVariables: Boolean = this match
-            case Free(_)              => false
-            case Field(of, _)         => of.isOfVariables
-            case Projection(_, _, of) => of.isOfVariables
-            case Applied(function, arguments) =>
-                function.isOfVariables && arguments.forall(_.isOfVariables)
-            case Construct(_, arguments)   => arguments.forall(_.isOfVariables)
-            case Lambda(_, body)           => body.isOfVariables
-            case Recursive(function, body) => function.isOfVariables && body.isOfVariables
-            case Choice(c, t, f)           => c.isOfVariables && t.isOfVariables && f.isOfVariables
-            case Cases(scrutinee, cases) =>
-                scrutinee.isOfVariables && cases.forall(_._2.isOfVariables)
-            case Conjunction(a, b) => a.isOfVariables && b.isOfVariables
-            case Disjunction(a, b) => a.isOfVariables && b.isOfVariables
-            case Negation(a)       => a.isOfVariables
-            case _                 => true
+        private def parts: List[Key] = this match {
+            case Field(of, _)              => List(of)
+            case Projection(_, _, of)      => List(of)
+            case Applied(function, args)   => function :: args
+            case Construct(_, args)        => args
+            case Lambda(_, body)           => List(body)
+            case Recursive(function, body) => List(function, body)
+            case Bind(value, body)         => List(value, body)
+            case Encoded(of, _)            => List(of)
+            case Decoded(of, _)            => List(of)
+            case Choice(c, t, f)           => List(c, t, f)
+            case Cases(scrutinee, cases)   => scrutinee :: cases.map(_._2)
+            case Conjunction(a, b)         => List(a, b)
+            case Disjunction(a, b)         => List(a, b)
+            case Negation(a)               => List(a)
+            case _                         => Nil
+        }
+
+        private lazy val cachedHash: Int =
+            MurmurHash3.orderedHash(productIterator, productPrefix.hashCode)
+
+        override def hashCode(): Int = cachedHash
+
+        /** Whether a variable a lambda outside the key binds is in it. */
+        lazy val hasFree: Boolean = this match
+            case Free(_) => true
+            case _       => parts.exists(_.hasFree)
+
+        /** Whether a variable of the statement is in it. */
+        lazy val hasVariable: Boolean = this match
+            case Variable(_) => true
+            case _           => parts.exists(_.hasVariable)
+
+        /** Whether it is of the statement's variables alone, and of one at least. */
+        def hoistable: Boolean = hasVariable && !hasFree
     }
 
     private val optionName = "scalus.cardano.onchain.plutus.prelude.Option"
@@ -196,20 +226,22 @@ object CallsAsUnknowns {
     /** `prop` with its walks as unknowns.
       *
       * A statement's leading `forAll`s are its variables. In each program of its body, a call is a
-      * walk where it loops: a recursive `let` applied to arguments, as an inline helper's local
-      * `go`, or a call of a function of `library`, or of a recursive one, whose code loops. A call
-      * of another function whose code loops is inlined, its parameters bound by `let`s in the order
-      * the call evaluates them, so that the walks in its code are found. A walk whose arguments are
-      * of the variables, of the values the program binds of them and of earlier walks is replaced
-      * by an unknown, a variable added after the statement's own: at the call, `None` fails, as the
-      * walk would, and `Some(v)` is `v`. A walk under a lambda, of the lambda's parameter, stays.
+      * walk where it loops: a recursive `let` applied to all its arguments, as an inline helper's
+      * local `go`, or a call of a function of `library`, or of a recursive one, whose code loops,
+      * applied to all its arguments, and not to a function. A call of another function whose code
+      * loops is inlined, its parameters bound by `let`s in the order the call evaluates them, so
+      * that the walks in its code are found. A walk whose key is of the variables, of the values
+      * the program binds of them and of earlier walks is replaced by an unknown, a variable added
+      * after the statement's own: at the call, `None` fails, as the walk would, and `Some(v)` is
+      * `v`. A walk under a lambda, of the lambda's parameter, stays, as does a walk of constants.
       *
       * The tie is trusted, of three facts. A walk ends on every value, as a walk over a list does.
-      * Two calls of one key compute one value: a key is the call with each variable the program
-      * binds replaced by the value it binds, each pattern variable by its field of the value
-      * matched, and `fromData(toData(x))` by `x`, of the types whose `Data` is their value. A
-      * program behaves as its form with unknowns, each the result of its call. The statement holds
-      * where it holds for every value of the unknowns.
+      * Two calls of one key compute one value, or both fail: a key is the call with each variable
+      * the program bound before it replaced by the value it bound, which it has, each pattern
+      * variable by its field of the value matched, and `fromData` of `toData` of a value of a type
+      * to that type by the value; a `let` inside the call is kept. A program behaves as its form
+      * with unknowns, each the result of its call. The statement holds where it holds for every
+      * value of the unknowns.
       */
     def rewrite(prop: Prop, library: String => Boolean): Either[String, Rewritten] = {
         def prefix(p: Prop, variables: List[PropExpr.Ident[?]]): (List[PropExpr.Ident[?]], Prop) =
@@ -247,12 +279,64 @@ object CallsAsUnknowns {
             case other =>
                 throw IllegalStateException(s"the prelude's Option compiles to ${other.show}")
 
+    /** Whether a value of `tp` is one Lean variable: an integer, a Boolean, a byte string, a string
+      * or the unit. Another type's unknown is one `Data`.
+      */
+    private def isScalar(tp: SIRType): Boolean = SirTypes.unwrap(tp) match
+        case SIRType.Integer | SIRType.Boolean | SIRType.ByteString | SIRType.String |
+            SIRType.Unit =>
+            true
+        case _ => false
+
+    /** `lowered` with its unknowns standing for every value Lean has, of their types or not: no
+      * premise of an unknown's type, and a value of one is never outside it. A statement of every
+      * value of an unknown holds of the values its call returns, which are of the type. Lean then
+      * walks no list of an unknown's value to check that it is one of the type's.
+      */
+    private def unrestricted(
+        lowered: UplcBlaster.Lowered,
+        unknowns: List[Unknown]
+    ): UplcBlaster.Lowered = {
+        val names = unknowns.map(_.ident.name).toSet
+        def ofUnknown(name: String): Boolean =
+            names.exists(n => name == n || name.startsWith(s"$n."))
+        def freed(goal: UplcBlaster.Lowered): UplcBlaster.Lowered = {
+            val indices = goal.binders.indices.filter(i => ofUnknown(goal.binders(i).name)).toSet
+            goal.copy(
+              predicates = goal.predicates.zipWithIndex.map((premise, index) =>
+                  if indices(index) then None else premise
+              ),
+              unrestricted = indices
+            )
+        }
+        freed(lowered).copy(unrewritten = lowered.unrewritten.map(freed))
+    }
+
+    /** `result` of the statement with unknowns, as a result of the statement: a proof is of the
+      * kind that says it rests on the unknowns, and a refutation is replayed on the statement as
+      * written.
+      */
+    private def finished(prepared: Prepared, result: ExecutionResult): ExecutionResult =
+        result match {
+            case VerificationResult.Proven(proof) => VerificationResult.Proven(ofUnknowns(proof))
+            case VerificationResult.ProvenWithin(proof, bound) =>
+                VerificationResult.ProvenWithin(ofUnknowns(proof), bound)
+            case refuted @ VerificationResult.Refuted(proof) =>
+                replayed(prepared, proof).getOrElse(refuted)
+            case other => other
+        }
+
+    private def ofUnknowns(proof: Proof): Proof = proof.artifact match
+        case artifact: UplcBlaster.Artifact =>
+            Proof(artifact.copy(kind = ProofKind.BlasterOfUnknowns), proof.usedLemmas)
+        case _ => proof
+
     /** Replays the refutation `proof` of the statement with unknowns on the statement as written:
       * where the statement holds there, the unknowns had values their walks do not return, and the
       * refutation is spurious. None where it refutes the statement as written.
       */
     private def replayed(prepared: Prepared, proof: Proof): Option[ExecutionResult] =
-        (proof.artifact, prepared.asWritten) match
+        (proof.artifact, prepared.asWritten) match {
             case (artifact: UplcBlaster.Artifact, Some(asWritten)) =>
                 UplcBlaster.holdsAsWrittenOn(asWritten, artifact.counterexample.toMap) match
                     case Right(Some(false)) => None
@@ -284,6 +368,7 @@ object CallsAsUnknowns {
                         "statement as written, which is not lowered"
                   )
                 )
+        }
 
     private def inconclusive(reason: String): ExecutionResult =
         VerificationResult.Inconclusive(reason)
@@ -317,6 +402,12 @@ object CallsAsUnknowns {
     /** A definition the linker put in a program: a module's function or value. */
     private final case class Definition(name: String, value: SIR, recursive: Boolean)
 
+    /** Whether `name` is of a module's definition, as
+      * `scalus.cardano.onchain.plutus.v1.Value$.zero`. Not
+      * [[scalus.compiler.sir.linking.SIRLinker.isDefinition]], which takes any qualified name: a
+      * program's own values have qualified names too, as the plugin's
+      * `_Validator.scala_15_8_match_scrutinee_1`, and a test's program begins with them.
+      */
     private def isModuleName(name: String): Boolean = name.contains("$.")
 
     /** `sir`, a test's program, with its walks as unknowns: `table` keeps them for all the leaves.
@@ -370,40 +461,29 @@ object CallsAsUnknowns {
         loops
     }
 
-    private def hasRecursiveLet(sir: SIR): Boolean = exists(sir) {
-        case SIR.Let(_, _, flags, _) => flags.isRec
-        case _                       => false
-    }
+    private def hasRecursiveLet(sir: SIR): Boolean =
+        SIR.accumulate[Boolean](
+          sir,
+          false,
+          Set.empty,
+          (node, _, found) =>
+              found || (node match
+                  case SIR.Let(_, _, flags, _) => flags.isRec
+                  case _                       => false)
+        )
 
-    private def referenced(sir: SIR, names: Set[String]): Set[String] = {
-        val found = mutable.Set.empty[String]
-        exists(sir) {
-            case SIR.Var(name, _, _) if names(name)            => found += name; false
-            case SIR.ExternalVar(_, name, _, _) if names(name) => found += name; false
-            case _                                             => false
-        }
-        found.toSet
-    }
-
-    /** Whether some node of `sir` is one `p` holds of. */
-    private def exists(sir: SIR)(p: SIR => Boolean): Boolean = {
-        def go(s: SIR): Boolean = p(s) || (s match
-            case SIR.Decl(_, term)                 => go(term)
-            case SIR.Let(bindings, body, _, _)     => bindings.exists(b => go(b.value)) || go(body)
-            case SIR.LamAbs(_, term, _, _)         => go(term)
-            case SIR.Apply(f, arg, _, _)           => go(f) || go(arg)
-            case SIR.Select(scrutinee, _, _, _)    => go(scrutinee)
-            case SIR.And(a, b, _)                  => go(a) || go(b)
-            case SIR.Or(a, b, _)                   => go(a) || go(b)
-            case SIR.Not(a, _)                     => go(a)
-            case SIR.IfThenElse(c, t, f, _, _)     => go(c) || go(t) || go(f)
-            case SIR.Error(msg, _, _)              => go(msg)
-            case SIR.Constr(_, _, args, _, _)      => args.exists(go)
-            case SIR.Match(scrutinee, cases, _, _) => go(scrutinee) || cases.exists(c => go(c.body))
-            case SIR.Cast(term, _, _)              => go(term)
-            case _                                 => false)
-        go(sir)
-    }
+    /** The definitions of `names` that `sir` refers to, and not a local value of one's name. */
+    private def referenced(sir: SIR, names: Set[String]): Set[String] =
+        SIR.accumulate[Set[String]](
+          sir,
+          Set.empty,
+          Set.empty,
+          (node, locals, found) =>
+              node match
+                  case SIR.Var(name, _, _) if names(name) && !locals(name) => found + name
+                  case SIR.ExternalVar(_, name, _, _) if names(name)       => found + name
+                  case _                                                   => found
+        )
 
     private def spine(sir: SIR): (SIR, List[SIR]) = sir match
         case SIR.Apply(f, arg, _, _) =>
@@ -411,11 +491,19 @@ object CallsAsUnknowns {
             (head, arguments :+ arg)
         case other => (other, Nil)
 
+    /** The lambdas `sir` begins with, and what they are of. */
     private def lambdas(sir: SIR): (List[SIR.LamAbs], SIR) = sir match
         case lambda @ SIR.LamAbs(_, term, _, _) =>
             val (more, body) = lambdas(term)
             (lambda :: more, body)
         case other => (Nil, other)
+
+    /** The parameters of a function's value, through a declaration or a cast around it. */
+    private def arity(value: SIR): Int = value match
+        case SIR.Decl(_, term)         => arity(term)
+        case SIR.Cast(term, _, _)      => arity(term)
+        case SIR.LamAbs(_, term, _, _) => 1 + lambdas(term)._1.size
+        case _                         => 0
 
     /** The unknowns of a statement, by key, shared by its leaves. */
     private final class Unknowns(val option: DataDecl) {
@@ -483,23 +571,31 @@ object CallsAsUnknowns {
             case SIR.ExternalVar(_, name, _, _) if definitions.contains(name) => Some(name)
             case _                                                            => None
 
-        private def arity(name: String): Int = lambdas(definitions(name).value)._1.size
+        private def nameOf(head: SIR): Option[String] = head match
+            case SIR.Var(name, _, _)            => Some(name)
+            case SIR.ExternalVar(_, name, _, _) => Some(name)
+            case _                              => None
 
         private def isFunction(tp: SIRType): Boolean = SirTypes.unwrap(tp) match
             case SIRType.Fun(_, _)        => true
             case SIRType.TypeLambda(_, _) => true
             case _                        => false
 
+        /** Whether `body` applies the local function `self` to all its `parameters`. */
+        private def appliesFully(body: SIR, self: String, parameters: Int): Boolean =
+            spine(body) match
+                case (SIR.Var(name, _, _), arguments) =>
+                    name == self && parameters > 0 && arguments.size == parameters
+                case _ => false
+
         def goSir(sir: SIR, values: Map[String, Key]): SIR = sir match
             case SIR.Decl(data, term) => SIR.Decl(data, goSir(term, values))
             case a: AnnotatedSIR      => go(a, values)
 
-        def go(sir: AnnotatedSIR, values: Map[String, Key]): AnnotatedSIR = sir match
-            case SIR.Let(List(Binding(self, _, _: SIR.LamAbs)), body, flags, anns)
-                if flags.isRec && spine(body)._1.match
-                    case SIR.Var(name, _, _) => name == self
-                    case _                   => false
-                =>
+        def go(sir: AnnotatedSIR, values: Map[String, Key]): AnnotatedSIR = sir match {
+            case SIR.Let(List(Binding(self, _, function: SIR.LamAbs)), body, flags, anns)
+                if flags.isRec && !isFunction(sir.tp) &&
+                    appliesFully(body, self, lambdas(function)._1.size) =>
                 walk(sir, values, anns).getOrElse(structural(sir, values))
             case SIR.Apply(_, _, tp, anns) =>
                 val (head, arguments) = spine(sir)
@@ -520,11 +616,7 @@ object CallsAsUnknowns {
                             case other => other
                     case _ => call(sir, head, arguments, tp, anns, values)
             case _ => structural(sir, values)
-
-        private def nameOf(head: SIR): Option[String] = head match
-            case SIR.Var(name, _, _)            => Some(name)
-            case SIR.ExternalVar(_, name, _, _) => Some(name)
-            case _                              => None
+        }
 
         /** `sir`, a call of `head` on `arguments`: a walk, the code of a function inlined, or the
           * call with its arguments rewritten.
@@ -539,7 +631,8 @@ object CallsAsUnknowns {
         ): AnnotatedSIR =
             global(head) match
                 case Some(name)
-                    if loops(name) && arguments.size == arity(name) && !isFunction(tp) =>
+                    if loops(name) && arguments.size == arity(definitions(name).value) &&
+                        !isFunction(tp) =>
                     val definition = definitions(name)
                     if definition.recursive || library(name) then
                         walk(sir, values, anns).getOrElse(structural(sir, values))
@@ -555,23 +648,19 @@ object CallsAsUnknowns {
             anns: AnnotationsDecl
         ): Option[AnnotatedSIR] = {
             val key = keyOf(sir, values, Map.empty, 0)
-            Option.when(key.isOfVariables)(
-              table.reference(key, sir.tp, written(sir), anns)
-            )
+            Option.when(key.hoistable)(table.reference(key, sir.tp, written(sir), anns))
         }
 
-        private def written(sir: SIR): String = {
-            val (head, _) = spine(sir)
-            head match
-                case SIR.Var(name, _, _)            => name
-                case SIR.ExternalVar(_, name, _, _) => name
-                case SIR.Let(List(binding), _, _, anns) =>
-                    s"a loop (${binding.name}) at ${anns.pos.file}:${anns.pos.startLine + 1}"
-                case _ => "a walk"
-        }
+        private def written(sir: SIR): String = spine(sir)._1 match
+            case SIR.Var(name, _, _)            => name
+            case SIR.ExternalVar(_, name, _, _) => name
+            case SIR.Let(List(binding), _, _, anns) =>
+                s"a loop (${binding.name}) at ${anns.pos.file}:${anns.pos.startLine + 1}"
+            case _ => "a walk"
 
         /** The code of `definition` applied to `arguments`, each bound to a parameter by a `let` in
-          * order. None for a function with type parameters, which a `let` does not bind.
+          * order. None for a function with type parameters, which a `let` does not bind, and for
+          * one whose value is not its lambdas.
           */
         private def inlinedCall(
             definition: Definition,
@@ -579,7 +668,10 @@ object CallsAsUnknowns {
             anns: AnnotationsDecl
         ): Option[AnnotatedSIR] = {
             val (parameters, body) = lambdas(definition.value)
-            Option.when(parameters.forall(_.typeParams.isEmpty)) {
+            Option.when(
+              parameters.nonEmpty && parameters.size == arguments.size &&
+                  parameters.forall(_.typeParams.isEmpty)
+            ) {
                 inlined += 1
                 val renamed =
                     parameters.map(p => p.param.name -> s"${p.param.name}-inlined$inlined")
@@ -600,7 +692,9 @@ object CallsAsUnknowns {
         }
 
         private def structural(sir: AnnotatedSIR, values: Map[String, Key]): AnnotatedSIR =
-            sir match
+            sir match {
+                // A value the program binds is the value of its key where a later call is made: the
+                // program evaluates the `let` before it goes on.
                 case SIR.Let(bindings, body, flags, anns) if !flags.isRec =>
                     var scope = values
                     val rewritten = bindings.map { binding =>
@@ -646,6 +740,7 @@ object CallsAsUnknowns {
                     )
                 case SIR.Cast(term, tp, anns) => SIR.Cast(go(term, values), tp, anns)
                 case other                    => other
+            }
 
         private def withPattern(
             values: Map[String, Key],
@@ -663,7 +758,7 @@ object CallsAsUnknowns {
           * the depth of those the key binds itself.
           */
         def keyOf(sir: SIR, values: Map[String, Key], bound: Map[String, Int], depth: Int): Key =
-            sir match
+            sir match {
                 case SIR.Decl(_, term) => keyOf(term, values, bound, depth)
                 case SIR.Var(name, _, _) =>
                     bound.get(name) match
@@ -678,17 +773,20 @@ object CallsAsUnknowns {
                 case SIR.ExternalVar(_, name, _, _) => Key.Global(name)
                 case SIR.Const(constant, _, _)      => Key.Literal(constant)
                 case SIR.Builtin(bn, _, _)          => Key.Builtin(bn.toString)
-                case SIR.Apply(_, _, _, _) =>
+                case SIR.Apply(_, _, tp, _) =>
                     val (head, arguments) = spine(sir)
                     val function = keyOf(head, values, bound, depth)
                     val keys = arguments.map(keyOf(_, values, bound, depth))
-                    (function, keys) match
-                        // A value of a type whose `Data` is the value, encoded and decoded again.
-                        case (
-                              Key.Global(`fromData`),
-                              List(Key.Applied(Key.Global(`toData`), List(of)))
-                            ) =>
-                            of
+                    (function, arguments, keys) match
+                        case (Key.Global(`toData`), List(argument), List(of)) =>
+                            Key.Encoded(of, SirTypes.typeKey(argument.tp))
+                        // A value of a type, encoded and decoded to that type again.
+                        case (Key.Global(`fromData`), List(_), List(of)) =>
+                            val decodedTo = SirTypes.typeKey(tp)
+                            of match
+                                case Key.Encoded(value, encodedFrom) if encodedFrom == decodedTo =>
+                                    value
+                                case _ => Key.Decoded(of, decodedTo)
                         case _ => Key.Applied(function, keys)
                 case SIR.LamAbs(_, _, _, _) =>
                     val (parameters, body) = lambdas(sir)
@@ -701,14 +799,18 @@ object CallsAsUnknowns {
                     bindings
                         .map(b => keyOf(b.value, values, inner, next))
                         .foldRight(keyOf(body, values, inner, next))((f, b) => Key.Recursive(f, b))
+                // A `let` inside a call is evaluated before its body, used or not: it is kept, so
+                // that a call whose `let` may fail has another key than one that has none.
                 case SIR.Let(bindings, body, _, _) =>
-                    val scope = bindings.foldLeft((values, bound)) { case ((vs, bs), binding) =>
-                        (
-                          vs + (binding.name -> keyOf(binding.value, vs, bs, depth)),
-                          bs - binding.name
-                        )
-                    }
-                    keyOf(body, scope._1, scope._2, depth)
+                    def nest(rest: List[Binding], scope: Map[String, Int], level: Int): Key =
+                        rest match
+                            case Nil => keyOf(body, values, scope, level)
+                            case binding :: more =>
+                                Key.Bind(
+                                  keyOf(binding.value, values, scope, level),
+                                  nest(more, scope + (binding.name -> level), level + 1)
+                                )
+                    nest(bindings, bound, depth)
                 case SIR.Select(scrutinee, field, _, _) =>
                     Key.Field(keyOf(scrutinee, values, bound, depth), field)
                 case SIR.Constr(name, _, args, _, _) =>
@@ -746,5 +848,6 @@ object CallsAsUnknowns {
                 case SIR.Not(a, _)        => Key.Negation(keyOf(a, values, bound, depth))
                 case SIR.Error(_, _, _)   => Key.Failure
                 case SIR.Cast(term, _, _) => keyOf(term, values, bound, depth)
+            }
     }
 }

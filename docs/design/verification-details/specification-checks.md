@@ -80,7 +80,8 @@ What the examples have:
 |---|---|---|
 | `VestingValidator.spend` | the beneficiary signed | checked, by `vesting.spend.beneficiary_signed_limited`, the same statement as the clause's, only where the context has at most two inputs |
 | `VestingValidator.spend` | something is withdrawn | checked, by `vesting.spend.something_is_withdrawn` |
-| `VestingValidator.spend` | what stays locked is at least what has not vested | open |
+| `VestingValidator.spend` | what stays locked is at least what has not vested | open; of every context it is proved with the walks as unknowns (`VestingWalksProbeTest`, `ProofKind.BlasterOfUnknowns`) |
+| `VestingValidator.spend` | the state is carried: a partial withdrawal leaves the rest under the same datum | open |
 | `VestingValidator.linearVesting` | `ensuring`: between nothing and the amount | checked, by `vesting.schedule.stated_contract_holds` |
 | `MintingPolicy.mint` | both clauses | checked, by the statement `guarantees` declared of them together |
 | `AmmMath.swapResult` | `ensuring`: the amount out is not negative, the product of the reserves does not decrease, positive reserves stay positive | checked, by `amm.swap.stated_contract_holds` |
