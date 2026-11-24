@@ -238,18 +238,80 @@ two texts of every construct.
 
 ## Termination
 
-A recursive Lean `def` needs a termination argument. In order of preference:
+A recursive Lean `def` needs a termination argument. The translator takes one in this order:
 
-1. **A measure from the source.** A clause in the Scala code, `decreasing(hi - lo)`, becomes
-   `termination_by (hi - lo).toNat`, with `decreasing_by omega`. A bisection has one:
-   `bisect(lo, hi)` stops where `hi − lo <= 1`.
-2. **Fuel.** Without a measure, the function takes a `Nat` of fuel and returns `Option`. The claim
+1. **Structural recursion.** A function that calls itself on a part of its argument, as on the
+   tail of a `List` or a field of an `inductive`, needs nothing: Lean finds the argument itself.
+2. **A measure from the source**, which the author of the function writes
+   ([below](#a-measure-from-the-source-specdecreases)).
+3. **Fuel.** Without a measure, the function takes a `Nat` of fuel and returns `Option`. The claim
    becomes "for some fuel", or "for fuel at least `b x`". The search for the largest amount that
    fits, by doubling and then bisection, has a doubling with no measure in its source:
    `bound(hi) = if fits(hi) then bound(2·hi) else hi` stops because `fits` is false from some point
    on, which is a premise about `fits`, not a fact of the code.
-3. **`partial def`.** Executable, but nothing can be proved of it. Only for the runner of
+4. **`partial def`.** Executable, but nothing can be proved of it. Only for the runner of
    [B2's tests](#b2-a-translation-of-a-subset-of-scala-to-lean).
+
+### A measure from the source: `Spec.decreases`
+
+The author of a function states what decreases, with a clause at the head of its body, beside
+`Spec.expects`:
+
+```scala
+@tailrec
+private def sqrtBabylonian(radicand: BigInt, x: BigInt, y: BigInt): BigInt = {
+    Spec.expects(y >= 0)
+    Spec.decreases(x)
+    if y >= x then x
+    else sqrtBabylonian(radicand, y, (y + radicand / y) / 2)
+}
+```
+
+```lean
+def sqrtBabylonian (radicand x y : Int) : Int :=
+  if ¬ (y ≥ 0) then 0   -- outside the domain of `Spec.expects`: the claim does not look here
+  else if y ≥ x then x
+  else sqrtBabylonian radicand y ((y + radicand.tdiv y).tdiv 2)
+termination_by x.toNat
+```
+
+- **The measure** is an integer expression of the function's parameters, or several, for a
+  lexicographic order: `Spec.decreases(a, b)` is `termination_by (a.toNat, b.toNat)`. Each function
+  of a group that calls each other has its own, and Lean proves them together, in a `mutual` block.
+- **It is a clause, as `Spec.expects` is.** The plugin reads it from the function's SIR
+  ([overview §3.7](../verification-overview.md#37-function-contracts-pre--and-postconditions)), and
+  the lowering erases it. The script's bytes are those without it, which a test checks as `SpecTest`
+  does for the other clauses, so it costs no budget.
+- **Not an annotation.** The arguments of an annotation of a `def` are typed outside the method, so
+  they cannot name its parameters: `@decreases(hi - lo) def bisect(lo: BigInt, hi: BigInt)` does
+  not compile, and a string, `@decreases("hi - lo")`, is no longer type-checked. A call at the head
+  of the body has the parameters in scope. Stainless, the Scala verifier of EPFL, writes its
+  `decreases(…)` the same way.
+- **It is checked, not trusted.** Lean proves that the measure falls at each recursive call, with
+  the condition of the call's branch and the function's precondition as hypotheses. A wrong measure
+  is a definition Lean refuses, and the error names the position of the clause in the Scala source.
+  A measure that is right, but that Lean's default tactic does not prove, needs a lemma, not trust.
+- **A measure often needs a precondition.** An integer measure is read as a natural number, so it
+  falls only while it is not negative, and many loops terminate only on part of their domain. The
+  precondition is the function's `Spec.expects`. The translator writes it as a guard, outside of
+  which the function returns a fixed value, and the mapping holds on that domain (the total form of
+  [the claim](#the-claim)).
+
+The loops of the prelude:
+
+| Function | Recursive call, and while | Measure | Precondition | Proof of the decrease |
+|---|---|---|---|---|
+| `Math.gcd`'s `go(a, b)` | `go(b, a % b)`, while `b ≠ 0` | `b.abs` | none | `\|a % b\| < \|b\|`: a lemma about `Int.tmod`, as `omega` does not reason about a modulus that is not a constant |
+| `Math.pow`'s `go(ret, n, e)` | `e / 2` or `(e − 1) / 2`, while `e ≠ 0` | `e` | `e >= 0` | `Int.tdiv` as `/` for `e >= 0`, then `omega` |
+| `Math.sqrt`'s `sqrtBabylonian(radicand, x, y)` | `(radicand, y, …)`, while `y < x` | `x` | `y >= 0` | `omega`, from `0 <= y < x` |
+
+`Math.pow`'s `go` shows why the precondition is needed: from `e = −1` it calls itself with
+`(−1 − 1) / 2 = −1`, for ever. `Math.pow` calls it only after its guard `exp < 0`, so on its domain
+it terminates.
+
+Scalus's Lean library would hold the lemmas of the common decreases, the bound of `Int.tmod` and the
+halving of an integer that is not negative, and the translator's `decreasing_by` would try them
+before `omega`. So the author of a function writes the measure, and as a rule nothing else.
 
 ## An example: the AMM
 
@@ -281,7 +343,8 @@ about a Lean model of it.
    place of `Int.tdiv`).
 2. **B2 without loops.** The translator for `BigInt` functions with no recursion, the table with
    `BigInteger.sqrt` and `pow`, and the runner and its differential test.
-3. **Loops.** The `while` rewriting, measures and fuel. First: a search by doubling and bisection.
+3. **Loops.** The `while` rewriting, `Spec.decreases` and fuel. First: the prelude's
+   `sqrtBabylonian`, and a search by doubling and bisection.
 4. **A3.** The same translator on on-chain SIR, and a try at bounded agreement on `Math.sqrt`.
 
 ## Open questions
@@ -296,3 +359,6 @@ about a Lean model of it.
 5. **`prepared = run`** (overview §6.4), which decides whether A2 reaches the program or stays
    over the optimized run.
 6. **The loop lemma** of A3: one lemma for every recursion, or a check of each translation.
+7. **`Spec.decreases` on the JVM.** In a test on the JVM, the plugin could check the clause itself:
+   that the measure of each recursive call is below its caller's and not negative. A wrong measure
+   would then fail a test before Lean sees it.
