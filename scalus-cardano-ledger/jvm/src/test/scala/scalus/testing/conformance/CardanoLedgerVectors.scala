@@ -34,24 +34,6 @@ object CardanoLedgerVectors {
     val impSlotConfig: SlotConfig = DugiteLedgerVectors.impGenesisSlotConfig
     val impEpoch: Long = 899
 
-    /** Validate a test vector by name
-      *
-      * @param vectorName
-      *   Name of the test vector (directory name under vectors/)
-      * @param evaluatorMode
-      *   Evaluator mode to use for validation
-      * @param useParams
-      *   Whether to load protocol parameters from the test vector files
-      * @return
-      *   List of (test file name, expected success, actual result)
-      */
-    def testVector(
-        vectorName: String,
-        evaluatorMode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost,
-        useParams: Boolean = true
-    ): List[(String, Boolean, Try[CardanoMutator.Result])] =
-        runVector(vectorName, evaluatorMode, useParams).map(r => (r.file, r.success, r.result))
-
     /** One test case of a vector: the expected outcome, the Scalus result, the expected new ledger
       * state (present when `success` is true), and the epoch the case ran at.
       */
@@ -71,8 +53,7 @@ object CardanoLedgerVectors {
 
     def runVector(
         vectorName: String,
-        evaluatorMode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost,
-        useParams: Boolean = true
+        evaluatorMode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost
     ): List[VectorRun] = {
         // spec [CV-8]: the epoch of a case is at least the epoch of every earlier case, D43
         var floor = impEpoch
@@ -89,7 +70,7 @@ object CardanoLedgerVectors {
             }
             // The fixtures may fail to give a case's pparams; that case then has no verdict, and
             // the other cases of the vector keep theirs.
-            val caseParams = Try(if useParams then vectorParams(vector) else None)
+            val caseParams = Try(vectorParams(vector))
                 .map(_.getOrElse(UtxoEnv.default.params))
             (states, caseParams) match
                 case (Failure(e), _) =>
@@ -343,16 +324,20 @@ object CardanoLedgerVectors {
     // Each directory stream is closed: the tests run in the sbt server JVM, which ran out of file
     // descriptors on the leaked ones.
     def vectorNames(): List[String] =
-        Using.resource(Files.list(conformanceVectorsPath)) { paths =>
-            paths
-                .map(_.getFileName.toFile.getName)
-                .iterator()
-                .asScala
-                .filterNot(_.startsWith("._"))
-                .filterNot(_ == "pparams-by-hash")
-                .toList
-                .sorted
-        }
+        // No vectors: no tests, not a NullPointerException in the suite. Each suite checks that
+        // it found vectors.
+        if !vectorsExist then Nil
+        else
+            Using.resource(Files.list(conformanceVectorsPath)) { paths =>
+                paths
+                    .map(_.getFileName.toFile.getName)
+                    .iterator()
+                    .asScala
+                    .filterNot(_.startsWith("._"))
+                    .filterNot(_ == "pparams-by-hash")
+                    .toList
+                    .sorted
+            }
 
     def loadVector(name: String): List[(Path, RawTestVector)] = {
         val rootPath = conformanceVectorsPath.resolve(name)
@@ -378,5 +363,79 @@ object CardanoLedgerVectors {
             .toList
             // numeric order, the order the Imp test made the cases in
             .sortBy((path, _) => (path.toString.toIntOption, path.toString))
+    }
+
+    // The conformance helpers below are shared by the JVM and the IT conformance suites, spec
+    // `[kit.vectors.both-suites]`.
+
+    private def summarizeResult(result: Try[CardanoMutator.Result]): String =
+        result match
+            case Failure(e) => s"Failure(${e.getClass.getSimpleName}: ${e.getMessage})"
+            case Success(Left(e)) =>
+                s"Left(${e.getClass.getSimpleName}: ${e.getMessage})"
+            case Success(Right(_)) => "Right(...)"
+
+    val conway = "Conway.Imp.ConwayImpSpec - Version 10."
+
+    /** The cases that the ledger and Scalus decide differently, keyed by vector name, each with its
+      * cause (D37). Each listed case must still fail, so a fix must remove it from this list.
+      */
+    val expectedFailures: Map[String, Set[String]] = Map(
+      // A Word64 above Long.MaxValue that `Coin(value: Long)` cannot hold: withdrawal amounts of
+      // a TreasuryWithdrawals in the state (EnactSpec.hs:129-137). The harness cannot decode the
+      // old state, spec section 20 Q9.
+      s"${conway}ENACT.Treasury withdrawals.Withdrawals exceeding maxBound Word64 submitted in a single proposal" ->
+          Set("10", "11", "12", "13"),
+      // A threshold denominator of 10^19 that `UnitInterval(Long, Long)` cannot hold, in an
+      // UpdateCommittee in the state (GovSpec.hs:807-820), spec section 20 Q9.
+      s"${conway}GOV.Voting.committee member can not vote on UpdateCommittee action" ->
+          Set("2", "3"),
+      // The vote comes three epochs after the proposal (`passNEpochs 3`, GovSpec.hs:788-798), and
+      // no field of the dump records the passed epochs, so the harness runs the vote at the
+      // proposal's epoch, where the action has not expired. The ledger disables this test in its
+      // own conformance run (`disableInConformanceIt`). GovMutatorTest covers
+      // VotingOnExpiredGovAction, spec [CV-8], D43.
+      s"${conway}GOV.Voting.expired gov-actions" -> Set("5")
+    )
+
+    /** The problems of one vector against the ledger's verdicts, one line each, spec
+      * `[kit.vectors.check-vector]`: a case whose verdict differs (unless `expectedFailures` lists
+      * it), an expected failure that now matches, and a passing case whose new state differs. An
+      * empty list means the vector conforms. A vector with no cases is a problem too: it would pass
+      * without checking anything, for example when the extracted vectors lost their files.
+      */
+    def checkVector(name: String, mode: EvaluatorMode): List[String] = {
+        val runs = runVector(name, mode)
+        if runs.isEmpty then return List(s"vector $name has no test cases")
+        val expectedToFail = expectedFailures.getOrElse(name, Set.empty)
+        // A thrown exception is no verdict: it matches neither a pass nor a fail.
+        val mismatched = runs.filter(run =>
+            run.result match
+                case Success(result) => run.success != result.isRight
+                case Failure(_)      => true
+        )
+        val failures = for
+            run <- mismatched
+            if !expectedToFail.contains(run.file)
+        yield s"  [${run.file}] expected=${if run.success then "pass" else "fail"}, got=${summarizeResult(run.result)}"
+        val fixed = (expectedToFail -- mismatched.map(_.file)).toSeq.sorted.map(file =>
+            s"  [$file] is an expected failure but now matches the ledger: remove it from expectedFailures"
+        )
+        // spec [SC-14]: a vector that expects success must also reach its newLedgerState
+        val stateMismatches = runs.flatMap { run =>
+            (run.success, run.result, run.newLedgerState) match
+                case (true, Success(Right(actual)), Some(expected)) =>
+                    LedgerStateComparison
+                        .withoutExcluded(
+                          name,
+                          LedgerStateComparison.compare(expected, actual),
+                          LedgerStateComparison.exclusions
+                        )
+                        .map(m => s"  [${run.file}] state field ${m.field} differs: ${m.detail}")
+                case (true, Success(_), None) =>
+                    List(s"  [${run.file}] has no newLedgerState")
+                case _ => Nil
+        }
+        failures ++ fixed ++ stateMismatches
     }
 }

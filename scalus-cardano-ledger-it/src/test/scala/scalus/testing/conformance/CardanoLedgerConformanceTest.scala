@@ -8,7 +8,8 @@ import scalus.testing.conformance.CardanoLedgerVectors.*
   *
   * Runs conformance tests from cardano-ledger test vectors to validate Scalus ledger implementation
   * against reference implementation. Uses EvaluatorMode.Validate which validates that script
-  * execution stays within the budget specified in redeemers.
+  * execution stays within the budget specified in redeemers, spec `[kit.vectors.it-mode]`. The
+  * check is `checkVector`, the same as in the JVM suite, spec `[kit.vectors.both-suites]`.
   *
   * ==Test Vector Format (December 2025)==
   *
@@ -21,12 +22,14 @@ import scalus.testing.conformance.CardanoLedgerVectors.*
   *   `scalus-cardano-ledger-it/src/test/resources/TEST_VECTORS.md` for vector regeneration
   */
 class CardanoLedgerConformanceTest extends AnyFunSuite {
+    // Without the vectors the suite would register no vector test and pass.
+    test("the conformance vectors are on the classpath") {
+        assert(vectorNames().nonEmpty)
+    }
+
     for vector <- vectorNames() do
         test("Conformance test vector: " + vector):
-            for case (x, success, result) <- testVector(vector, EvaluatorMode.Validate)
-            do {
-                println(pprint((x, success, result)))
-                if success != (result.isSuccess && result.get.isRight) then
-                    fail(s"[$vector/$x]($success) $result")
-            }
+            val problems = checkVector(vector, EvaluatorMode.Validate)
+            if problems.nonEmpty then
+                fail(s"${problems.size} problem(s):\n${problems.mkString("\n")}")
 }
