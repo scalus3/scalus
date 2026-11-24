@@ -2,7 +2,7 @@
 
 area: ci
 
-Date: 2026-11-21. Status: phases 1 and 2 and the shell split of section 9 built; phase 3 planned in 8.1.
+Date: 2026-11-21. Status: phases 1, 2 and 3 built; phase 4 planned in 9.1.
 
 ## 1. Overview
 
@@ -749,6 +749,43 @@ and `ci-lean_` entries, and the job deleted them.
 `[ci.nix.save-before-build]`: the post step of `cache-nix-action` is skipped when the job fails.
 In branch run 44945312274 a proof failed, so the 32-minute source build of `blasterZ3` was not
 saved, and the next run builds it again. `[ci.nix.root-shell-only]` replaces the flake-input part of `[ci.nix.gc-roots]`.
+
+### 9.1 Phase 4 steps
+
+*Informative.* Phase 1 already built most of the Nix rules above. Measured on master run of
+734a1c086 (2026-11-24), the overhead of a CI-JVM job before its first sbt task is:
+
+| Part | format job | 3.9.0 job |
+|---|---|---|
+| Checkout with `fetch-depth: 0` | 11 s | 11 s |
+| Nix store restore | 10 s | 12 s |
+| Dependency and task cache restore | 9 s | 6 s |
+| `nix develop .#ci`: unpacks the haskell.nix source, copies 4 paths | 14 s | 4 s |
+| sbt start and build load (43,304 settings) | 49 s | about 60 s |
+
+So the Nix part is 10 to 25 s per job, and sbt start and build load cost more than all of it.
+The format job spends 49 s loading the build and 54 s in `scalafmtCheckAll`. The `nodejs` build
+of spike item 4 no longer happens: the 3.9.0 job builds nothing. nix-direnv (spike item 5) gains
+nothing, because each job still enters the dev shell once.
+
+Each step is one commit and one branch run; the owner says yes to each push.
+
+1. **Format without sbt.** The format job runs the `scalafmt` CLI of the dev shell, with the
+   version that `.scalafmt.conf` names, on the Scala and sbt files, and does not start sbt.
+   Check: a branch run with one unformatted file fails; the job takes under 1 minute.
+2. **Shallow checkout in push jobs.** `fetch-depth: 1` in the push workflows; `release.yml`
+   keeps the full history, because sbt-ci-release reads the version from git.
+   Check: the version that sbt prints in a push job is `<last release>-SNAPSHOT`; the jobs pass.
+3. **Plutus source without haskell.nix.** Spike item 3: a `flake = false` input of the Plutus
+   repository gives the corpus, so the `ci` shell does not unpack haskell.nix. `uplc` keeps
+   coming from the release binary (`[ci.shell.uplc-release]`).
+   Check: `nix develop .#ci` on an empty store fetches no haskell.nix source; the conformance
+   tests run the same cases (`[ci.task.key-flake]` starts a new task cache, as expected).
+4. **Measure the sbt build load.** Split the 49 to 60 s into server start, meta-build compile and
+   settings resolution, and record which part a cache could keep. This step only measures.
+5. **Record.** The times of each push job in section 4.
+
+Phase 4 is done when step 5 is recorded. Step 4 may propose a later phase.
 
 ### Decision: Run the browser test with the runner's Google Chrome
 
