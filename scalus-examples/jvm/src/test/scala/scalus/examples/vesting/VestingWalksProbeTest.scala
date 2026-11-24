@@ -9,7 +9,7 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.{Budget, LeanProofsSuite, UplcBlaster}
+import scalus.verify.uplcblaster.{Budget, CallsAsUnknowns, LeanProofsSuite, UplcBlaster}
 
 import java.nio.file.Path
 import scala.concurrent.duration.*
@@ -136,6 +136,36 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
             VerificationRequest(
               stateIsCarriedWithoutDatumCheck,
               UplcBlaster(Budget.Auto, lean, 30.minutes)
+            )
+          )
+        )
+    }
+
+    // Step 1 of calls as unknowns in the tactic: the third guarantee of the validator itself, not
+    // of a copy, with its walks made unknowns by the tactic (CallsAsUnknowns).
+    private val unvestedStaysLockedOfTheValidator = verifier.statement(
+      "vesting.probe.unvested_stays_locked_calls_as_unknowns",
+      forAllData[ScriptContext](ctx => accepts(ctx) ==>?: keepsTheUnvestedLocked(ctx))
+    )
+
+    test("the tactic makes unknowns of the walks of the validator and of the third guarantee") {
+        val unknowns = CallsAsUnknowns
+            .rewrite(unvestedStaysLockedOfTheValidator.prop, CallsAsUnknowns.inLibrary)
+            .fold(reason => fail(reason), _.unknowns)
+        info(CallsAsUnknowns.described(unknowns))
+        // The clause's lockedBy and the validator's lovelace of the spent output are one walk.
+        assert(unknowns.count(_.written.endsWith("Value$.getLovelace")) == 3, unknowns)
+    }
+
+    test(
+      "spend's third guarantee of the validator holds of every context, with calls as unknowns"
+    ) {
+        report(
+          unvestedStaysLockedOfTheValidator,
+          check(
+            VerificationRequest(
+              unvestedStaysLockedOfTheValidator,
+              new CallsAsUnknowns(UplcBlaster(Budget.Auto, lean, 30.minutes))
             )
           )
         )
