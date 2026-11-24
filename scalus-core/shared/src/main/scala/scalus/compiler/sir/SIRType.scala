@@ -260,27 +260,17 @@ object SIRType {
     case class Fun(in: SIRType, out: SIRType) extends SIRType {
 
         override def show: String = {
-            in match {
-                case inF: Fun =>
-                    s"(${in.show}) -> ${out.show}"
-                case SIRType.TypeLambda(params, body: Fun) =>
-                    s"(${in.show}) -> ${body.show}"
-                case _ =>
-                    s"${in.show} -> ${out.show}"
-            }
-
+            in match
+                // Without parentheses `([A] =>> A) -> Int` prints as `[A] =>> (A -> Int)`.
+                case _: Fun | _: SIRType.TypeLambda => s"(${in.show}) -> ${out.show}"
+                case _                              => s"${in.show} -> ${out.show}"
         }
 
         override def showDebug: String = {
-            in match {
-                case inF: Fun =>
+            in match
+                case _: Fun | _: SIRType.TypeLambda =>
                     s"(${in.showDebug}) -> ${out.showDebug}"
-                case SIRType.TypeLambda(params, body: Fun) =>
-                    s"(${in.showDebug}) -> ${body.showDebug}"
-                case _ =>
-                    s"${in.showDebug} -> ${out.showDebug}"
-            }
-
+                case _ => s"${in.showDebug} -> ${out.showDebug}"
         }
 
     }
