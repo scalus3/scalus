@@ -120,6 +120,30 @@ final class UplcBlaster private (
           mapping
         )
 
+    /** The same tactic with each variable named in `names` one `Data`, whatever the rules would map
+      * it as, and the other nodes as before: the unknowns of [[CallsAsUnknowns]] whose values have
+      * lists, which Lean would otherwise have as lists it builds terms of.
+      */
+    private[uplcblaster] def withVariablesAsData(names: Set[String]): UplcBlaster =
+        if names.isEmpty then this
+        else
+            new UplcBlaster(
+              budget,
+              servers,
+              timeout,
+              attemptTimeout,
+              maxHeartbeats,
+              checksKeptIn,
+              lastChecksOnly,
+              new MappingPlan.Fixed(
+                fixedPlan.paths ++ names,
+                (variable, path, tp) =>
+                    if names(path) then Some(MappingPlan.Mapping.AsData)
+                    else fixedPlan.mapping(variable, path, tp)
+              ),
+              mapping
+            )
+
     /** The same tactic with no time limit, of the whole run or of one attempt. A check then runs
       * until it ends or Lean gives it up at its limit of work, and one that does neither until its
       * thread is interrupted or the server closed.
@@ -4274,6 +4298,33 @@ object UplcBlaster {
                         .map((program, scope) => evaluate(program, scope.map(values)))
                     Right(holds(lowered.body, outcomes))
         }
+    }
+
+    /** Whether `goal`, as written, holds on `values`, the values of its variables by name: run on
+      * the Scalus CEK, as a replay runs a counterexample, with a claim of `==>?:` that fails saying
+      * nothing. None where a program did not end within the replay budget. For the replay of a
+      * counterexample of another statement over the same variables and more, as one with its walks
+      * as unknowns ([[CallsAsUnknowns]]).
+      */
+    private[uplcblaster] def holdsAsWrittenOn(
+        goal: Lowered,
+        values: Map[String, Constant]
+    ): Either[String, Option[Boolean]] = {
+        val written = goal.unrewritten.getOrElse(goal)
+        val missing = written.binders.map(_.name).filterNot(values.contains)
+        if missing.nonEmpty then
+            Left(s"the counterexample has no value of ${missing.mkString(", ")}")
+        else if satisfied(written.body).nonEmpty then
+            Left(
+              "the statement has Lean predicates, as isValid, which only Lean evaluates, and not " +
+                  "the Scalus CEK"
+            )
+        else
+            val ordered = written.binders.map(binder => values(binder.name)).toVector
+            val outcomes = written.leaves
+                .zip(written.leafBinders)
+                .map((program, scope) => evaluate(program, scope.map(ordered)))
+            Right(holds(written.body, outcomes))
     }
 
     /** What the quantifier asks of the values of a list or a map variable: the Lean premise on the

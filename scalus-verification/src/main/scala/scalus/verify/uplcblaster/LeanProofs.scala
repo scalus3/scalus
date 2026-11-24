@@ -497,6 +497,12 @@ final class LeanProofs private (
         inconclusive(own, declared, tactic)
     }
 
+    /** [[inconclusive]], of a tactic that is not [[UplcBlaster]] itself, as [[CallsAsUnknowns]]. */
+    def inconclusive(statement: Statement, tactic: Tactic): String = {
+        val (own, declared) = ownStatement(statement)
+        inconclusive(own, declared, tactic)
+    }
+
     /** A verifier of its own, with the functions of [[verifier]] and nothing kept, and `statement`
       * declared in it under its name: a check there makes no theorem and keeps no result.
       */
@@ -891,7 +897,7 @@ final class LeanProofs private (
     private def inconclusive(
         verifier: Verifier,
         statement: Statement,
-        tactic: UplcBlaster
+        tactic: Tactic
     ): String =
         run(verifier, statement, tactic) match
             case VerificationResult.Inconclusive(reason) =>

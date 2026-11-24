@@ -267,6 +267,21 @@ proved in Lean with each walk's termination, replaces the trust.
 
 1. **The rewrite**, on SIR, with the keys, and the check on samples; an option of the tactic.
    Vesting's #3 proved of every context with it, as the probe is.
+
+   Built, but for the check on samples (2026-11-24): `CallsAsUnknowns`, a tactic over an
+   `UplcBlaster`, in `scalus.verify.uplcblaster`, and `CallsAsUnknownsTest`. Vesting's #3, of the
+   validator itself, is proved of every context at 1262 steps in 1514 s
+   (`VestingWalksProbeTest`); the tactic made ten unknowns of it, and the clause's walks are the
+   validator's. What the first runs taught:
+   - An unknown of a record, as the spent input, is one `Data`, with no premise of its type. By
+     fields, the `Value` in it was a list that Lean builds terms of, and Lean's symbolic run at 1789
+     steps did not end in an hour, at 20 GB. A statement of every value of an unknown, of its type
+     or not, holds of the values its call returns.
+   - The clauses of a specification are left as they are: the pipeline erases them. Erased in one
+     leaf, the linker's walk took the leaf's own `let`s for definitions, and moved them out of
+     scope.
+   - A refutation through unknowns is often of values no walk returns, as a length below zero; its
+     replay on the statement as written says so, and the result is inconclusive.
 2. **Lemmas**: their statements, patterns and the premises they give; vesting's #4.
 3. **The proofs of the lemmas** and of each walk's termination, by induction.
 4. **The rewrite's lemma** in Lean.
