@@ -11,6 +11,20 @@ inputs:
   key:
     description: "The `key` output of the restore action."
     required: true
+  meta-prefix:
+    description: "The `meta-prefix` output of the restore action."
+    required: false
+    default: ""
+  meta-key:
+    description: >-
+      The `meta-key` output of the restore action, from one job of the push only
+      ([ci.meta.one-saver]). Empty: the job saves no meta-build.
+    required: false
+    default: ""
+  meta-hit:
+    description: "The `meta-hit` output of the restore action."
+    required: false
+    default: ""
   token:
     description: "A token with `actions: write`, for the deletion of the older entries."
     required: true
@@ -25,3 +39,17 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.token }}
       run: '"$GITHUB_WORKSPACE/scripts/ci/prune-caches.sh" "${{ inputs.prefix }}" "${{ inputs.key }}"'
+    # A new meta-build entry replaces the older ones ([ci.meta.prune]), so a change of a build
+    # file leaves one entry, not one per change.
+    - if: ${{ inputs.meta-key != '' && inputs.meta-hit != 'true' }}
+      uses: actions/cache/save@v6
+      with:
+        path: |
+          project/target
+          project/project/target
+        key: ${{ inputs.meta-key }}
+    - if: ${{ inputs.meta-key != '' && inputs.meta-hit != 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: '"$GITHUB_WORKSPACE/scripts/ci/prune-caches.sh" "${{ inputs.meta-prefix }}" "${{ inputs.meta-key }}"'

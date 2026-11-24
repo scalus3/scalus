@@ -15,6 +15,15 @@ outputs:
   key:
     description: The key of this run.
     value: ${{ steps.name.outputs.key }}
+  meta-prefix:
+    description: The key prefix of the meta-build cache, shared by all jobs.
+    value: ${{ steps.name.outputs.meta-prefix }}
+  meta-key:
+    description: The key of the meta-build cache for the build files of this commit.
+    value: ${{ steps.name.outputs.meta-key }}
+  meta-hit:
+    description: "`true` when the meta-build cache had an entry for this key."
+    value: ${{ steps.meta.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -27,8 +36,22 @@ runs:
         prefix="sbt-task-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.nix', 'flake.lock') }}-${{ inputs.job }}-$(date -u +%Y-%m)-"
         echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
         echo "key=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
+        meta_prefix="sbt-meta-${{ runner.os }}-${{ runner.arch }}-"
+        echo "meta-prefix=$meta_prefix" >> "$GITHUB_OUTPUT"
+        echo "meta-key=${meta_prefix}${{ hashFiles('flake.nix', 'flake.lock', '*.sbt', 'project/*.sbt', 'project/*.scala', 'project/build.properties', 'scalus-sbt-plugin/src/main/**') }}" >> "$GITHUB_OUTPUT"
     - uses: actions/cache/restore@v6
       with:
         path: ~/.cache/sbt
         key: ${{ steps.name.outputs.key }}
         restore-keys: ${{ steps.name.outputs.prefix }}
+    # The compiled build definition ([ci.meta.restore-exact]): without it, each job spends about
+    # 25 s compiling plugins.sbt, scalus-sbt-plugin and each build.sbt statement. All CI shells
+    # run the same JDK and sbt, so all jobs share one entry. Exact key only: a changed build file
+    # loads from scratch, never on top of the meta-build of other build files.
+    - id: meta
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          project/target
+          project/project/target
+        key: ${{ steps.name.outputs.meta-key }}

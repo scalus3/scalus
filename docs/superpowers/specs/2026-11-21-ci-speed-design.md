@@ -2,7 +2,7 @@
 
 area: ci
 
-Date: 2026-11-21. Status: phases 1, 2 and 3 built; phase 4 planned in 9.1.
+Date: 2026-11-21. Status: phases 1, 2 and 3 built; phase 4 partly built, see 9.1.
 
 ## 1. Overview
 
@@ -397,7 +397,8 @@ Phase 1 is done when step 9 passes. Record the numbers of steps 1, 3 and 9 in se
 - The restore step MUST fall back to the newest entry of the same OS, job and month.
   `[ci.task.restore-prefix]`
 - Each push job MUST save its task cache only on a push to master. `[ci.task.save-on-master]`
-- A job MUST NOT restore or save a `target/` directory. `[ci.task.no-target]`
+- A job MUST NOT restore or save a `target/` directory, except the meta-build of
+  `[ci.meta.restore-exact]`. `[ci.task.no-target]`
 - The sum of all cache entries MUST stay under 8 GB. `[ci.task.budget]`
 - The prefix of the task cache key MUST hold the hash of `flake.nix` and `flake.lock`.
   `[ci.task.key-flake]`
@@ -790,10 +791,31 @@ Each step is one commit and one branch run; the owner says yes to each push. *Th
    (`scalus-sbt-plugin`, `TestInputDigests.scala`) 6 s, `build.sbt` 10 s, settings 3 s.
    sbt compiles each top-level statement of `build.sbt` as its own unit (about 50 `$Wrap`
    classes in `project/target/config-classes`), so a cold JVM runs the compiler about 50
-   times. A warm load takes 4.5 s. sbt-welcome costs nothing measurable. *Proposed:* a cache entry of `project/target`
-   and `project/project`, keyed by the hash of `project/**` and `*.sbt`, restored by exact key
-   only, so a changed build never loads a stale meta-build. This changes `[ci.task.no-target]`,
-   which so far keeps every `target/` out of the caches. Waits for the owner.
+   times. A warm load takes 4.5 s. sbt-welcome costs nothing measurable.
+   *Status, 2026-11-24:* the owner chose the meta-build cache. Built, branch run pending.
+
+   *Informative.* Each push job restores the compiled build definition before sbt starts. All
+   jobs share one entry, because all CI shells run the same JDK and sbt. The key is the hash of
+   the build files, so a changed build file misses and loads from scratch. The 3.3.9 job of a
+   master push then saves the new entry and deletes the older ones.
+
+   - Each push job MUST restore `project/target` and `project/project/target` by an exact key,
+     with no fallback to another key. `[ci.meta.restore-exact]`
+   - The meta-build key MUST hold the runner OS and the hash of `flake.nix`, `flake.lock`, the
+     `*.sbt` files of the root and of `project/`, `project/*.scala`,
+     `project/build.properties` and the sources of `scalus-sbt-plugin`. `[ci.meta.key]`
+   - Only the 3.3.9 job of CI-JVM MUST save the meta-build, only on a push to master, and only
+     after a miss. `[ci.meta.one-saver]`
+   - After that save, the job MUST delete every other meta-build entry of the same OS.
+     `[ci.meta.prune]`
+
+   **Why:** `[ci.meta.restore-exact]`: the meta-build holds no SIR and no test results, so the
+   reason of `[ci.task.no-target]` does not apply to it. An exact key still keeps one build from
+   loading on top of the compiled definition of other build files. `[ci.meta.key]`: the
+   `scalus-sbt-plugin` sources compile into the meta-build (see `project/plugins.sbt`).
+   `[ci.meta.one-saver]`: parallel prunes of one prefix would race, and a delete of an entry that
+   another job already deleted fails the step. `[ci.meta.prune]`: each change of a build file
+   would otherwise leave a 1.6 MB entry until GitHub evicts it after 7 days unused.
 3. **Explore the doc build (option A).** *Result, 2026-11-24:* `docs-mima` restores the 3.3.9
    entry, which holds no doc output since phase 3, so CI builds `jvm/doc` (48 s) and
    `docs/unidoc` (36 s) from scratch on each push. Locally, even a fully cached run of both takes

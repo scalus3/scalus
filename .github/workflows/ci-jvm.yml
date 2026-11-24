@@ -147,6 +147,10 @@ jobs:
         with:
           prefix: ${{ steps.task.outputs.prefix }}
           key: ${{ steps.task.outputs.key }}
+          # One saver per push ([ci.meta.one-saver]): parallel prunes of one prefix would race.
+          meta-prefix: ${{ steps.task.outputs.meta-prefix }}
+          meta-key: ${{ matrix.name == '3.3.9' && steps.task.outputs.meta-key || '' }}
+          meta-hit: ${{ steps.task.outputs.meta-hit }}
           token: ${{ github.token }}
       - name: Show what the runner cached
         if: always()
