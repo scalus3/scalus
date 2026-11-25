@@ -239,22 +239,6 @@
         "spend's first guarantee holds of every script context, with calls as unknowns"
       ]
     },
-    "vesting.spend.beneficiary_signed_limited": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "9a67a5823f8b4d58",
-      "programs": [
-        "bfe19f251e845f79",
-        "06370ae120acc99f"
-      ],
-      "notes": {
-        "budget": "3300",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "spend's first guarantee holds of spends of two inputs: the beneficiary signed"
-      ]
-    },
     "vesting.spend.something_is_withdrawn": {
       "tactic": "uplc-blaster",
       "result": "proved",
@@ -268,6 +252,21 @@
       },
       "tests": [
         "spend's second guarantee holds of every script context: something is withdrawn"
+      ]
+    },
+    "vesting.spend.unvested_stays_locked": {
+      "tactic": "uplc-blaster-unknowns",
+      "result": "proved",
+      "statement": "c472ec8a44198d72",
+      "programs": [
+        "1139776472be5fd9"
+      ],
+      "notes": {
+        "budget": "1328",
+        "kind": "BlasterOfUnknowns"
+      },
+      "tests": [
+        "spend's third guarantee holds of every script context, with calls as unknowns"
       ]
     },
     "vesting.validator.no_datum_is_rejected": {

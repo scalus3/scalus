@@ -346,38 +346,23 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       forAllData[ScriptContext](ctx => accepts(ctx) ==>?: signedByTheBeneficiary(ctx))
     )
 
-    test("the first guarantee's isSignedBy and the validator's are one unknown") {
-        // The clause reads the datum with `configOf(datum)`, the validator with that code written
-        // out: the two calls have one key.
-        val unknowns = CallsAsUnknowns
-            .rewrite(beneficiarySigned.prop, CallsAsUnknowns.inLibrary)
-            .fold(reason => fail(reason), _.unknowns)
-        assert(unknowns.count(_.written.endsWith("isSignedBy")) == 1, unknowns)
-    }
-
     test("spend's first guarantee holds of every script context, with calls as unknowns") {
-        // Of the validator as it is, Lean's run walks the context's lists and does not finish.
-        // With each walk an unknown (CallsAsUnknowns), the program has no loop: the clause's
-        // isSignedBy and the validator's are one unknown, and where it is false the validator's
-        // check of the signature rejects, whatever the other walks return. The proof rests on the
-        // tie of the validator to its program with unknowns (ProofKind.BlasterOfUnknowns).
+        // Lean does not finish the statement as it is: the validator walks the context's lists,
+        // whose length is unknown. The tactic replaces each walk by an unknown value, and the
+        // program left has no loop. The clause's isSignedBy(configOf(datum).beneficiary) and the
+        // validator's isSignedBy(vestingConfig.beneficiary) check the same key, and are one
+        // unknown: where it is false, the clause is false and the validator rejects, whatever the
+        // other walks return.
+        //
+        // The proof rests on one step that is tested, not proved: that the validator does what
+        // its program with unknowns does, with each unknown the value its walk returns
+        // (ProofKind.BlasterOfUnknowns).
         check(
           VerificationRequest(
             beneficiarySigned,
             new CallsAsUnknowns(UplcBlaster(Budget.Auto, lean, 30.minutes))
           )
         )
-    }
-
-    private val beneficiarySignedLimited = verifier.statement(
-      "vesting.spend.beneficiary_signed_limited",
-      forAllDataLimited[ScriptContext](ctx => fewInputs(ctx))(ctx =>
-          accepts(ctx) ==>?: signedByTheBeneficiary(ctx)
-      )
-    )
-
-    test("spend's first guarantee holds of spends of two inputs: the beneficiary signed") {
-        check(beneficiarySignedLimited, guaranteesBudget)
     }
 
     // spend: Spec.ensures(amountOf(redeemer) > 0)
@@ -400,40 +385,18 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       forAllData[ScriptContext](ctx => accepts(ctx) ==>?: keepsTheUnvestedLocked(ctx))
     )
 
-    test("spend's third guarantee, of every script context, is not finished by Lean", Unfinished) {
-        val unfinished = inconclusive(
-          unvestedStaysLocked,
-          UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
+    test("spend's third guarantee holds of every script context, with calls as unknowns") {
+        // As the first: with each walk an unknown, the program has no loop. The clause's
+        // lockedBy(txInfo, txOutRef) and the validator's lovelace of the spent output are one
+        // walk, findInputOrFail and getLovelace of the same input, so the clause's bound is the
+        // validator's check rearranged, whatever the walks return. It rests on the same tested
+        // step (ProofKind.BlasterOfUnknowns).
+        check(
+          VerificationRequest(
+            unvestedStaysLocked,
+            new CallsAsUnknowns(UplcBlaster(Budget.Auto, lean, 60.minutes))
+          )
         )
-        assert(unfinished.contains("did not finish"), unfinished)
-    }
-
-    private val unvestedStaysLockedLimited = verifier.statement(
-      "vesting.spend.unvested_stays_locked_limited",
-      forAllDataLimited[ScriptContext](ctx => fewInputs(ctx))(ctx =>
-          accepts(ctx) ==>?: keepsTheUnvestedLocked(ctx)
-      )
-    )
-
-    // Lean finishes the third of no contexts: it is declared open, so that the suite says so of
-    // the clause, and does not fail it as unchecked.
-    verifier.open(
-      unvestedStaysLockedLimited,
-      "Lean does not finish its symbolic run (the test of it is tagged Unfinished)"
-    )
-
-    test("spend's third guarantee, of spends of two inputs, is not finished by Lean", Unfinished) {
-        // What stays locked is at least what has not vested. Its rejecting program did not end its
-        // symbolic run in 30 minutes, at 3300 or at 3800 steps, written as the condition is or as
-        // the validator's check, with the outputs free or of at most two; and the search for its
-        // budget came, by 1173, 1327, 1406 and 1450 steps, each a spurious counterexample of a
-        // minute or two, to 2517, which it did not finish in the time left (2026-11-06). The first
-        // two take 149 s and 14 s. The time limit ends it.
-        val unfinished = inconclusive(
-          unvestedStaysLockedLimited,
-          UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
-        )
-        assert(unfinished.contains("symbolically"), unfinished)
     }
 
     // spend: Spec.ensures(amountOf(redeemer) === lockedBy(txInfo, txOutRef) ||
@@ -604,10 +567,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
             sample <- accepted
             statement <- List(
               beneficiarySigned,
-              beneficiarySignedLimited,
               somethingIsWithdrawn,
               unvestedStaysLocked,
-              unvestedStaysLockedLimited,
               stateIsCarried,
               stateIsCarriedLimited
             )

@@ -184,8 +184,8 @@ statement, and its axioms are those and the kernel's.
 ## The cost
 
 The steps are statements over script contexts, of the costliest kind. Measured on vesting: Lean
-does not finish #3 over every context, nor over contexts of two inputs; `VestingVerificationTest`
-declares it open. #4 checks the continuing output, which the validator reaches last, after it sums
+does not finish #3 of the validator as it is, over every context, nor over contexts of two inputs;
+with its walks as unknowns it does (way 4). #4 checks the continuing output, which the validator reaches last, after it sums
 the beneficiary's inputs and outputs. Three ways to a step Lean finishes:
 
 1. **Limits of exact length**, as the contexts of the minting policy's statements: one input, and
@@ -276,8 +276,9 @@ proved in Lean with each walk's termination, replaces the trust.
 
    Built, but for the check on samples (2026-11-24): `CallsAsUnknowns`, a tactic over an
    `UplcBlaster`, in `scalus.verify.uplcblaster`, and `CallsAsUnknownsTest`. Vesting's #3, of the
-   validator itself, is proved of every context at 1262 steps in 1514 s
-   (`VestingWalksProbeTest`); the tactic made ten unknowns of it, and the clause's walks are the
+   validator itself, is proved of every context at 1262 steps in 1514 s in the probe suite, and at
+   1328 as `vesting.spend.unvested_stays_locked` in `VestingVerificationTest`; the tactic made ten
+   unknowns of it, and the clause's walks are the
    validator's. What the first runs taught:
    - An unknown of a record, as the spent input, is one `Data`, with no premise of its type. By
      fields, the `Value` in it was a list that Lean builds terms of, and Lean's symbolic run at 1789
@@ -291,8 +292,8 @@ proved in Lean with each walk's termination, replaces the trust.
      unknown is never outside its type, as it has no premise of it: the replay of the statement
      with unknowns takes it as it is, and the statement as written decides.
    - Of the validator itself, Lean finishes #4 of no contexts, nor of one input and two outputs in
-     10 minutes; the clause is open, as #3 is in `VestingVerificationTest`. With the walks as
-     unknowns it needs the lemma on `Value`, step 2.
+     10 minutes; the clause is open in `VestingVerificationTest`. With the walks as unknowns it
+     needs the lemma on `Value`, step 2.
    - Vesting's #1, of the validator itself, is proved of every context at 983 steps (2026-11-25,
      `vesting.spend.beneficiary_signed` in `VestingVerificationTest`; in the probe suite, at 937
      steps in 497 s). The clause's `isSignedBy` and the validator's are one unknown, and the

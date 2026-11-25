@@ -126,21 +126,6 @@
         "spend's fourth guarantee is refuted without the lemma, with the walks given"
       ]
     },
-    "vesting.probe.unvested_stays_locked_calls_as_unknowns": {
-      "tactic": "uplc-blaster-unknowns",
-      "result": "proved",
-      "statement": "c472ec8a44198d72",
-      "programs": [
-        "044b7e7b9905e9b0"
-      ],
-      "notes": {
-        "budget": "1262",
-        "kind": "BlasterOfUnknowns"
-      },
-      "tests": [
-        "spend's third guarantee of the validator holds of every context, with calls as unknowns"
-      ]
-    },
     "vesting.probe.unvested_stays_locked_given_walks": {
       "tactic": "uplc-blaster",
       "result": "proved",
