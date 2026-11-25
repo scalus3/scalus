@@ -1928,8 +1928,11 @@ object JEmulator {
               // ledger-rules spec [ES-2a], [ES-10a]: checked here, not by the require of
               // ChainConfig, so the TypeError names the option
               options.activeSlotsCoeff.toOption.fold(defaults.activeSlotsCoeff) { f =>
+                  // `js.Dynamic.global.JSON`, not `js.JSON`: Scaladoc cannot resolve the
+                  // overloaded `js.JSON.stringify` when it reads this TASTy ("undefined:
+                  // scala.scalajs.js.JSON.stringify # -1"). The compiler accepts both.
                   def fail: Nothing = typeError(
-                    s"activeSlotsCoeff must be a fraction in (0, 1], got: ${js.JSON.stringify(f)}"
+                    s"activeSlotsCoeff must be a fraction in (0, 1], got: ${js.Dynamic.global.JSON.stringify(f)}"
                   )
                   val n = Try(longOf(f.numerator, "activeSlotsCoeff")).getOrElse(fail)
                   val d = Try(longOf(f.denominator, "activeSlotsCoeff")).getOrElse(fail)
