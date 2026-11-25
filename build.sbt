@@ -629,7 +629,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
           val classpath = (Test / fullClasspath).value.map(entry => Digest(entry.data))
           Digest((scalusPlugin / Compile / packageBin).value) +: classpath
       },
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.86",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.87",
       libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0",
       // Ethereum KZG ceremony JSON is in scalus-ethereum-kzg-ceremony resources, needed for benchmark tests
       Test / unmanagedResourceDirectories += (LocalRootProject / baseDirectory).value / "scalus-ethereum-kzg-ceremony" / "src" / "main" / "resources"
@@ -1452,7 +1452,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
       libraryDependencies += "com.lihaoyi" %% "upickle" % "4.4.3" % "test",
       libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.3" % "test",
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.86" % "test",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.87" % "test",
       libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0",
       libraryDependencies += "com.lihaoyi" %% "pprint" % pprintVersion % "test",
       // Testcontainers for Yaci DevKit integration tests
