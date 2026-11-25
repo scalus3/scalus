@@ -365,6 +365,18 @@ final class Verifier private (results: Option[KeptResults]) {
     def obligations(caller: FunctionRef[?, ?], parameter: LimitedData): CallObligations =
         declareObligations(caller, None, Some(parameter))
 
+    /** [[obligations]] of `caller` over the values of its parameter that `parameter` says, named
+      * after `caller` and `domain`, as `spends[few_inputs]/vested_in_range#1`: the obligations of
+      * one function can then be stated over several sets of values in one verifier, as
+      * [[guarantees]] with a domain are.
+      */
+    def obligations(
+        caller: FunctionRef[?, ?],
+        parameter: LimitedData,
+        domain: String
+    ): CallObligations =
+        declareObligations(caller, None, Some(parameter), Some(domain))
+
     /** [[obligations]] of the function `callerContract` is about, where that contract's own
       * precondition holds: the calling function may assume what its callers establish. They are
       * named after the contract, not the function, so both can be declared in one verifier.
@@ -435,6 +447,20 @@ final class Verifier private (results: Option[KeptResults]) {
     ): StatedGuarantees =
         declareGuarantees(function, None, Some(parameter), connective)
 
+    /** [[guarantees]] of `function` over the values of its parameter that `parameter` says, each
+      * stated with `connective`, and named after `function` and `domain`, as
+      * `spends[any_context]/ensures#1`: one function's clauses can then be stated over several sets
+      * of values in one verifier, as a validator's of every script context and of those of a few
+      * inputs.
+      */
+    def guarantees(
+        function: FunctionRef[?, ?],
+        parameter: LimitedData,
+        connective: Connective,
+        domain: String
+    ): StatedGuarantees =
+        declareGuarantees(function, None, Some(parameter), connective, Some(domain))
+
     /** [[guarantees]] of the function `contract` is about, where that contract's own precondition
       * holds: a clause may rely on what the function's callers establish. They are named after the
       * contract, not the function, so both can be declared in one verifier.
@@ -499,11 +525,12 @@ final class Verifier private (results: Option[KeptResults]) {
         function: FunctionRef[?, ?],
         premise: Option[(String, FunctionContract[?, ?])],
         parameter: Option[LimitedData],
-        connective: Connective = Connective.Implies
+        connective: Connective = Connective.Implies,
+        domain: Option[String] = None
     ): StatedGuarantees = {
         val definition = functionTable(function)
         val body = Obligations.body(definition, definition(Representation.Sir))
-        val owner = premise.fold(function.displayName)(_._1)
+        val owner = ownerName(premise.fold(function.displayName)(_._1), domain)
         val assumed = premise.map((_, contract) => assumption(contract, body.parameters))
         // The variables, whether or not there is a clause: a parameter that does not fit is
         // refused at once.
@@ -591,10 +618,17 @@ final class Verifier private (results: Option[KeptResults]) {
         StatedGuarantees(each, unsupported.result(), together)
     }
 
+    /** The name the statements of a function or a contract are named after: with the set of values
+      * they are of, where it is said, as `spends[few_inputs]`.
+      */
+    private def ownerName(owner: String, domain: Option[String]): String =
+        domain.fold(owner)(of => s"$owner[$of]")
+
     private def declareObligations(
         caller: FunctionRef[?, ?],
         premise: Option[(String, FunctionContract[?, ?])],
-        parameter: Option[LimitedData]
+        parameter: Option[LimitedData],
+        domain: Option[String] = None
     ): CallObligations = {
         val definition = functionTable(caller)
         val specified = Obligations.body(definition, definition(Representation.Sir))
@@ -610,7 +644,7 @@ final class Verifier private (results: Option[KeptResults]) {
             .groupBy(_._2.function.name)
         val arities = contracts.map((name, declared) => name -> declared.head._2.variables.size)
         val parameters = variablesOf(caller, body, parameter)
-        val owner = premise.fold(caller.displayName)(_._1)
+        val owner = ownerName(premise.fold(caller.displayName)(_._1), domain)
         val assumed = premise.map((_, contract) => assumption(contract, body.parameters))
         val statements = List.newBuilder[Statement]
         val unsupported = List.newBuilder[String]
