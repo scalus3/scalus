@@ -756,6 +756,52 @@ object CallsAsUnknowns {
                     )
                 case _ => values
 
+        /** The key of a call of the definition `name`, where it does not loop: the key of its code
+          * on `arguments`, so that a function called and its code written out have one key, as the
+          * clause's `configOf(datum)` and the validator's `datum.getOrFail(...).to[Config]`. An
+          * argument that is a value, a variable, a constant or a lambda, ends without failing, and
+          * stands for its parameter. Another is bound to it as a `let` in a call is, and stays in
+          * the key, as it may fail. None for a definition that loops, which is a walk, for one with
+          * type parameters, and for a call of another number of arguments.
+          */
+        private def unfolded(
+            name: String,
+            arguments: List[SIR],
+            values: Map[String, Key],
+            bound: Map[String, Int],
+            depth: Int
+        ): Option[Key] =
+            definitions.get(name).filterNot(_ => loops(name)).flatMap { definition =>
+                val (parameters, body) = lambdas(definition.value)
+                Option.when(
+                  parameters.nonEmpty && parameters.size == arguments.size &&
+                      parameters.forall(_.typeParams.isEmpty)
+                ) {
+                    // The definition's code is closed but for its parameters and other definitions:
+                    // the names of the caller are not in its scope.
+                    def nest(
+                        rest: List[(SIR.LamAbs, SIR)],
+                        scope: Map[String, Key],
+                        inner: Map[String, Int],
+                        level: Int
+                    ): Key = rest match
+                        case Nil => keyOf(body, scope, inner, level)
+                        case (parameter, argument) :: more =>
+                            val p = parameter.param.name
+                            val of = keyOf(argument, values, bound, depth)
+                            argument match
+                                case _: SIR.Var | _: SIR.ExternalVar | _: SIR.Const |
+                                    _: SIR.LamAbs =>
+                                    nest(more, scope + (p -> of), inner - p, level)
+                                case _ =>
+                                    Key.Bind(
+                                      of,
+                                      nest(more, scope - p, inner + (p -> level), level + 1)
+                                    )
+                    nest(parameters.zip(arguments), Map.empty, Map.empty, depth)
+                }
+            }
+
         /** The key of `sir`: `values` has the keys of the variables the program binds, and `bound`
           * the depth of those the key binds itself.
           */
@@ -789,6 +835,9 @@ object CallsAsUnknowns {
                                 case Key.Encoded(value, encodedFrom) if encodedFrom == decodedTo =>
                                     value
                                 case _ => Key.Decoded(of, decodedTo)
+                        case (Key.Global(name), _, _) =>
+                            unfolded(name, arguments, values, bound, depth)
+                                .getOrElse(Key.Applied(function, keys))
                         case _ => Key.Applied(function, keys)
                 case SIR.LamAbs(_, _, _, _) =>
                     val (parameters, body) = lambdas(sir)

@@ -293,6 +293,14 @@ proved in Lean with each walk's termination, replaces the trust.
    - Of the validator itself, Lean finishes #4 of no contexts, nor of one input and two outputs in
      10 minutes; the clause is open, as #3 is in `VestingVerificationTest`. With the walks as
      unknowns it needs the lemma on `Value`, step 2.
+   - Vesting's #1, of the validator itself, is proved of every context at 937 steps in 497 s
+     (2026-11-25). The clause's `isSignedBy` and the validator's are one unknown, and the
+     statement holds of every value of it: it needs no mapping of `isSignedBy`. At first they
+     were two: the clause reads its datum with the helper `configOf(datum)`, which the key kept
+     as a call, and the validator with that code written out. Lean found refutations of the two
+     unknowns that differ, each spurious, up to 1100 steps, and did not finish in 30 minutes. The
+     key of a call of a definition that does not loop is now the key of its code, with each
+     argument that is a value standing for its parameter, and any other bound as a `let`.
 2. **Lemmas**: their statements, patterns and the premises they give; vesting's #4.
 3. **The proofs of the lemmas** and of each walk's termination, by induction.
 4. **The rewrite's lemma** in Lean.

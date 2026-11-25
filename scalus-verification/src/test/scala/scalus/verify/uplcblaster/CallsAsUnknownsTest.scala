@@ -14,6 +14,12 @@ import scala.concurrent.duration.*
 @Compile
 object CallsAsUnknownsHelpers {
     def size(xs: prelude.List[BigInt]): BigInt = xs.length
+
+    /** A helper that does not loop: the rewrite leaves its call, and its key is that of its code.
+      */
+    def firstList(xss: prelude.List[prelude.List[BigInt]]): prelude.List[BigInt] = xss match
+        case prelude.List.Cons(head, _) => head
+        case prelude.List.Nil           => prelude.List.Nil
 }
 
 /** The tactic of calls as unknowns ([[CallsAsUnknowns]]): what it makes unknowns of, and that a
@@ -44,6 +50,28 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
             (CallsAsUnknownsHelpers.size(xs) > BigInt(0)) ==>: (xs.length >= BigInt(1))
         )
         assert(unknownsOf(prop) == List("scalus.cardano.onchain.plutus.prelude.List$.length"))
+    }
+
+    test("a walk of a helper's result is the walk of the helper's code written out") {
+        // Vesting's clause reads its datum with `configOf(datum)`, and the validator with that
+        // code written out: the two signature checks are one walk.
+        val prop = forAll[prelude.List[prelude.List[BigInt]]](xss =>
+            (CallsAsUnknownsHelpers.firstList(xss).length > BigInt(0)) ==>: (xss match {
+                case prelude.List.Cons(head, _) => head
+                case prelude.List.Nil           => prelude.List.Nil
+            }).length >= BigInt(1)
+        )
+        assert(unknownsOf(prop) == List("scalus.cardano.onchain.plutus.prelude.List$.length"))
+    }
+
+    test("a helper's argument that may fail stays in the key of a walk of its result") {
+        // `firstList({ require(...); xss })` fails where `firstList(xss)` returns.
+        val prop = forAll[BigInt, prelude.List[prelude.List[BigInt]]]((x, xss) =>
+            (CallsAsUnknownsHelpers.firstList(xss).length >= BigInt(0)) ==>: (
+              CallsAsUnknownsHelpers.firstList { require(x > BigInt(0)); xss }.length >= BigInt(0)
+            )
+        )
+        assert(unknownsOf(prop).size == 2)
     }
 
     test("walks of two lists are two unknowns") {
