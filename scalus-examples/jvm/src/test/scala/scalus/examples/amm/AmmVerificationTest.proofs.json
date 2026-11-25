@@ -5,7 +5,7 @@
       "Blaster": "a06919767488",
       "CardanoLedgerApi": "3dd048e3eb86",
       "PlutusCore": "71872c19a90b",
-      "ScalusProofs": "a20652afcd3a2b35",
+      "ScalusProofs": "9377250e3610679e",
       "proofs": "8097bcd9f8d7f0f7",
       "toolchain": "leanprover/lean4:v4.24.0"
     },
@@ -14,7 +14,7 @@
       "Blaster": "a06919767488",
       "CardanoLedgerApi": "3dd048e3eb86",
       "PlutusCore": "71872c19a90b",
-      "ScalusProofs": "a20652afcd3a2b35",
+      "ScalusProofs": "9377250e3610679e",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },
