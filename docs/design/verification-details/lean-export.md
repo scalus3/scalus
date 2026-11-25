@@ -112,7 +112,7 @@ axiom `proved`, and with a header that says it is to be proved by hand. A suite 
 that proves it, with the tactic `lean-manual` (`LeanManual`):
 
 ```scala
-checkByHand(
+verifyByHand(
   depositDilutesNoToken,                         // the statement, declared as any other
   "Amm.Proofs.Deposit",                          // the module of the proof
   "Amm.Proofs.Deposit.deposit_dilutes_no_token", // the theorem

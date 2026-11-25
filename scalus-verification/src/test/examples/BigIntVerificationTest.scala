@@ -25,7 +25,7 @@ class BigIntVerificationTest extends AnyFunSuite with LeanProofsSuite {
     import RoundedMagnitude.half
 
     // The statements, declared by name in the suite's verifier. Declaring one runs nothing; a test
-    // checks it, and the result is held to what it was declared to be.
+    // runs it with `verify`, and asserts what it expects of the result.
 
     private val doubledIsNearTheMagnitude = verifier.statement(
       "half.doubled_is_near_the_magnitude",
@@ -50,12 +50,14 @@ class BigIntVerificationTest extends AnyFunSuite with LeanProofsSuite {
         verifier.statement("half.never_negative.few_steps", forAll[BigInt](x => half(x) >= 0))
 
     test("proof: doubling the result is between the magnitude and magnitude + 1") {
-        check(doubledIsNearTheMagnitude, budget = 160)
+        val result = verify(doubledIsNearTheMagnitude, budget = 160)
+        assert(result.isProven, describe(result))
     }
 
     test("counterexample: doubling the result does not always recover a nonnegative input") {
-        val counterexample =
-            counterexampleOf(check(doublingRecoversANonnegativeInput, budget = 160))
+        val result = verify(doublingRecoversANonnegativeInput, budget = 160)
+        assert(result.isRefuted, describe(result))
+        val counterexample = counterexampleOf(result)
         // The solver chooses the value; check its meaning, rather than expecting a fixed one.
         val x = integer(counterexample.values.head)
         assert(x >= 0 && x % 2 == 1, counterexample)
@@ -65,14 +67,17 @@ class BigIntVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     test("no solutions: no integer input produces a negative result") {
         // Prove the universal statement, equivalently: not exists x. half(x) < 0.
-        check(neverNegative, budget = 100)
+        val result = verify(neverNegative, budget = 100)
+        assert(result.isProven, describe(result))
     }
 
     test("inconclusive: too few evaluation steps cannot establish the same true property") {
-        val reason = inconclusive(
+        val result = verifyWithoutKeeping(
           neverNegativeInFewSteps,
           UplcBlaster(Budget.LeanSteps(3), lean, 30.seconds)
         )
+        assert(result.isInconclusive, describe(result))
+        val reason = result.why.getOrElse("")
         // A candidate from the bounded model passes CEK replay: it is not a real counterexample.
         assert(reason.contains("spurious"), reason)
         info(reason)

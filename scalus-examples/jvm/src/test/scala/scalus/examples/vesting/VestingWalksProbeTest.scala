@@ -56,15 +56,16 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("spend's third guarantee holds of every context, with the walks given") {
-        report(
+        val result = report(
           unvestedStaysLockedGivenWalks,
-          check(
+          verify(
             VerificationRequest(
               unvestedStaysLockedGivenWalks,
               UplcBlaster(Budget.Auto, lean, 30.minutes)
             )
           )
         )
+        assert(result.isProven, describe(result))
     }
 
     /** The negative control: a withdrawal leaves what was locked whole. */
@@ -76,15 +77,16 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("a withdrawal that takes nothing is refuted, with the walks given") {
-        report(
+        val result = report(
           nothingIsWithdrawnGivenWalks,
-          check(
+          verify(
             VerificationRequest(
               nothingIsWithdrawnGivenWalks,
               UplcBlaster(Budget.Auto, lean, 30.minutes)
             )
           )
         )
+        assert(result.isRefuted, describe(result))
     }
 
     // spend: Spec.ensures(amountOf(redeemer) === lockedBy(txInfo, txOutRef) ||
@@ -101,15 +103,16 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("spend's fourth guarantee holds of every context, with the walks given and the lemma") {
-        report(
+        val result = report(
           stateIsCarriedGivenWalks,
-          check(
+          verify(
             VerificationRequest(
               stateIsCarriedGivenWalks,
               UplcBlaster(Budget.Auto, lean, 30.minutes)
             )
           )
         )
+        assert(result.isProven, describe(result))
     }
 
     /** The control of the lemma: without it, the value the validator checks says nothing of the
@@ -123,15 +126,16 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("spend's fourth guarantee is refuted without the lemma, with the walks given") {
-        report(
+        val result = report(
           stateIsCarriedWithoutTheLemma,
-          check(
+          verify(
             VerificationRequest(
               stateIsCarriedWithoutTheLemma,
               UplcBlaster(Budget.Auto, lean, 30.minutes)
             )
           )
         )
+        assert(result.isRefuted, describe(result))
     }
 
     /** The control of the datum check: without it, a withdrawal leaves the rest under another
@@ -146,19 +150,20 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("spend's fourth guarantee is refuted without the datum check, with the walks given") {
-        report(
+        val result = report(
           stateIsCarriedWithoutDatumCheck,
-          check(
+          verify(
             VerificationRequest(
               stateIsCarriedWithoutDatumCheck,
               UplcBlaster(Budget.Auto, lean, 30.minutes)
             )
           )
         )
+        assert(result.isRefuted, describe(result))
     }
 
     /** Says how `statement` was decided: the budget, the time, and a refutation's values. */
-    private def report(statement: Statement, result: => VerificationResult): Unit = {
+    private def report(statement: Statement, result: => VerificationResult): VerificationResult = {
         val start = System.nanoTime()
         val decided = result
         val seconds = (System.nanoTime() - start) / 1_000_000_000L
@@ -169,6 +174,7 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
             case VerificationResult.Refuted(_) => s"refuted, values ${counterexampleOf(decided)}"
             case other                         => other.toString
         info(s"${statement.name}: $outcome, budget ${artifact.budget}, $seconds s")
+        decided
     }
 
     test("the probe, given what its walks return, accepts the samples the validator accepts") {

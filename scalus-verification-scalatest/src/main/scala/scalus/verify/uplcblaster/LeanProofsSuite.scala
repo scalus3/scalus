@@ -33,7 +33,10 @@ object Unfinished extends Tag("scalus.verify.uplcblaster.Unfinished")
   *     private val plusZero =
   *         verifier.statement("plus_zero", forAll[BigInt](x => x + BigInt(0) == x))
   *
-  *     test("x + 0 is x") { check(plusZero, 40) }
+  *     test("x + 0 is x") {
+  *         val result = verify(plusZero, 40)
+  *         assert(result.isProven, describe(result))
+  *     }
   * }
   * }}}
   *

@@ -369,7 +369,8 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
                   "held_to_the_code",
                   forAll[BigInt](x => x + BigInt(0) == x)
                 )
-                val result = proofs.check(held, 40)
+                val result = proofs.verify(held, 40)
+                assert(result.isProven, proofs.describe(result))
                 assert(proofs.writeStatement(held, result) == "Created.Generated.held_to_the_code")
                 val (_, module) = LeanWorkspace.generated(workspace, "held_to_the_code")
                 // The programs are beside it; their texts are not committed.
@@ -384,13 +385,14 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
                   )
                 )
                 // Checked again, the module is of the code.
-                proofs.check(held, 40)
+                val again = proofs.verify(held, 40)
+                assert(again.isProven, proofs.describe(again))
                 // A module of other programs than the code's fails the statement's check.
                 Files.writeString(
                   module,
                   text(module).replaceAll("(?m)^  leaf0 [0-9a-f]{64}$", "  leaf0 " + "0" * 64)
                 )
-                val stale = intercept[AssertionError](proofs.check(held, 40))
+                val stale = intercept[AssertionError](proofs.verify(held, 40))
                 assert(
                   stale.getMessage.contains("is not the statement's as the code has it"),
                   stale.getMessage
@@ -402,13 +404,13 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
                   "held.to.the.code",
                   forAll[BigInt](x => BigInt(0) + x == x)
                 )
-                val clashing = intercept[AssertionError](proofs.check(clash, 40))
+                val clashing = intercept[AssertionError](proofs.verify(clash, 40))
                 assert(clashing.getMessage.contains("the module of held_to_the_code"), clashing)
                 // So is one whose module would be that of the Lean types.
                 val types =
                     proofs.verifier.statement("types", forAll[BigInt](x => x * BigInt(1) == x))
                 val typed = intercept[AssertionError](
-                  proofs.writeStatement(types, proofs.check(types, 40))
+                  proofs.writeStatement(types, proofs.verify(types, 40))
                 )
                 assert(typed.getMessage.contains("the module of the Lean types"), typed)
             finally proofs.close()

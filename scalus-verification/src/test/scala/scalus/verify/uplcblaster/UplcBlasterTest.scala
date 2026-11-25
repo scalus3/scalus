@@ -165,7 +165,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         proven(splitScope, budget = 20)
 
         // There is no finite counterexample that CEK replay can use to check every witness.
-        check(exists[BigInt](x => x != x), 20, Nil) match
+        verify(exists[BigInt](x => x != x), 20, Nil) match
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("establish that no witness exists"), reason)
             case (_, _, other) =>
@@ -188,7 +188,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         // True, with the witness 2, which Lean does not find at a budget no run finishes in.
         // The value a replay would take for `n` shows nothing about the others.
         val squareRoot = !forAll[BigInt](n => n * n != BigInt(4))
-        check(squareRoot, 3, Nil) match
+        verify(squareRoot, 3, Nil) match
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("establish that no witness exists"), reason)
             case (_, _, other) => fail(s"expected an inconclusive result, got $other")
@@ -238,7 +238,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("a falsification caused by too small a budget is reported as spurious") {
-        check(forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x), 3, Nil) match
+        verify(forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x), 3, Nil) match
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("spurious"), reason)
                 // Lean's machine counted the steps of the counterexample: the budget is at fault.
@@ -281,7 +281,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     test("proves that a program fails, apart from a budget that runs out") {
         proven(!denotes(BigInt(7) / BigInt(0)), budget = 40)
         refuted(!denotes(BigInt(7) / BigInt(2)), budget = 40)
-        check(!denotes(BigInt(7) / BigInt(0)), 2, Nil) match
+        verify(!denotes(BigInt(7) / BigInt(0)), 2, Nil) match
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("spurious"), reason)
             case (_, _, other) => fail(s"expected an inconclusive result, got $other")
@@ -895,7 +895,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     test("a string constant above U+2FFFF is not translated, so it proves nothing") {
         // The solver's strings have no character above U+2FFFF, and Blaster refuses such a
         // literal (input-output-hk/Lean-blaster#389): the check fails, and is no proof.
-        check(forAll[String](s => s != "\uD880\uDC00"), 40, Seq.empty) match
+        verify(forAll[String](s => s != "\uD880\uDC00"), 40, Seq.empty) match
             case (verifier, _, VerificationResult.Failed(reason)) =>
                 assert(reason.contains("above the Smt string alphabet bound"), reason)
                 assert(verifier.theorems.isEmpty)
@@ -1316,7 +1316,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     /** `statement` checked at `budget` with the nodes at `paths` mapped as Data
-      * ([[MappingPlan.Fixed]]), and held to what it was declared to expect. Each check here takes
+      * ([[MappingPlan.Fixed]]): the test says what it expects of the result. Each check here takes
       * seconds; one that takes minutes is given up.
       */
     private def checkedAsData(
@@ -1324,7 +1324,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         budget: Budget,
         paths: String*
     ): VerificationResult =
-        check(
+        verify(
           VerificationRequest(
             statement,
             UplcBlaster(budget, lean, 3.minutes).withFixedPlan(MappingPlan.Fixed.asData(paths*))
@@ -1667,7 +1667,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         // stopped at their `BitVec`. When it translates them, this test needs another statement
         // Blaster rejects.
         val exp2 = FunctionDef(Math.exp2)
-        check(forAll[BigInt](e => callRef(exp2.ref, e)(r => r >= BigInt(0))), 120, Seq(exp2)) match
+        verify(forAll[BigInt](e => callRef(exp2.ref, e)(r => r >= BigInt(0))), 120, Seq(exp2)) match
             case (verifier, _, VerificationResult.Failed(reason)) =>
                 assert(reason.startsWith("Lean reported an error: "), reason)
                 assert(reason.contains("translateApp: unexpected application"), reason)

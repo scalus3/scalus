@@ -237,6 +237,40 @@ enum VerificationResult {
     case Unsupported(report: CompatibilityReport)
     case Inconclusive(reason: String)
     case Failed(reason: String)
+
+    /** Whether the statement is proved: a theorem of the verifier. */
+    def isProven: Boolean = this match
+        case Proven(_) => true
+        case _         => false
+
+    /** Whether the statement is proved within a bound ([[ProvenWithin]]), which is no theorem. */
+    def isProvenWithin: Boolean = this match
+        case ProvenWithin(_, _) => true
+        case _                  => false
+
+    /** Whether the statement is refuted, with a counterexample. */
+    def isRefuted: Boolean = this match
+        case Refuted(_) => true
+        case _          => false
+
+    /** Whether the tactic came to no result, as where Lean did not finish. */
+    def isInconclusive: Boolean = this match
+        case Inconclusive(_) => true
+        case _               => false
+
+    /** Whether the tactic failed, as where Lean reported an error. */
+    def isFailed: Boolean = this match
+        case Failed(_) => true
+        case _         => false
+
+    /** Why the tactic came to no result or failed, or why the statement is unsupported. */
+    def why: Option[String] = this match
+        case Inconclusive(reason) => Some(reason)
+        case Failed(reason)       => Some(reason)
+        case Unsupported(report)  => Some(report.issues.mkString("; "))
+        case Proven(_)            => None
+        case ProvenWithin(_, _)   => None
+        case Refuted(_)           => None
 }
 
 /** A result produced after successful preparation. Its type excludes

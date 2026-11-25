@@ -8,8 +8,9 @@ For example, `half(-5) = 3`, `half(0) = 0`, and `half(4) = 2`. The properties ca
 `half(x)` directly. The property macro captures these expressions, and UplcBlaster
 links the `@Compile` function into the UPLC predicates it verifies. Each property is declared
 by name in the suite's verifier, `verifier.statement` or `verifier.refute` for a negative
-control. A test checks it with `check`, which holds the result to what the statement was
-declared to be, or, for the check given too few steps, with `inconclusive`.
+control. A test runs it with `verify`, or, for the check given too few steps, with
+`verifyWithoutKeeping`, and asserts what it expects of the result: `isProven`, `isRefuted` or
+`isInconclusive`.
 
 | Case | Statement | Expected result |
 | --- | --- | --- |
