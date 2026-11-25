@@ -76,11 +76,15 @@ class AmmVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("a swap keeps the product of the reserves, and does not drain the pool") {
-        val contract = verify(swapContractHolds.getOrElse(fail("swapResult states no contract")))
-        assert(contract.isProven, describe(contract))
+        val swapContract = swapContractHolds.getOrElse(fail("swapResult states no contract"))
+        val contract = verify(swapContract)
+        assert(contract.meets(swapContract), explain(swapContract, contract))
         // negative control: without the fee's bound, the product falls.
         val withoutTheFeeBound = verify(productKeptWithoutTheFeeBound)
-        assert(withoutTheFeeBound.isRefuted, describe(withoutTheFeeBound))
+        assert(
+          withoutTheFeeBound.meets(productKeptWithoutTheFeeBound),
+          explain(productKeptWithoutTheFeeBound, withoutTheFeeBound)
+        )
     }
 
     // A redemption
@@ -103,11 +107,15 @@ class AmmVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("a redemption takes no more than its share") {
-        val contract = verify(redeemContractHolds.getOrElse(fail("redeemDatum states no contract")))
-        assert(contract.isProven, describe(contract))
+        val redeemContract = redeemContractHolds.getOrElse(fail("redeemDatum states no contract"))
+        val contract = verify(redeemContract)
+        assert(contract.meets(redeemContract), explain(redeemContract, contract))
         // negative control: a redemption of more than the supply.
         val withoutTheSupplyBound = verify(reservesKeptWithoutTheSupplyBound)
-        assert(withoutTheSupplyBound.isRefuted, describe(withoutTheSupplyBound))
+        assert(
+          withoutTheSupplyBound.meets(reservesKeptWithoutTheSupplyBound),
+          explain(reservesKeptWithoutTheSupplyBound, withoutTheSupplyBound)
+        )
     }
 
     // A deposit
@@ -189,7 +197,7 @@ class AmmVerificationTest extends AnyFunSuite with LeanProofsSuite {
             lean
           )
         )
-        assert(result.isFailed, describe(result))
+        assert(result.isFailed, explain(depositDilutesNoToken, result))
         val reason = result.why.getOrElse("")
         assert(reason.toLowerCase.contains("type mismatch"), reason)
     }
@@ -204,7 +212,7 @@ class AmmVerificationTest extends AnyFunSuite with LeanProofsSuite {
           depositContractHolds.getOrElse(fail("depositDatum states no contract")),
           UplcBlaster(Budget.LeanSteps(depositBudget), lean)
         )
-        assert(result.isFailed, describe(result))
+        assert(result.isFailed, explain(result))
         val reason = result.why.getOrElse("")
         assert(reason.contains("translateApp: unexpected application"), reason)
         assert(reason.contains("Init.Data.Nat.Log2"), reason)

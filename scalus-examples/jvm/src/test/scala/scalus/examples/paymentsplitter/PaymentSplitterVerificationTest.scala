@@ -109,8 +109,8 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private def notFinished(statement: Statement, steps: Int): Unit = {
         val result =
             verifyWithoutKeeping(statement, UplcBlaster(Budget.LeanSteps(steps), lean, 60.seconds))
-        assert(result.isInconclusive, describe(result))
-        assert(result.why.exists(_.contains("did not finish")), describe(result))
+        assert(result.isInconclusive, explain(statement, result))
+        assert(result.why.exists(_.contains("did not finish")), explain(result))
     }
 
     test(
@@ -230,7 +230,10 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
             UplcBlaster(Budget.Auto, lean, spendTime)
           )
         )
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(p.spendRedeemerNamesItsInputLimited),
+          explain(p.spendRedeemerNamesItsInputLimited, result)
+        )
     }
 
     test(
@@ -260,7 +263,10 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
             UplcBlaster(Budget.Auto, lean, spendTime)
           )
         )
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(p.spendNeedsItsOwnWithdrawalLimited),
+          explain(p.spendNeedsItsOwnWithdrawalLimited, result)
+        )
     }
 
     test(
@@ -288,7 +294,10 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
             UplcBlaster(Budget.Auto, lean, spendTime)
           )
         )
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(p.spendWithItsWithdrawalIsAcceptedLimited),
+          explain(p.spendWithItsWithdrawalIsAcceptedLimited, result)
+        )
     }
 
     test(
@@ -328,9 +337,15 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // Of every context: an accepted certificate is a registration or a deregistration, so a
         // delegation is rejected, whatever the transaction is.
         val neverDelegated = verify(p.stakeIsNeverDelegated)
-        assert(neverDelegated.isProven, describe(neverDelegated))
+        assert(
+          neverDelegated.meets(p.stakeIsNeverDelegated),
+          explain(p.stakeIsNeverDelegated, neverDelegated)
+        )
         val registration = verify(p.stakeRegistrationIsAccepted)
-        assert(registration.isProven, describe(registration))
+        assert(
+          registration.meets(p.stakeRegistrationIsAccepted),
+          explain(p.stakeRegistrationIsAccepted, registration)
+        )
     }
 
     // Samples
@@ -377,7 +392,7 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
             )
         do
             val result = verify(sample)
-            assert(result.isProven, describe(result))
+            assert(result.meets(sample), explain(sample, result))
             assert(artifactOf(result).kind == ProofKind.LeanNative, sample.name)
     }
 }

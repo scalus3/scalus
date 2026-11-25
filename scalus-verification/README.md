@@ -406,9 +406,9 @@ val proofs = LeanProofs(LeanProofs.projectWorkspace, Some(keptFile))
 val plusZero = proofs.verifier.statement("plus_zero", forAll[BigInt](x => x + BigInt(0) == x))
 val plusOne = proofs.verifier.refute("plus_one", forAll[BigInt](x => x + BigInt(1) == x))
 val zero = proofs.verify(plusZero, 40) // UplcBlaster at 40 steps; a VerificationRequest names another tactic
-assert(zero.isProven, proofs.describe(zero))
+assert(zero.meets(plusZero), proofs.explain(plusZero, zero))
 val one = proofs.verify(plusOne, 40)
-assert(one.isRefuted, proofs.describe(one))
+assert(one.meets(plusOne), proofs.explain(plusOne, one)) // a refutation, as declared
 ```
 
 `verify(VerificationRequest(statement, tactic))` is the general form, with any tactic;
@@ -420,8 +420,9 @@ export to Lean will use it. Checks run one at a time; declare the statements bef
 them concurrently, as `Verifier` is not made for concurrent declarations. What a framework is
 needed for, `LeanProofs` leaves to its caller:
 
-- **An expectation** is the caller's: `isProven`, `isRefuted`, `isInconclusive` of the result,
-  and `describe(result)` for the message. A result that is not what it is by its own account, as a
+- **An expectation** is the caller's: `result.meets(statement)`, the result the statement was
+  declared to give (a proof, or a refutation of a negative control), or `isProven`, `isRefuted`,
+  `isInconclusive` of it, and `explain(statement, result)` for the message. A result that is not what it is by its own account, as a
   proof Blaster did not say valid, throws an `AssertionError`, which every test framework takes for
   a failed test.
 - **A statement that cannot be checked here**, as Lean does not run here or its kept result is
@@ -431,8 +432,8 @@ needed for, `LeanProofs` leaves to its caller:
   it change. Where the checks are kept, a statement's are in a directory named after it, which
   holds those of its last run; a statement whose kept result is taken runs no check and leaves it
   as it is.
-- **A result that is not the expected one** fails with what came instead: the replayed
-  counterexample of a refutation, or the reason there is no result.
+- **What came** is in `explain(statement, result)`: the replayed counterexample of a refutation,
+  or the reason there is no result, for the message of an assert that does not hold.
 - **The Lean server** is ended by `close()`. One that is left is ended when the proofs are no
   longer used, or with the JVM.
 
@@ -469,7 +470,7 @@ class ArithmeticProofsTest extends AnyFunSuite with LeanProofsSuite {
 
     test("x + 0 is x") {
         val result = proofs.verify(p.plusZero, 40)
-        assert(result.isProven, proofs.describe(result))
+        assert(result.meets(p.plusZero), proofs.explain(p.plusZero, result))
     }
 }
 ```

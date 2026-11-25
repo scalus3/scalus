@@ -109,7 +109,10 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
 
     test("with its walk as an unknown, a statement of every list is proved") {
         val result = verify(VerificationRequest(longerThanNothingStatement, unknowns))
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(longerThanNothingStatement),
+          explain(longerThanNothingStatement, result)
+        )
     }
 
     test("a refutation whose unknown is no value its walk returns is spurious") {
@@ -122,7 +125,7 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
           ),
           unknowns
         )
-        assert(result.isInconclusive, describe(result))
+        assert(result.isInconclusive, explain(result))
         val reason = result.why.getOrElse("")
         assert(reason.contains("values that their walks do not return"), reason)
     }

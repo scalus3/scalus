@@ -263,6 +263,16 @@ enum VerificationResult {
         case Failed(_) => true
         case _         => false
 
+    /** Whether the result is the one `expected` says: a proof, or a refutation. */
+    def meets(expected: ExpectedOutcome): Boolean = expected match
+        case ExpectedOutcome.Valid     => isProven
+        case ExpectedOutcome.Falsified => isRefuted
+
+    /** Whether the result is the one `statement` was declared to give: a proof of a statement, a
+      * refutation of a negative control ([[Verifier.refute]]).
+      */
+    def meets(statement: Statement): Boolean = meets(statement.expected)
+
     /** Why the tactic came to no result or failed, or why the statement is unsupported. */
     def why: Option[String] = this match
         case Inconclusive(reason) => Some(reason)
@@ -353,6 +363,15 @@ final class Verifier private (results: Option[KeptResults]) {
       */
     def refute(name: String, prop: Prop): Statement =
         declare(name, prop, Origin.Explicit, ExpectedOutcome.Falsified)
+
+    /** `statement`, of another verifier, declared in this one as it is there: its name, its
+      * proposition, where it comes from and what it is expected to give, so that a tactic lowers it
+      * here as it would there. The functions it is of are to be added to this verifier.
+      */
+    def declare(statement: Statement): Statement =
+        declared(
+          new Statement(statement.name, statement.prop, statement.origin, statement.expected)
+        )
 
     /** `contract` as a statement of its own, which is not the function's contract: no caller owes
       * its precondition. A contract read from the function's code ([[FunctionContract.inSource]]),
