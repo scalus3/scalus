@@ -334,6 +334,23 @@ of Scalus's Lean library; adding them makes every kept result stale once.
 1. **The mapping of `isSignedBy`**: its compiled program, the Lean function it maps to, and the
    lemma, proved by hand. This says what such a proof takes: lemmas of the machine's run that
    PlutusCore has, and those to write.
+
+   Built (2026-11-25), in Scalus's Lean library: `ScalusProofs.Mappings.IsSignedBy`, with
+   `ScalusProofs.Runs` (`returns`, `succeeds`, `fails` within some number of steps, and
+   `runFor_eq_stepN`). `isSignedBy_txSignedBy`: the compiled program, on a transaction's fields and
+   a key, returns CardanoLedgerApi's `txSignedBy pk tx`, for any number of signatories; its axioms
+   are Lean's own. What it took:
+   - PlutusCore's `step` reduces on values whose parts are any, so a run of known steps is `rfl`:
+     59 steps from the start to the loop, 17 for an element to the case on `equalsData`, 4 for the
+     end of the list; with the equality rewritten, 2 more to `True` or 11 to the loop on the rest.
+     The counts were found by running the machine on concrete values and printing its states.
+   - An induction over the list with PlutusCore's `stepN_add`; nothing of the machine had to be
+     written but `runFor = stepN`.
+   - `Recursor.any` and `Recursor.map` of CardanoLedgerApi are local recursive functions, with no
+     name to unfold: by definition each is `x == pk || …` of the rest, and `congrArg` closes it.
+   - The library is the Lean source alone, so the program is a term in the module, written by
+     `LeanPrograms` from the compiled program. `IsSignedByMappingTest` fails where Scalus compiles
+     `isSignedBy` to another, and the lemma is then to be proved again.
 2. **A walk as a Lean function** in the rewrite: a call of a library function with a mapping is
    replaced by the mapped Lean function of its arguments, and the statement cites the mapping.
 3. **Vesting's #1 of every context** with it, resting on the mapping of `isSignedBy` and on no
