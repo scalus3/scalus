@@ -131,6 +131,26 @@ LocalRootProject / Compile / doc / scalacOptions ++= Seq(
   "Lantr.io"
 )
 
+// Every subproject (bare settings). Scaladoc reads the compiled TASTy and skips compiler-only
+// options with a log line each, and a warning for -Xplugin. -semanticdb-target takes the next
+// element as its value. -P: goes with -Xplugin: Scala 2.12 Scaladoc (the sbt 1 axis of
+// scalusSbtPlugin) fails on "-P:semanticdb:..." once the SemanticDB plugin is gone.
+Compile / doc / scalacOptions ~= { options =>
+    val unused = Seq(
+      "-Xplugin",
+      "-P:",
+      "-J",
+      "-Xsemanticdb",
+      "-semanticdb-target",
+      "-Xcheck-macros",
+      "-Xmax-inlines",
+      "-Yexplicit-nulls"
+    )
+    options.zip("" +: options).collect {
+        case (o, prev) if prev != "-semanticdb-target" && !unused.exists(o.startsWith) => o
+    }
+}
+
 // =============================================================================
 // COMMON SETTINGS
 // =============================================================================
