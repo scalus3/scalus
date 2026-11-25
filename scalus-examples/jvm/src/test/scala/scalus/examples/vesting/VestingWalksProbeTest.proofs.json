@@ -18,21 +18,6 @@
     }
   },
   "results": {
-    "vesting.probe.beneficiary_signed_calls_as_unknowns": {
-      "tactic": "uplc-blaster-unknowns",
-      "result": "proved",
-      "statement": "c472ec8a44198d72",
-      "programs": [
-        "70db590429612699"
-      ],
-      "notes": {
-        "budget": "937",
-        "kind": "BlasterOfUnknowns"
-      },
-      "tests": [
-        "spend's first guarantee of the validator holds of every context, with calls as unknowns"
-      ]
-    },
     "vesting.probe.nothing_is_withdrawn_given_walks": {
       "tactic": "uplc-blaster",
       "result": "refuted",

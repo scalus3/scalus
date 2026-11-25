@@ -12,7 +12,7 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.{Budget, LeanProofs, LeanProofsSuite, Unfinished, UplcBlaster}
+import scalus.verify.uplcblaster.{Budget, CallsAsUnknowns, LeanProofs, LeanProofsSuite, Unfinished, UplcBlaster}
 
 import java.nio.file.Path
 import scala.concurrent.duration.*
@@ -346,12 +346,27 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       forAllData[ScriptContext](ctx => accepts(ctx) ==>?: signedByTheBeneficiary(ctx))
     )
 
-    test("spend's first guarantee, of every script context, is not finished by Lean", Unfinished) {
-        val unfinished = inconclusive(
-          beneficiarySigned,
-          UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
+    test("the first guarantee's isSignedBy and the validator's are one unknown") {
+        // The clause reads the datum with `configOf(datum)`, the validator with that code written
+        // out: the two calls have one key.
+        val unknowns = CallsAsUnknowns
+            .rewrite(beneficiarySigned.prop, CallsAsUnknowns.inLibrary)
+            .fold(reason => fail(reason), _.unknowns)
+        assert(unknowns.count(_.written.endsWith("isSignedBy")) == 1, unknowns)
+    }
+
+    test("spend's first guarantee holds of every script context, with calls as unknowns") {
+        // Of the validator as it is, Lean's run walks the context's lists and does not finish.
+        // With each walk an unknown (CallsAsUnknowns), the program has no loop: the clause's
+        // isSignedBy and the validator's are one unknown, and where it is false the validator's
+        // check of the signature rejects, whatever the other walks return. The proof rests on the
+        // tie of the validator to its program with unknowns (ProofKind.BlasterOfUnknowns).
+        check(
+          VerificationRequest(
+            beneficiarySigned,
+            new CallsAsUnknowns(UplcBlaster(Budget.Auto, lean, 30.minutes))
+          )
         )
-        assert(unfinished.contains("did not finish"), unfinished)
     }
 
     private val beneficiarySignedLimited = verifier.statement(
