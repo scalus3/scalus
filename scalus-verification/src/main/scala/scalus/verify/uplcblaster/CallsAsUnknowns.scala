@@ -576,10 +576,12 @@ object CallsAsUnknowns {
             case SIR.ExternalVar(_, name, _, _) => Some(name)
             case _                              => None
 
-        private def isFunction(tp: SIRType): Boolean = SirTypes.unwrap(tp) match
-            case SIRType.Fun(_, _)        => true
-            case SIRType.TypeLambda(_, _) => true
-            case _                        => false
+        /** Whether a call's value can be an unknown, a Lean variable of data: it is no function,
+          * plain or polymorphic ([[SIRType.isPolyFunOrFun]]), which a program cannot read from such
+          * a variable. A call applies a function to its arguments, so its type is no type lambda of
+          * another kind.
+          */
+        private def isValueType(tp: SIRType): Boolean = !SIRType.isPolyFunOrFun(tp)
 
         /** Whether `body` applies the local function `self` to all its `parameters`. */
         private def appliesFully(body: SIR, self: String, parameters: Int): Boolean =
@@ -594,7 +596,7 @@ object CallsAsUnknowns {
 
         def go(sir: AnnotatedSIR, values: Map[String, Key]): AnnotatedSIR = sir match {
             case SIR.Let(List(Binding(self, _, function: SIR.LamAbs)), body, flags, anns)
-                if flags.isRec && !isFunction(sir.tp) &&
+                if flags.isRec && isValueType(sir.tp) &&
                     appliesFully(body, self, lambdas(function)._1.size) =>
                 walk(sir, values, anns).getOrElse(structural(sir, values))
             case SIR.Apply(_, _, tp, anns) =>
@@ -632,7 +634,7 @@ object CallsAsUnknowns {
             global(head) match
                 case Some(name)
                     if loops(name) && arguments.size == arity(definitions(name).value) &&
-                        !isFunction(tp) =>
+                        isValueType(tp) =>
                     val definition = definitions(name)
                     if definition.recursive || library(name) then
                         walk(sir, values, anns).getOrElse(structural(sir, values))
