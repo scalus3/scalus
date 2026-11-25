@@ -150,6 +150,9 @@ Compile / doc / scalacOptions ~= { options =>
         case (o, prev) if prev != "-semanticdb-target" && !unused.exists(o.startsWith) => o
     }
 }
+// Central validates the javadoc jar of a release only. A snapshot publishes on each master push,
+// and its javadoc jar is the largest file (32 MB for scalus_3, 11 MB for its main jar).
+Compile / packageDoc / publishArtifact := !isSnapshot.value
 
 // =============================================================================
 // COMMON SETTINGS
