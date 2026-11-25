@@ -385,18 +385,28 @@ of Scalus's Lean library; adding them makes every kept result stale once.
 - `vesting.schedule.does_not_decrease`, the time part of the vesting invariant.
 - `lean-manual`, which checks a theorem written by hand and reads the statements it cites.
 - `isValid(ctx)`, CardanoLedgerApi's validity of a V3 context, as a premise.
+- The thread and the trace lemma, in Scalus's Lean library: `ScalusProofs.Thread`
+  (`scalus-verification/src/main/lean/ScalusProofs/Thread.lean`), `Steps`, `Thread`, and
+  `invariant` and `property` by induction over the thread. Their axioms are Lean's own.
+- The vesting theorem, of every thread, from guarantees #3 and #4 as hypotheses:
+  `LinearVesting.Proofs.Thread.withdrawn_at_most_vested`, and `withdrawn_at_most_vested_later`,
+  at any later time with the schedule's not decreasing
+  (`scalus-examples/jvm/src/test/lean/LinearVesting/LinearVesting/Proofs/Thread.lean`). A
+  withdrawal of everything ends the thread. #3 is proved of the validator, #4 is open, and that
+  each hypothesis is the statement Scalus proved is step 4.
 
 ## Steps
 
 1. **Guarantee #4 on vesting**, with its statement of contexts of the limits of #3, and the
    control: a copy of the validator without its datum check, in the tests, whose #4 is refuted.
 2. **A step Lean finishes**: one of the three ways of [The cost](#the-cost), on #3 and #4.
-3. **The trace lemma** in Scalus's Lean library, `ScalusProofs.Thread`. Its change makes every kept
-   result stale once, so it goes in with another change of the library.
+3. **The trace lemma** in Scalus's Lean library, `ScalusProofs.Thread`. Built (2026-11-25).
 4. **The lemma from a statement.** A statement is written into the workspace in the form of its
    lowering, the rejecting form among them. A lemma for each form gives `step` from the statement.
 5. **The vesting theorem**: in every thread from a deposit of `initialAmount` under `C0`, what has
    been withdrawn is at most what has vested, at every step. Written by hand, checked by `lean-manual`.
+   Its proof from the guarantees as hypotheses is built (2026-11-25); with step 4 it rests on the
+   statements instead.
 6. **A property of history**, on a contract whose datum keeps it, and **the origin** made a
    statement, by a thread token and its policy.
 
