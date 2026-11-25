@@ -108,19 +108,22 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
         verifier.statement("calls_as_unknowns.longer_than_nothing", longerThanNothing)
 
     test("with its walk as an unknown, a statement of every list is proved") {
-        check(VerificationRequest(longerThanNothingStatement, unknowns))
+        val result = verify(VerificationRequest(longerThanNothingStatement, unknowns))
+        assert(result.isProven, describe(result))
     }
 
     test("a refutation whose unknown is no value its walk returns is spurious") {
         // A length is never negative, but an unknown of it can be: the replay on the statement as
         // written says that the refutation is of no list.
-        val reason = inconclusive(
+        val result = verifyWithoutKeeping(
           verifier.statement(
             "calls_as_unknowns.length_not_negative",
             forAll[prelude.List[BigInt]](xs => xs.length >= BigInt(0))
           ),
           unknowns
         )
+        assert(result.isInconclusive, describe(result))
+        val reason = result.why.getOrElse("")
         assert(reason.contains("values that their walks do not return"), reason)
     }
 }

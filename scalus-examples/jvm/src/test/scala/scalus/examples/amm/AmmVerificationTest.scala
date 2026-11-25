@@ -76,9 +76,11 @@ class AmmVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("a swap keeps the product of the reserves, and does not drain the pool") {
-        check(swapContractHolds.getOrElse(fail("swapResult states no contract")))
+        val contract = verify(swapContractHolds.getOrElse(fail("swapResult states no contract")))
+        assert(contract.isProven, describe(contract))
         // negative control: without the fee's bound, the product falls.
-        check(productKeptWithoutTheFeeBound)
+        val withoutTheFeeBound = verify(productKeptWithoutTheFeeBound)
+        assert(withoutTheFeeBound.isRefuted, describe(withoutTheFeeBound))
     }
 
     // A redemption
@@ -101,9 +103,11 @@ class AmmVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("a redemption takes no more than its share") {
-        check(redeemContractHolds.getOrElse(fail("redeemDatum states no contract")))
+        val contract = verify(redeemContractHolds.getOrElse(fail("redeemDatum states no contract")))
+        assert(contract.isProven, describe(contract))
         // negative control: a redemption of more than the supply.
-        check(reservesKeptWithoutTheSupplyBound)
+        val withoutTheSupplyBound = verify(reservesKeptWithoutTheSupplyBound)
+        assert(withoutTheSupplyBound.isRefuted, describe(withoutTheSupplyBound))
     }
 
     // A deposit
@@ -159,7 +163,7 @@ class AmmVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val depositByHandBudget = 500
 
     test("a deposit into a pool with liquidity dilutes no LP token: a proof by hand") {
-        val result = checkByHand(
+        val result = verifyByHand(
           depositDilutesNoToken,
           "Amm.Proofs.Deposit",
           "Amm.Proofs.Deposit.deposit_dilutes_no_token",
@@ -176,7 +180,7 @@ class AmmVerificationTest extends AnyFunSuite with LeanProofsSuite {
     test("a theorem of another statement is no proof by hand of the deposit's") {
         // negative control, apart from the proof: a refused proof is no result that is kept, so it
         // needs Lean, and the proof passes on its kept result without Lean.
-        val reason = failure(
+        val result = verifyWithoutKeeping(
           depositDilutesNoToken,
           LeanManual(
             "Amm.Proofs.Redeem",
@@ -185,6 +189,8 @@ class AmmVerificationTest extends AnyFunSuite with LeanProofsSuite {
             lean
           )
         )
+        assert(result.isFailed, describe(result))
+        val reason = result.why.getOrElse("")
         assert(reason.toLowerCase.contains("type mismatch"), reason)
     }
 
@@ -194,10 +200,12 @@ class AmmVerificationTest extends AnyFunSuite with LeanProofsSuite {
     test("Lean does not check yet that a deposit dilutes no LP token") {
         // Not tagged `Unfinished`: it fails at once, and it fails no longer where Blaster
         // translates `Nat.log2`, which says to prove the clause.
-        val reason = failure(
+        val result = verifyWithoutKeeping(
           depositContractHolds.getOrElse(fail("depositDatum states no contract")),
           UplcBlaster(Budget.LeanSteps(depositBudget), lean)
         )
+        assert(result.isFailed, describe(result))
+        val reason = result.why.getOrElse("")
         assert(reason.contains("translateApp: unexpected application"), reason)
         assert(reason.contains("Init.Data.Nat.Log2"), reason)
     }

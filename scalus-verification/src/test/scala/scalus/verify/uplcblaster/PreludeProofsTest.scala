@@ -282,47 +282,68 @@ class PreludeProofsTest extends AnyFunSuite with LeanProofsSuite {
         }
         test(s"the samples of ${sample.function.name} hold on the Lean model") {
             // A closed statement: Lean decides it by running the programs.
-            assert(artifactOf(check(sample.statement, sample.budget)).kind == ProofKind.LeanNative)
+            val result = verify(sample.statement, sample.budget)
+            assert(result.isProven, describe(result))
+            assert(artifactOf(result).kind == ProofKind.LeanNative)
         }
     }
 
     test("abs is a non-negative magnitude") {
-        check(absIsNonNegative, 100)
-        check(absIsTheArgumentOrItsNegation, 100)
-        check(absIsPositive, 100)
+        val nonNegative = verify(absIsNonNegative, 100)
+        assert(nonNegative.isProven, describe(nonNegative))
+        val argumentOrNegation = verify(absIsTheArgumentOrItsNegation, 100)
+        assert(argumentOrNegation.isProven, describe(argumentOrNegation))
+        val positive = verify(absIsPositive, 100)
+        assert(positive.isRefuted, describe(positive))
     }
 
     test("min is a lower bound and one of its arguments") {
-        check(minIsALowerBound, 100)
-        check(minIsAnArgument, 100)
-        check(minIsAnUpperBound, 100)
+        val lowerBound = verify(minIsALowerBound, 100)
+        assert(lowerBound.isProven, describe(lowerBound))
+        val anArgument = verify(minIsAnArgument, 100)
+        assert(anArgument.isProven, describe(anArgument))
+        val upperBound = verify(minIsAnUpperBound, 100)
+        assert(upperBound.isRefuted, describe(upperBound))
     }
 
     test("max is an upper bound, and min + max is the sum") {
-        check(maxIsAnUpperBound, 100)
-        check(minPlusMaxIsTheSum, 120)
-        check(maxIsAtMostTheFirst, 100)
+        val upperBound = verify(maxIsAnUpperBound, 100)
+        assert(upperBound.isProven, describe(upperBound))
+        val sum = verify(minPlusMaxIsTheSum, 120)
+        assert(sum.isProven, describe(sum))
+        val atMostTheFirst = verify(maxIsAtMostTheFirst, 100)
+        assert(atMostTheFirst.isRefuted, describe(atMostTheFirst))
     }
 
     test("clamp stays in range, and keeps a value already in range") {
-        check(clampStaysInRange, 120)
-        check(clampKeepsAValueInRange, 120)
-        check(clampStaysInAnyRange, 120)
+        val inRange = verify(clampStaysInRange, 120)
+        assert(inRange.isProven, describe(inRange))
+        val keepsAValue = verify(clampKeepsAValueInRange, 120)
+        assert(keepsAValue.isProven, describe(keepsAValue))
+        val inAnyRange = verify(clampStaysInAnyRange, 120)
+        assert(inAnyRange.isRefuted, describe(inAnyRange))
     }
 
     test("exp2 of a negative exponent is zero") {
-        check(exp2OfANegativeExponentIsZero, 60)
-        check(exp2OfANegativeExponentIsOne, 60)
+        val zero = verify(exp2OfANegativeExponentIsZero, 60)
+        assert(zero.isProven, describe(zero))
+        val one = verify(exp2OfANegativeExponentIsOne, 60)
+        assert(one.isRefuted, describe(one))
     }
 
     test("an Option match doubles a positive value and defaults otherwise") {
-        check(aPositiveValueIsDoubled, 160)
-        check(otherwiseTheDefault, 160)
-        check(everyValueIsDoubled, 160)
+        val doubled = verify(aPositiveValueIsDoubled, 160)
+        assert(doubled.isProven, describe(doubled))
+        val theDefault = verify(otherwiseTheDefault, 160)
+        assert(theDefault.isProven, describe(theDefault))
+        val everyValueDoubled = verify(everyValueIsDoubled, 160)
+        assert(everyValueDoubled.isRefuted, describe(everyValueDoubled))
     }
 
     test("a fold over a two-element list is the sum") {
-        check(theFoldIsTheSum, 320)
-        check(theFoldIsTheProduct, 320)
+        val sum = verify(theFoldIsTheSum, 320)
+        assert(sum.isProven, describe(sum))
+        val product = verify(theFoldIsTheProduct, 320)
+        assert(product.isRefuted, describe(product))
     }
 }

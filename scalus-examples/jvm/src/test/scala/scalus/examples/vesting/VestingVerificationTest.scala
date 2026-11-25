@@ -90,7 +90,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("nothing is vested before the start") {
-        check(zeroBeforeStart, scheduleBudget)
+        val result = verify(zeroBeforeStart, scheduleBudget)
+        assert(result.isProven, describe(result))
     }
 
     private val everythingFromTheEnd = verifier.statement(
@@ -103,7 +104,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("everything is vested from the end of the period on") {
-        check(everythingFromTheEnd, scheduleBudget)
+        val result = verify(everythingFromTheEnd, scheduleBudget)
+        assert(result.isProven, describe(result))
     }
 
     private val scheduleReturns = verifier.statement(
@@ -115,7 +117,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     test("the schedule returns for every datum and time") {
         // Whatever the datum's numbers are: it does not divide by a zero duration.
-        check(scheduleReturns, scheduleBudget)
+        val result = verify(scheduleReturns, scheduleBudget)
+        assert(result.isProven, describe(result))
     }
 
     /** The contract `linearVesting` states in its body, and that it returns: none where it states
@@ -153,15 +156,18 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // negative, what is vested lies between nothing and that amount. The verifier reads the
         // clause from the function's SIR. It owes its callers nothing, and here it is also shown
         // to return.
-        check(
+        val contract = verify(
           statedContractHolds.getOrElse(fail("linearVesting states no contract")),
           scheduleBudget
         )
+        assert(contract.isProven, describe(contract))
         // negative control: a wrong postcondition. From the end on, everything is vested.
-        check(vestedBelowTheAmount, scheduleBudget)
+        val belowTheAmount = verify(vestedBelowTheAmount, scheduleBudget)
+        assert(belowTheAmount.isRefuted, describe(belowTheAmount))
         // negative control: the bound needs its condition. A negative initial amount is below
         // what is vested before the start.
-        check(boundedWithoutCondition, scheduleBudget)
+        val withoutCondition = verify(boundedWithoutCondition, scheduleBudget)
+        assert(withoutCondition.isRefuted, describe(withoutCondition))
     }
 
     private val doesNotDecrease = verifier.statement(
@@ -183,9 +189,11 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("the vested amount does not decrease with time") {
-        check(doesNotDecrease, scheduleBudget)
+        val holds = verify(doesNotDecrease, scheduleBudget)
+        assert(holds.isProven, describe(holds))
         // negative control: a negative initial amount is taken away over time
-        check(doesNotDecreaseForAnyAmount, scheduleBudget)
+        val forAnyAmount = verify(doesNotDecreaseForAnyAmount, scheduleBudget)
+        assert(forAnyAmount.isRefuted, describe(forAnyAmount))
     }
 
     // The validator, on every script context
@@ -209,7 +217,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("an output without a datum cannot be spent") {
-        check(noDatumIsRejected, rejectionBudget)
+        val result = verify(noDatumIsRejected, rejectionBudget)
+        assert(result.isProven, describe(result))
     }
 
     private val nonPositiveAmountIsRejected = verifier.statement(
@@ -223,7 +232,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     test("a withdrawal of a non-positive amount is rejected") {
         // Of an output with a datum, whatever the datum is. A redeemer that is no `Action` is none
         // the premise reads an amount of, and the validator rejects it too.
-        check(nonPositiveAmountIsRejected, rejectionBudget)
+        val result = verify(nonPositiveAmountIsRejected, rejectionBudget)
+        assert(result.isProven, describe(result))
     }
 
     private val onlySpending = verifier.statement(
@@ -232,7 +242,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("the script validates nothing but spending") {
-        check(onlySpending, rejectionBudget)
+        val result = verify(onlySpending, rejectionBudget)
+        assert(result.isProven, describe(result))
     }
 
     // Withdrawals
@@ -277,10 +288,10 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // Closed statements: Lean decides them by running the validator. They are what the
         // statements below are not vacuous of: the validator accepts some withdrawals, and the
         // bound of what stays locked is exact.
-        assert(artifactOf(check(sampleAccepted, sampleBudget)).kind == ProofKind.LeanNative)
-        assert(artifactOf(check(sampleUnsigned, sampleBudget)).kind == ProofKind.LeanNative)
-        assert(artifactOf(check(sampleOfTheVested, sampleBudget)).kind == ProofKind.LeanNative)
-        assert(artifactOf(check(sampleOfMore, sampleBudget)).kind == ProofKind.LeanNative)
+        for sample <- List(sampleAccepted, sampleUnsigned, sampleOfTheVested, sampleOfMore) do
+            val result = verify(sample, sampleBudget)
+            assert(result.isProven, describe(result))
+            assert(artifactOf(result).kind == ProofKind.LeanNative, sample.name)
     }
 
     /** The validator on a script context of its type: what the verifier's statements about its code
@@ -357,12 +368,13 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // The proof rests on one step that is tested, not proved: that the validator does what
         // its program with unknowns does, with each unknown the value its walk returns
         // (ProofKind.BlasterOfUnknowns).
-        check(
+        val result = verify(
           VerificationRequest(
             beneficiarySigned,
             new CallsAsUnknowns(UplcBlaster(Budget.Auto, lean, 30.minutes))
           )
         )
+        assert(result.isProven, describe(result))
     }
 
     // spend: Spec.ensures(amountOf(redeemer) > 0)
@@ -375,7 +387,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("spend's second guarantee holds of every script context: something is withdrawn") {
-        check(somethingIsWithdrawn, guaranteesBudget)
+        val result = verify(somethingIsWithdrawn, guaranteesBudget)
+        assert(result.isProven, describe(result))
     }
 
     // spend: Spec.ensures(lockedBy(txInfo, txOutRef) - amountOf(redeemer) >=
@@ -391,12 +404,13 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // walk, findInputOrFail and getLovelace of the same input, so the clause's bound is the
         // validator's check rearranged, whatever the walks return. It rests on the same tested
         // step (ProofKind.BlasterOfUnknowns).
-        check(
+        val result = verify(
           VerificationRequest(
             unvestedStaysLocked,
             new CallsAsUnknowns(UplcBlaster(Budget.Auto, lean, 60.minutes))
           )
         )
+        assert(result.isProven, describe(result))
     }
 
     // spend: Spec.ensures(amountOf(redeemer) === lockedBy(txInfo, txOutRef) ||
@@ -411,10 +425,12 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("spend's fourth guarantee, of every script context, is not finished by Lean", Unfinished) {
-        val unfinished = inconclusive(
+        val result = verifyWithoutKeeping(
           stateIsCarried,
           UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
         )
+        assert(result.isInconclusive, describe(result))
+        val unfinished = result.why.getOrElse("")
         assert(unfinished.contains("did not finish"), unfinished)
     }
 
@@ -450,10 +466,12 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // the validator to its end, its last check, over the outputs. Of every context it is
         // proved with the walks as unknowns once their lemmas are premises
         // (docs/design/verification-details/multi-transaction.md). The time limit ends it.
-        val unfinished = inconclusive(
+        val result = verifyWithoutKeeping(
           stateIsCarriedLimited,
           UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
         )
+        assert(result.isInconclusive, describe(result))
+        val unfinished = result.why.getOrElse("")
         assert(unfinished.contains("did not finish"), unfinished)
     }
 
@@ -480,10 +498,12 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
           "by Lean",
       Unfinished
     ) {
-        val unfinished = inconclusive(
+        val result = verifyWithoutKeeping(
           stateIsCarriedWithoutDatumCheck,
           UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
         )
+        assert(result.isInconclusive, describe(result))
+        val unfinished = result.why.getOrElse("")
         assert(unfinished.contains("did not finish"), unfinished)
     }
 
@@ -502,10 +522,12 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // The search for a counterexample did not finish in 10 minutes (2026-11-24): it is a
         // withdrawal the copy accepts, so its run goes to the copy's end. The samples below show
         // one. The time limit ends it.
-        val unfinished = inconclusive(
+        val result = verifyWithoutKeeping(
           stateIsCarriedWithoutDatumCheckLimited,
           UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
         )
+        assert(result.isInconclusive, describe(result))
+        val unfinished = result.why.getOrElse("")
         assert(unfinished.contains("did not finish"), unfinished)
     }
 
@@ -534,17 +556,15 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     test("without the datum check, two withdrawals halfway through the period take everything") {
         // Each meets the first three guarantees: they are of the transaction's own datum. Only the
         // fourth sees the first withdrawal's fault.
-        assert(
-          artifactOf(check(sampleLeavingAnotherDatum, sampleBudget)).kind == ProofKind.LeanNative
-        )
-        assert(
-          artifactOf(check(sampleLeavingAnotherDatumWithoutDatumCheck, sampleBudget)).kind ==
-              ProofKind.LeanNative
-        )
-        assert(
-          artifactOf(check(sampleOfTheRestUnderAnotherDatum, sampleBudget)).kind ==
-              ProofKind.LeanNative
-        )
+        for sample <- List(
+              sampleLeavingAnotherDatum,
+              sampleLeavingAnotherDatumWithoutDatumCheck,
+              sampleOfTheRestUnderAnotherDatum
+            )
+        do
+            val result = verify(sample, sampleBudget)
+            assert(result.isProven, describe(result))
+            assert(artifactOf(result).kind == ProofKind.LeanNative, sample.name)
         for context <- List(sampleHalfwayUnder(vestedAtOnce), sampleOfTheRestUnder(vestedAtOnce))
         do
             val ctx = context.to[ScriptContext]
@@ -596,10 +616,12 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         val owed = spendObligations match
             case CallObligations(List(owed), Nil) => owed
             case other                            => fail(s"expected one obligation, got $other")
-        val unfinished = inconclusive(
+        val result = verifyWithoutKeeping(
           owed,
           UplcBlaster(Budget.LeanSteps(obligationBudget), lean, 60.seconds)
         )
+        assert(result.isInconclusive, describe(result))
+        val unfinished = result.why.getOrElse("")
         assert(unfinished.contains("did not finish"), unfinished)
     }
 
@@ -612,15 +634,10 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
             case CallObligations(List(owed), Nil) => owed
             case other                            => fail(s"expected one obligation, got $other")
         // It is refuted: the validator reads the amount from the datum and does not check it.
-        val values = counterexampleOf(
-          check(
-            VerificationRequest(
-              owed,
-              UplcBlaster(Budget.LeanSteps(obligationBudget), lean),
-              ExpectedOutcome.Falsified
-            )
-          )
-        )
+        val result =
+            verify(VerificationRequest(owed, UplcBlaster(Budget.LeanSteps(obligationBudget), lean)))
+        assert(result.isRefuted, describe(result))
+        val values = counterexampleOf(result)
         val amounts = values.collect { case (_, scalus.uplc.Constant.Data(context)) =>
             initialAmountOf(context.to[ScriptContext])
         }
@@ -651,10 +668,12 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         val assumed = obligationsOfAnAmount match
             case CallObligations(List(assumed), Nil) => assumed
             case other                               => fail(s"expected one obligation, got $other")
-        val unfinished = inconclusive(
+        val result = verifyWithoutKeeping(
           assumed,
           UplcBlaster(Budget.LeanSteps(obligationBudget), lean, 60.seconds)
         )
+        assert(result.isInconclusive, describe(result))
+        val unfinished = result.why.getOrElse("")
         assert(unfinished.contains("did not finish"), unfinished)
     }
 
@@ -665,12 +684,13 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         val assumed = obligationsOfAnAmountLimited match
             case CallObligations(List(assumed), Nil) => assumed
             case other                               => fail(s"expected one obligation, got $other")
-        check(
+        val result = verify(
           VerificationRequest(
             assumed,
             UplcBlaster(Budget.LeanSteps(obligationBudget), lean, 30.minutes)
           )
         )
+        assert(result.isProven, describe(result))
     }
 
     // Everything after the end of the period
@@ -693,10 +713,12 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       Unfinished
     ) {
         List(everythingAfterTheEnd, everythingAtAnyTime).foreach { statement =>
-            val unfinished = inconclusive(
+            val result = verifyWithoutKeeping(
               statement,
               UplcBlaster(Budget.LeanSteps(1922), lean, 60.seconds)
             )
+            assert(result.isInconclusive, describe(result))
+            val unfinished = result.why.getOrElse("")
             assert(unfinished.contains("did not finish"), unfinished)
         }
     }
@@ -730,10 +752,12 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // have every test end on the largest values that meet them, and Lean was still in the
         // validator's symbolic run after 16 minutes (2026-11-06). The time limit ends it.
         List(everythingAfterTheEndLimited, everythingAtAnyTimeLimited).foreach { statement =>
-            val unfinished = inconclusive(
+            val result = verifyWithoutKeeping(
               statement,
               UplcBlaster(Budget.LeanSteps(1922), lean, 60.seconds)
             )
+            assert(result.isInconclusive, describe(result))
+            val unfinished = result.why.getOrElse("")
             assert(unfinished.contains("symbolically"), unfinished)
         }
     }

@@ -17,13 +17,14 @@ import scala.util.Using
   * first check and ended by [[close]].
   *
   * Statements are declared by name in [[verifier]], as statements or as negative controls
-  * ([[Verifier.refute]]), and run with [[check]], which holds each to what it was declared to
-  * expect (docs/design/verification-overview.md §5.1, §5.2):
+  * ([[Verifier.refute]]), and run with [[verify]], which returns the result: the caller holds it to
+  * what it expects (docs/design/verification-overview.md §5.1, §5.2):
   *
   * {{{
   * val proofs = LeanProofs(LeanProofs.projectWorkspace, Some(keptFile))
   * val zero = proofs.verifier.statement("plus_zero", forAll[BigInt](x => x + BigInt(0) == x))
-  * proofs.check(zero, 40)
+  * val result = proofs.verify(zero, 40)
+  * assert(result.isProven, proofs.describe(result))
   * }}}
   *
   * The anonymous `proven`, `refuted` and `inconclusive` state a statement without a name, in a
@@ -365,39 +366,40 @@ final class LeanProofs private (
     }
 
     /** The verifier of these proofs, in which statements are declared by name, and run with
-      * [[check]]. Their results are kept in the file of these proofs, where they keep them, under
+      * [[verify]]. Their results are kept in the file of these proofs, where they keep them, under
       * the statements' names, and used in the way of [[keptMode]]: a statement keeps its result
       * while statements around it change, are added or are removed.
       */
     lazy val verifier: Verifier = results.fold(Verifier.empty)(Verifier.keeping)
 
-    /** Runs `request` in [[verifier]], and holds its result to the one the request expects. A
-      * statement that cannot be checked here, as Lean does not run here or its kept result is
-      * stale, is not checked ([[notChecked]]). A result other than the expected one throws an
-      * `AssertionError` that says what came instead: the counterexample of a refutation, replayed,
-      * or the reason.
+    /** Runs `request` in [[verifier]]: its tactic checks the statement, or the result kept of it is
+      * taken. It says nothing of what the result is to be: a test holds it to what it expects
+      * (`isProven`, `isRefuted`, `isInconclusive`). A statement that cannot be checked here, as
+      * Lean does not run here or its kept result is stale, is not checked ([[notChecked]]).
+      *
+      * A proof makes the statement a theorem of [[verifier]], and a proof by [[UplcBlaster]] is
+      * exported where these proofs export them. What a result is by its own account is held, as a
+      * proof that Blaster did not say valid: a result that is not fails the test.
       *
       * Checks run one at a time: the verifier is not made for concurrent use, and its Lean server
       * runs one check after another anyway. An [[UplcBlaster]] of the request writes its checks
       * where these proofs keep them ([[keepingChecks]]).
       *
       * @return
-      *   the result: a proof where the request expects one, and a refutation, whose counterexample
-      *   was replayed on the Scalus CEK, where it expects that
+      *   the result; a refutation's counterexample was replayed on the Scalus CEK
       */
-    def check(request: VerificationRequest): VerificationResult = checked(verifier, request)
+    def verify(request: VerificationRequest): VerificationResult = verified(verifier, request)
 
-    /** Runs `request` in `verifier`, and holds its result to the one the request expects: every
-      * expectation of these proofs is held so. A proof is to be among the verifier's theorems, and
-      * a refuted statement is not to be. A proof within a budget is one where the request asks for
-      * a check within that budget, and makes no theorem.
-      */
     /** The budget a check within one is asked for at ([[Budget.Within]]). */
     private def withinOf(blaster: UplcBlaster): Option[Int] = blaster.budget match
         case Budget.Within(steps) => Some(steps)
         case _                    => None
 
-    private def checked(verifier: Verifier, request: VerificationRequest): VerificationResult = {
+    /** Runs `request` in `verifier`, and holds the result to what it is by its own account: a proof
+      * is among the verifier's theorems, a refuted statement is not, and a proof within a budget is
+      * one where the request asks for a check within that budget, and makes no theorem.
+      */
+    private def verified(verifier: Verifier, request: VerificationRequest): VerificationResult = {
         val statement = request.statement
         val name = statement.name
         def isTheorem = verifier.theorems.exists(_.statement eq statement)
@@ -408,8 +410,8 @@ final class LeanProofs private (
             case blaster: UplcBlaster      => withinOf(blaster)
             case unknowns: CallsAsUnknowns => withinOf(unknowns.inner)
             case _                         => None
-        (request.expected, result) match
-            case (ExpectedOutcome.Valid, VerificationResult.Proven(proof)) =>
+        result match
+            case VerificationResult.Proven(proof) =>
                 proof.artifact match
                     case artifact: UplcBlaster.Artifact =>
                         checkedProof(artifact)
@@ -426,9 +428,11 @@ final class LeanProofs private (
                 if !isTheorem then failed(s"$name: proved, and not among the verifier's theorems")
             // A check within a budget is asked for, and proves the statement within it, which is
             // no theorem.
-            case (ExpectedOutcome.Valid, VerificationResult.ProvenWithin(proof, _)) =>
+            case VerificationResult.ProvenWithin(proof, _) =>
                 if within.isEmpty then
-                    failed(s"$name: expected a proof, got ${LeanProofs.describe(result)}")
+                    failed(
+                      s"$name: proved within a budget, where no check within one was asked for"
+                    )
                 proof.artifact match
                     case artifact: UplcBlaster.Artifact =>
                         checkedProof(artifact)
@@ -440,31 +444,23 @@ final class LeanProofs private (
                     case _ =>
                 if isTheorem && !wasTheorem then
                     failed(s"$name: proved within a budget, and made a theorem of")
-            case (ExpectedOutcome.Falsified, VerificationResult.Refuted(_)) =>
+            case VerificationResult.Refuted(_) =>
                 if isTheorem then failed(s"$name: refuted, and the verifier has a theorem of it")
-            case (ExpectedOutcome.Valid, other) =>
-                failed(s"$name: expected a proof, got ${LeanProofs.describe(other)}")
-            case (ExpectedOutcome.Falsified, other) =>
-                failed(s"$name: expected a refutation, got ${LeanProofs.describe(other)}")
+            case _ =>
         result
     }
 
-    /** [[check]] with [[UplcBlaster]] at `budget`, expecting what `statement` was declared to be.
-      * By default the tactic finds the budget ([[Budget.Auto]]). The budget is then a result, not a
-      * part of the statement: where results are kept, it is kept with the proof, and a later search
-      * starts at it, so a statement that has not changed is decided in one check, or taken as it
-      * was kept.
+    /** [[verify]] with [[UplcBlaster]] at `budget`. By default the tactic finds the budget
+      * ([[Budget.Auto]]). The budget is then a result, not a part of the statement: where results
+      * are kept, it is kept with the proof, and a later search starts at it, so a statement that
+      * has not changed is decided in one check, or taken as it was kept.
       */
-    def check(statement: Statement, budget: Budget = Budget.Auto): VerificationResult = {
-        check(VerificationRequest(statement, UplcBlaster(budget, lean)))
-    }
+    def verify(statement: Statement, budget: Budget = Budget.Auto): VerificationResult =
+        verify(VerificationRequest(statement, UplcBlaster(budget, lean)))
 
-    /** [[check]] with [[UplcBlaster]] at a budget of `budget` steps of Lean's machine, expecting
-      * what `statement` was declared to be.
-      */
-    def check(statement: Statement, budget: Int): VerificationResult = {
-        check(statement, Budget.LeanSteps(budget))
-    }
+    /** [[verify]] with [[UplcBlaster]] at a budget of `budget` steps of Lean's machine. */
+    def verify(statement: Statement, budget: Int): VerificationResult =
+        verify(statement, Budget.LeanSteps(budget))
 
     /** Runs `tactic` on `statement` in `verifier`: every check of these proofs runs so. An
       * [[UplcBlaster]] writes its checks where these proofs keep them ([[keepingChecks]]). A
@@ -494,14 +490,14 @@ final class LeanProofs private (
             case result => result
     }
 
-    /** Why `tactic` is inconclusive about `statement`, declared in [[verifier]]. The check runs in
-      * a verifier of its own, with the functions of [[verifier]], which keeps nothing: an
-      * inconclusive result is never kept, and a statement that unexpectedly gets a result here is
-      * to fail its test, not to stand on that result from then on.
+    /** [[verify]] in a verifier of its own, with the functions of [[verifier]], which keeps nothing
+      * and makes no theorem: of a statement a tactic is not to decide, as one Lean does not finish
+      * or one it fails on. A statement that unexpectedly gets a result here is to fail its test,
+      * which says what it expects, and not to stand on that result from then on.
       */
-    def inconclusive(statement: Statement, tactic: Tactic): String = {
+    def verifyWithoutKeeping(statement: Statement, tactic: Tactic): VerificationResult = {
         val (own, declared) = ownStatement(statement)
-        inconclusive(own, declared, tactic)
+        run(own, declared, tactic)
     }
 
     /** A verifier of its own, with the functions of [[verifier]] and nothing kept, and `statement`
@@ -511,19 +507,6 @@ final class LeanProofs private (
         val own = Verifier.empty
         own.addFunctions(verifier.functions)
         own -> own.statement(statement.name, statement.prop)
-    }
-
-    /** Why `tactic` fails on `statement`, declared in [[verifier]]: Lean reported an error, as one
-      * of a program Blaster cannot translate. As [[inconclusive]], the check runs in a verifier of
-      * its own, which keeps nothing, and a statement that gets a result here fails its test: the
-      * test is to be changed to prove it.
-      */
-    def failure(statement: Statement, tactic: Tactic): String = {
-        val (own, declared) = ownStatement(statement)
-        run(own, declared, tactic) match
-            case VerificationResult.Failed(reason) => reason
-            case other =>
-                failed(s"${statement.name}: expected a failure, got ${LeanProofs.describe(other)}")
     }
 
     /** That `statement`, declared in [[verifier]], holds on `values` read with `==>:` for each
@@ -536,17 +519,17 @@ final class LeanProofs private (
             case Right(None)  => failed(s"${statement.name} did not end within the replay budget")
             case Left(reason) => failed(s"${statement.name} cannot be run: $reason")
 
-    /** [[check]] with [[LeanManual]]: `statement` is proved by `theorem`, a theorem written by hand
-      * in the module `module` of the workspace, of the statement as written at `budget` steps. The
-      * statement's module is written where these proofs export ([[writtenForHand]]).
+    /** [[verify]] with [[LeanManual]]: `statement` is proved by `theorem`, a theorem written by
+      * hand in the module `module` of the workspace, of the statement as written at `budget` steps.
+      * The statement's module is written where these proofs export ([[writtenForHand]]).
       */
-    def checkByHand(
+    def verifyByHand(
         statement: Statement,
         module: String,
         theorem: String,
         budget: Int
     ): VerificationResult =
-        check(VerificationRequest(statement, LeanManual(module, theorem, budget, lean)))
+        verify(VerificationRequest(statement, LeanManual(module, theorem, budget, lean)))
 
     /** The module of `statement` that `tactic` checks a proof by hand of: written where these
       * proofs export, as the modules of the statements proved are, and held to the code where they
@@ -805,7 +788,7 @@ final class LeanProofs private (
       * the results are kept, from what is kept. A statement that is stale, with nothing kept for it
       * as it is now and no Lean to ask, is not checked ([[notChecked]]).
       */
-    def check(
+    def verify(
         prop: Prop,
         budget: Budget,
         functions: Seq[FunctionDef[?, ?]]
@@ -815,13 +798,13 @@ final class LeanProofs private (
         (verifier, statement, run(verifier, statement, UplcBlaster(budget, lean)))
     }
 
-    /** [[check]], at a budget of `budget` steps of Lean's machine. */
-    def check(
+    /** [[verify]], at a budget of `budget` steps of Lean's machine. */
+    def verify(
         prop: Prop,
         budget: Int,
         functions: Seq[FunctionDef[?, ?]]
     ): (Verifier, Statement, VerificationResult) =
-        check(prop, Budget.LeanSteps(budget), functions)
+        verify(prop, Budget.LeanSteps(budget), functions)
 
     /** Proves `prop` at a budget of `budget` steps, and returns how the proof was checked. */
     def proven(prop: Prop, budget: Int, functions: FunctionDef[?, ?]*): ProofKind =
@@ -844,12 +827,13 @@ final class LeanProofs private (
         functions: FunctionDef[?, ?]*
     ): UplcBlaster.Artifact = {
         val verifier = verifierOf(functions)
-        artifactOf(
-          checked(
-            verifier,
-            VerificationRequest(verifier.statement(prop), UplcBlaster(budget, lean))
-          )
-        )
+        val statement = verifier.statement(prop)
+        val result = verified(verifier, VerificationRequest(statement, UplcBlaster(budget, lean)))
+        result match
+            case VerificationResult.Proven(_) | VerificationResult.ProvenWithin(_, _) =>
+                artifactOf(result)
+            case other =>
+                failed(s"${statement.name}: expected a proof, got ${LeanProofs.describe(other)}")
     }
 
     /** The replayed counterexample of a statement that is refuted at a budget of `budget` steps.
@@ -868,9 +852,13 @@ final class LeanProofs private (
         functions: FunctionDef[?, ?]*
     ): Map[String, Constant] = {
         val verifier = verifierOf(functions)
-        counterexampleOf(
-          checked(verifier, VerificationRequest(verifier.refute(prop), UplcBlaster(budget, lean)))
-        )
+        val statement = verifier.refute(prop)
+        verified(verifier, VerificationRequest(statement, UplcBlaster(budget, lean))) match
+            case refutation @ VerificationResult.Refuted(_) => counterexampleOf(refutation)
+            case other =>
+                failed(
+                  s"${statement.name}: expected a refutation, got ${LeanProofs.describe(other)}"
+                )
     }
 
     /** A verifier of its own for a statement without a name, with `functions`, keeping its results
@@ -918,6 +906,11 @@ final class LeanProofs private (
                   s"${statement.name}: expected an inconclusive result, got " +
                       LeanProofs.describe(other)
                 )
+
+    /** `result` in words, for the message of a test that expected another: what was proved, or the
+      * counterexample of a refutation, or why there is no result.
+      */
+    def describe(result: VerificationResult): String = LeanProofs.describe(result)
 
     /** The integer `value` is, as a variable of a counterexample. */
     def integer(value: Constant): BigInt = value match

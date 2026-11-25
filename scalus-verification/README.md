@@ -398,26 +398,32 @@ fails with "Imports are out of date and must be rebuilt".
 
 `LeanProofs` runs the statements of a verifier, and asks for no test framework. Statements are
 declared by name in its `verifier`: `statement(name, prop)` expects a proof, and
-`refute(name, prop)`, a negative control, a refutation (overview §5.2). `check` runs one and holds
-it to that:
+`refute(name, prop)`, a negative control, a refutation (overview §5.2). `verify` runs one and
+returns its `VerificationResult`, and the caller says what it expects of it:
 
 ```scala
 val proofs = LeanProofs(LeanProofs.projectWorkspace, Some(keptFile))
 val plusZero = proofs.verifier.statement("plus_zero", forAll[BigInt](x => x + BigInt(0) == x))
 val plusOne = proofs.verifier.refute("plus_one", forAll[BigInt](x => x + BigInt(1) == x))
-proofs.check(plusZero, 40)   // UplcBlaster at 40 steps; a VerificationRequest names another tactic
-proofs.check(plusOne, 40)
+val zero = proofs.verify(plusZero, 40) // UplcBlaster at 40 steps; a VerificationRequest names another tactic
+assert(zero.isProven, proofs.describe(zero))
+val one = proofs.verify(plusOne, 40)
+assert(one.isRefuted, proofs.describe(one))
 ```
 
-`check(VerificationRequest(statement, tactic, expected))` is the general form, with any tactic;
-`check(statement, budget)` is it for `UplcBlaster`. A statement is a value with a stable name: the
+`verify(VerificationRequest(statement, tactic))` is the general form, with any tactic;
+`verify(statement, budget)` is it for `UplcBlaster`. `verifyWithoutKeeping(statement, tactic)` runs
+a statement in a verifier of its own, which keeps nothing and makes no theorem: for one the tactic
+is not to decide, as one Lean does not finish. A statement is a value with a stable name: the
 class that declares it is what other code refers to, its result is kept under that name, and an
 export to Lean will use it. Checks run one at a time; declare the statements before tests run
 them concurrently, as `Verifier` is not made for concurrent declarations. What a framework is
 needed for, `LeanProofs` leaves to its caller:
 
-- **An expectation that does not hold**, as a refutation where a proof was expected, throws an
-  `AssertionError`. Every test framework takes that for a failed test.
+- **An expectation** is the caller's: `isProven`, `isRefuted`, `isInconclusive` of the result,
+  and `describe(result)` for the message. A result that is not what it is by its own account, as a
+  proof Blaster did not say valid, throws an `AssertionError`, which every test framework takes for
+  a failed test.
 - **A statement that cannot be checked here**, as Lean does not run here or its kept result is
   stale, is the third argument's, `notChecked`: a function of the reason that does not return.
   Without it, a `LeanProofs.NotChecked` is thrown.
@@ -461,7 +467,10 @@ final class ArithmeticProofs(val verifier: Verifier) {
 class ArithmeticProofsTest extends AnyFunSuite with LeanProofsSuite {
     private lazy val p = ArithmeticProofs(proofs.verifier)
 
-    test("x + 0 is x") { proofs.check(p.plusZero, 40) }
+    test("x + 0 is x") {
+        val result = proofs.verify(p.plusZero, 40)
+        assert(result.isProven, proofs.describe(result))
+    }
 }
 ```
 
@@ -657,7 +666,7 @@ searched for again. An update of Blaster or of the library makes every kept resu
 search of each statement then starts at the budget kept with the old revision, so a statement
 still decided there takes one check. A kept refutation is replayed on the Scalus CEK, without
 Lean, and stands as it was. The old entries stay in the file as `former` results until each
-statement is kept again, so a run of a few tests after an update loses no budget of the others. `proofs.check(statement)` is the search; a fixed `Budget.LeanSteps` is for
+statement is kept again, so a run of a few tests after an update loses no budget of the others. `proofs.verify(statement)` is the search; a fixed `Budget.LeanSteps` is for
 the tactic's own tests, and for a run without kept results that is to be saved the search. A
 statement no budget proves, such as one about a loop over a whole list, gets a longer
 counterexample from every check, and ends at the time limit. `Budget.Within(n)` proves such a

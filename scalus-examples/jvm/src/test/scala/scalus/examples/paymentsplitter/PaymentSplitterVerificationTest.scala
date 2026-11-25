@@ -107,8 +107,10 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
       * run multiply past what the tests here wait for.
       */
     private def notFinished(statement: Statement, steps: Int): Unit = {
-        val reason = inconclusive(statement, UplcBlaster(Budget.LeanSteps(steps), lean, 60.seconds))
-        assert(reason.contains("did not finish"), reason)
+        val result =
+            verifyWithoutKeeping(statement, UplcBlaster(Budget.LeanSteps(steps), lean, 60.seconds))
+        assert(result.isInconclusive, describe(result))
+        assert(result.why.exists(_.contains("did not finish")), describe(result))
     }
 
     test(
@@ -222,12 +224,13 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("the redeemer of a spend names the contract's output") {
-        check(
+        val result = verify(
           VerificationRequest(
             p.spendRedeemerNamesItsInputLimited,
             UplcBlaster(Budget.Auto, lean, spendTime)
           )
         )
+        assert(result.isProven, describe(result))
     }
 
     test(
@@ -251,12 +254,13 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // 582 s at 1661, and at 1743 it did not finish in the 15 minutes left of 30. Stated of
         // every input of the spent reference, the claim searched them all, and at 3200 steps it
         // did not finish in 15 minutes.
-        check(
+        val result = verify(
           VerificationRequest(
             p.spendNeedsItsOwnWithdrawalLimited,
             UplcBlaster(Budget.Auto, lean, spendTime)
           )
         )
+        assert(result.isProven, describe(result))
     }
 
     test(
@@ -278,12 +282,13 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // accepted. Stated so, Lean runs the validator on every context within the limits, the
         // premise pruning none: a withdrawal's context too, whose stake validator walks the
         // parameter's payees and the outputs, lists of any length here, and the budget cuts.
-        check(
+        val result = verify(
           VerificationRequest(
             p.spendWithItsWithdrawalIsAcceptedLimited,
             UplcBlaster(Budget.Auto, lean, spendTime)
           )
         )
+        assert(result.isProven, describe(result))
     }
 
     test(
@@ -322,8 +327,10 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
     test("the contract's stake credential is registered and deregistered, and not delegated") {
         // Of every context: an accepted certificate is a registration or a deregistration, so a
         // delegation is rejected, whatever the transaction is.
-        check(p.stakeIsNeverDelegated)
-        check(p.stakeRegistrationIsAccepted)
+        val neverDelegated = verify(p.stakeIsNeverDelegated)
+        assert(neverDelegated.isProven, describe(neverDelegated))
+        val registration = verify(p.stakeRegistrationIsAccepted)
+        assert(registration.isProven, describe(registration))
     }
 
     // Samples
@@ -363,9 +370,15 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
     test("sample payouts are accepted on the Lean machine") {
         // Closed statements: Lean decides them by running the validators. They are what the
         // statements above are not vacuous of: the validators accept an honest payout.
-        assert(artifactOf(check(p.sampleNaivePayoutIsAccepted)).kind == ProofKind.LeanNative)
-        assert(artifactOf(check(p.sampleSpendIsAccepted)).kind == ProofKind.LeanNative)
-        assert(artifactOf(check(p.sampleRewardIsAccepted)).kind == ProofKind.LeanNative)
+        for sample <- List(
+              p.sampleNaivePayoutIsAccepted,
+              p.sampleSpendIsAccepted,
+              p.sampleRewardIsAccepted
+            )
+        do
+            val result = verify(sample)
+            assert(result.isProven, describe(result))
+            assert(artifactOf(result).kind == ProofKind.LeanNative, sample.name)
     }
 }
 
