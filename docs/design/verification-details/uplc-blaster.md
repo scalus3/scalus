@@ -1559,7 +1559,8 @@ The times are of single checks with Blaster compiled, in the suite's Lean server
 The validator's specification is written in `VestingValidator` itself. `spend` states its three
 guarantees at its head; `Verifier.guarantees(spends.ref, fewInputs, Connective.Rejects)` finds them
 in the code of `spends`, the validator on a typed context, where the inlined handler ends up, over
-the contexts `fewInputs` says ([`Props.limitedData`](../verification-overview.md#37-function-contracts-pre--and-postconditions)). Each
+the contexts `fewInputs` says, a set of values named `few_inputs` (`LimitedData.named`), so that
+the statements are named `spends[few_inputs]/ensures#n` beside those of every context ([`Props.limitedData`](../verification-overview.md#37-function-contracts-pre--and-postconditions)). Each
 is proved alone: one rejecting program of all three would run every way one of them is false on
 into the validator. They are stated with `==>?:`, as a clause reads the datum, the redeemer and the
 spent input as the validator does, and fails where they cannot be read, where the validator

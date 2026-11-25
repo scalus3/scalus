@@ -365,18 +365,6 @@ final class Verifier private (results: Option[KeptResults]) {
     def obligations(caller: FunctionRef[?, ?], parameter: LimitedData): CallObligations =
         declareObligations(caller, None, Some(parameter))
 
-    /** [[obligations]] of `caller` over the values of its parameter that `parameter` says, named
-      * after `caller` and `domain`, as `spends[few_inputs]/vested_in_range#1`: the obligations of
-      * one function can then be stated over several sets of values in one verifier, as
-      * [[guarantees]] with a domain are.
-      */
-    def obligations(
-        caller: FunctionRef[?, ?],
-        parameter: LimitedData,
-        domain: String
-    ): CallObligations =
-        declareObligations(caller, None, Some(parameter), Some(domain))
-
     /** [[obligations]] of the function `callerContract` is about, where that contract's own
       * precondition holds: the calling function may assume what its callers establish. They are
       * named after the contract, not the function, so both can be declared in one verifier.
@@ -423,8 +411,12 @@ final class Verifier private (results: Option[KeptResults]) {
       * `guarantees(contract)`.
       *
       * Several clauses are also declared as one statement, [[StatedGuarantees.together]], named
-      * after the function alone, `function/ensures`: a tactic then runs the function's body once
-      * for all of them.
+      * `function/ensures`: a tactic then runs the function's body once for all of them.
+      *
+      * The statements are named after the function, `function/ensures#n`, and over a set of values
+      * that has a name ([[LimitedData.named]]), after the function and the set,
+      * `function[set]/ensures#n`: so the clauses of one function can be stated over several sets of
+      * values in one verifier, as a validator's of every script context and of a few inputs.
       */
     def guarantees(function: FunctionRef[?, ?]): StatedGuarantees =
         declareGuarantees(function, None, None)
@@ -446,20 +438,6 @@ final class Verifier private (results: Option[KeptResults]) {
         connective: Connective
     ): StatedGuarantees =
         declareGuarantees(function, None, Some(parameter), connective)
-
-    /** [[guarantees]] of `function` over the values of its parameter that `parameter` says, each
-      * stated with `connective`, and named after `function` and `domain`, as
-      * `spends[any_context]/ensures#1`: one function's clauses can then be stated over several sets
-      * of values in one verifier, as a validator's of every script context and of those of a few
-      * inputs.
-      */
-    def guarantees(
-        function: FunctionRef[?, ?],
-        parameter: LimitedData,
-        connective: Connective,
-        domain: String
-    ): StatedGuarantees =
-        declareGuarantees(function, None, Some(parameter), connective, Some(domain))
 
     /** [[guarantees]] of the function `contract` is about, where that contract's own precondition
       * holds: a clause may rely on what the function's callers establish. They are named after the
@@ -525,12 +503,18 @@ final class Verifier private (results: Option[KeptResults]) {
         function: FunctionRef[?, ?],
         premise: Option[(String, FunctionContract[?, ?])],
         parameter: Option[LimitedData],
-        connective: Connective = Connective.Implies,
-        domain: Option[String] = None
+        connective: Connective = Connective.Implies
     ): StatedGuarantees = {
         val definition = functionTable(function)
         val body = Obligations.body(definition, definition(Representation.Sir))
-        val owner = ownerName(premise.fold(function.displayName)(_._1), domain)
+        val owner = ownerName(premise.fold(function.displayName)(_._1), parameter)
+        require(
+          !declarations.keys.exists(name =>
+              name == s"$owner/ensures" || name.startsWith(s"$owner/ensures#")
+          ),
+          s"the guarantees of $owner are declared already: to state them over another set of " +
+              "values, name the set (LimitedData.named)"
+        )
         val assumed = premise.map((_, contract) => assumption(contract, body.parameters))
         // The variables, whether or not there is a clause: a parameter that does not fit is
         // refused at once.
@@ -556,7 +540,7 @@ final class Verifier private (results: Option[KeptResults]) {
             // Where the code states the clause: `Spec.ensures` is inline, and its call is at its
             // own definition ([[Clause.at]]).
             val line = clause.line
-            val where = s"the clause of ${function.displayName} at line $line"
+            val where = s"the clause of $owner at line $line"
             def cannot(reason: String): Unit = {
                 unsupported += s"$where $reason"
                 unstatable = unstatable.updated(clause, s"it is $reason")
@@ -618,17 +602,17 @@ final class Verifier private (results: Option[KeptResults]) {
         StatedGuarantees(each, unsupported.result(), together)
     }
 
-    /** The name the statements of a function or a contract are named after: with the set of values
-      * they are of, where it is said, as `spends[few_inputs]`.
+    /** The name the statements of a function or a contract are named after: with the name of the
+      * set of values they are of, where it has one ([[LimitedData.named]]), as
+      * `spends[few_inputs]`.
       */
-    private def ownerName(owner: String, domain: Option[String]): String =
-        domain.fold(owner)(of => s"$owner[$of]")
+    private def ownerName(owner: String, parameter: Option[LimitedData]): String =
+        parameter.flatMap(_.name).fold(owner)(of => s"$owner[$of]")
 
     private def declareObligations(
         caller: FunctionRef[?, ?],
         premise: Option[(String, FunctionContract[?, ?])],
-        parameter: Option[LimitedData],
-        domain: Option[String] = None
+        parameter: Option[LimitedData]
     ): CallObligations = {
         val definition = functionTable(caller)
         val specified = Obligations.body(definition, definition(Representation.Sir))
@@ -644,7 +628,16 @@ final class Verifier private (results: Option[KeptResults]) {
             .groupBy(_._2.function.name)
         val arities = contracts.map((name, declared) => name -> declared.head._2.variables.size)
         val parameters = variablesOf(caller, body, parameter)
-        val owner = ownerName(premise.fold(caller.displayName)(_._1), domain)
+        val owner = ownerName(premise.fold(caller.displayName)(_._1), parameter)
+        require(
+          !declarations.keys.exists(name =>
+              contracts.values.flatten.exists((declared, _) =>
+                  name.startsWith(s"$owner/${declared.name}#")
+              )
+          ),
+          s"the obligations of $owner are declared already: to state them over another set of " +
+              "values, name the set (LimitedData.named)"
+        )
         val assumed = premise.map((_, contract) => assumption(contract, body.parameters))
         val statements = List.newBuilder[Statement]
         val unsupported = List.newBuilder[String]
@@ -655,7 +648,9 @@ final class Verifier private (results: Option[KeptResults]) {
             val callee = contract.function
             val variables = contract.variables
             val line = Obligations.line(site)
-            val where = s"${caller.displayName} calls ${callee.displayName} at line $line"
+            val where =
+                s"${ownerName(caller.displayName, parameter)} calls ${callee.displayName} at " +
+                    s"line $line"
             def cut(atSite: SIR): Option[SIR] =
                 Obligations
                     .slice(
@@ -667,10 +662,11 @@ final class Verifier private (results: Option[KeptResults]) {
             def cannot(reason: String): Unit = {
                 unsupported += s"$where$reason"
                 val key = caller.name -> callee.name
-                unstatedCalls = unstatedCalls.updated(
-                  key,
-                  unstatedCalls.getOrElse(key, Nil) :+ s"$where$reason"
-                )
+                val written =
+                    s"${caller.displayName} calls ${callee.displayName} at line $line$reason"
+                val known = unstatedCalls.getOrElse(key, Nil)
+                if !known.contains(written) then
+                    unstatedCalls = unstatedCalls.updated(key, known :+ written)
             }
             (contract.expects, inLambda) match
                 case (_, true) => cannot(" inside a function value, which is not supported")
@@ -1120,7 +1116,12 @@ final class Verifier private (results: Option[KeptResults]) {
             .collect { case (name, clauses) if clauses(clause) => declarations(name) }
             .toList
             .sortBy(_.name)
-        candidates.iterator.flatMap(provedFor).nextOption() match
+        // A proof of every value first, then one of the fewest limits: the names, as of the sets of
+        // values, say nothing of which is stronger.
+        candidates
+            .flatMap(provedFor)
+            .sortBy(theorem => limitsOf(theorem.statement.prop).size)
+            .headOption match
             case Some(theorem) => checkedBy(List(theorem))
             case None =>
                 candidates.iterator
@@ -1190,9 +1191,25 @@ final class Verifier private (results: Option[KeptResults]) {
                 owner <- owners
                 reason <- unstatedCalls.getOrElse(caller.name -> owner.name, Nil)
             yield reason
-            val unproved = owed.filterNot(statement => provedFor(statement).nonEmpty)
-            if unstated.isEmpty && unstatableCalls.isEmpty && unproved.isEmpty then
-                checkedBy(owed.flatMap(provedFor))
+            // One call's obligation over several sets of values is one obligation, met by a proof of
+            // any of them, a proof of every value first, and open where one of them is.
+            val byCall = owed.groupBy(_.origin).values.toList.sortBy(_.map(_.name).min)
+            val proofs = byCall.map(statements =>
+                statements.flatMap(provedFor).sortBy(t => limitsOf(t.statement.prop).size)
+            )
+            val open = byCall.zip(proofs).collect {
+                case (statements, Nil) if statements.exists(openFor(_).nonEmpty) =>
+                    statements.iterator.flatMap(openFor).next()
+            }
+            val unproved = byCall
+                .zip(proofs)
+                .collect {
+                    case (statements, Nil) if !statements.exists(openFor(_).nonEmpty) => statements
+                }
+                .flatten
+            if unstated.isEmpty && unstatableCalls.isEmpty && unproved.isEmpty && open.isEmpty then
+                checkedBy(proofs.map(_.head))
+            else if unstated.isEmpty && unstatableCalls.isEmpty && unproved.isEmpty then open.head
             else
                 openClause(clause, owners).getOrElse {
                     val toState =

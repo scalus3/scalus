@@ -19,16 +19,38 @@ import java.nio.charset.StandardCharsets
   *   without them, where the parameter is a variable of its values
   * @param limits
   *   the limits the values meet, none for every value
+  * @param name
+  *   the name of the set of values, in the names of the statements made over it, as
+  *   `spends[few_inputs]/ensures#1` ([[named]]); none for the statements over every value, whose
+  *   names are the plain ones
   */
 final class LimitedData private[verify] (
     private[verify] val tp: SIRType,
     private[verify] val decoder: Option[scalus.compiler.sir.SIR],
-    private[verify] val limits: Limits
+    private[verify] val limits: Limits,
+    private[verify] val name: Option[String] = None
 ) {
     require(
       decoder.isDefined == limits.all.nonEmpty,
       "a parameter has a decoder where it has limits, and none where it has none"
     )
+
+    /** The same values, named `name` in the statements made over them: so that one function's
+      * statements can be made over several sets of values in one verifier, as a validator's of
+      * every script context, under the plain names, and of those of a few inputs, under
+      * `spends[few_inputs]/...`. A name is ASCII letters, digits and `_`, as it is part of the
+      * names of Lean modules.
+      */
+    def named(name: String): LimitedData = {
+        require(
+          name.nonEmpty && name.forall(c =>
+              (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                  c == '_'
+          ),
+          s"the name of a set of values is ASCII letters, digits and _, not '$name'"
+        )
+        new LimitedData(tp, decoder, limits, Some(name))
+    }
 }
 
 object LimitedData {
