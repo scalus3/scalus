@@ -792,7 +792,9 @@ Each step is one commit and one branch run; the owner says yes to each push. *Th
    sbt compiles each top-level statement of `build.sbt` as its own unit (about 50 `$Wrap`
    classes in `project/target/config-classes`), so a cold JVM runs the compiler about 50
    times. A warm load takes 4.5 s. sbt-welcome costs nothing measurable.
-   *Status, 2026-11-24:* the owner chose the meta-build cache. Built, branch run pending.
+   *Status, 2026-11-25:* built and landed (8b3dcc35a). The first master run saved one entry of
+   193 KB. On a rerun of CI-JVM every job hit it, and the sbt load (from `welcome to sbt` to
+   `resolving key references`) fell from 24 to 32 s to 4 s in each job.
 
    *Informative.* Each push job restores the compiled build definition before sbt starts. All
    jobs share one entry, because all CI shells run the same JDK and sbt. The key is the hash of
