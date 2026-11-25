@@ -1548,7 +1548,8 @@ context, and otherwise its test is `Unfinished`, which shows what the limits are
 | | `spend`'s guarantees, stated with `==>?:`: the beneficiary signed | every context of at most two inputs and one signatory, the inputs' values of one token, `limitedData` | 3300 | 149 s |
 | | something is withdrawn | every script context, `unlimitedData` | | 10 s |
 | | at least the unvested amount stays locked | of at most two inputs, as the first | | not finished (`Unfinished`) |
-| | the first and the third | every script context | | not finished (`Unfinished`) |
+| | the first | every script context, with the walks as unknowns (`CallsAsUnknowns`) | 983 | about 500 s |
+| | the third | every script context | | not finished (`Unfinished`) |
 | | had `linearVesting` expected `initialAmount >= 0`, its call would owe it: refuted; proved under the validator's own contract | of at most two inputs, as the first guarantee | 3000 | 289 s; 310 s |
 | | the same two | every script context | | not finished (`Unfinished`) |
 | | after the end, everything locked can be withdrawn | every context of at most two inputs and two outputs | | not finished (`Unfinished`) |

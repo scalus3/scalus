@@ -7,6 +7,14 @@
       "PlutusCore": "71872c19a90b",
       "ScalusProofs": "a20652afcd3a2b35",
       "toolchain": "leanprover/lean4:v4.24.0"
+    },
+    "uplc-blaster-unknowns": {
+      "Blaster": "a06919767488",
+      "CardanoLedgerApi": "3dd048e3eb86",
+      "LinearVesting": "cfdfdce352d08b72",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "a20652afcd3a2b35",
+      "toolchain": "leanprover/lean4:v4.24.0"
     }
   },
   "results": {
@@ -214,6 +222,21 @@
       },
       "tests": [
         "nothing is vested before the start"
+      ]
+    },
+    "vesting.spend.beneficiary_signed": {
+      "tactic": "uplc-blaster-unknowns",
+      "result": "proved",
+      "statement": "c472ec8a44198d72",
+      "programs": [
+        "951c9caed0f1019c"
+      ],
+      "notes": {
+        "budget": "983",
+        "kind": "BlasterOfUnknowns"
+      },
+      "tests": [
+        "spend's first guarantee holds of every script context, with calls as unknowns"
       ]
     },
     "vesting.spend.beneficiary_signed_limited": {
