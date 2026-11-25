@@ -76,9 +76,11 @@ class HtlcProofsTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("a refund is rejected unless its validity range starts at the timeout or later") {
-        check(refundRejectedBeforeTheTimeout, budget = 4000)
-        // at the timeout itself, a refund is accepted
-        check(refundRejectedAtTheTimeout, budget = 4000)
+        val beforeTheTimeout = verify(refundRejectedBeforeTheTimeout, budget = 4000)
+        assert(beforeTheTimeout.meets(refundRejectedBeforeTheTimeout))
+        // at the timeout itself, a refund is accepted: the negative control is refuted
+        val atTheTimeout = verify(refundRejectedAtTheTimeout, budget = 4000)
+        assert(atTheTimeout.meets(refundRejectedAtTheTimeout))
     }
 }
 
@@ -154,7 +156,10 @@ be checked fails the run. Without a test name, it runs every suite of proofs in 
 [sbt Commands](/docs/formal-verification/sbt-commands).
 
 `budget = 4000` is the number of steps Lean's machine may run each program of the statement.
-`check(statement)` without a budget searches for one, and keeps the one it finds with the result.
+`verify(statement)` without a budget searches for one, and keeps the one it finds with the result.
+It returns the `VerificationResult`, and the test asserts what it expects of it:
+`result.meets(statement)` is a proof of a statement, or a refutation of a negative control
+declared with `refute`. `explain(statement, result)` says what came, for the assert's message.
 [Tuning Your Proof](/docs/formal-verification/tuning) explains the budget, and what to do when a check
 does not finish.
 

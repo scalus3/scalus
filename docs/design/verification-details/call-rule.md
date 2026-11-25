@@ -45,15 +45,15 @@ Where the rule is sound:
   (`scalus-verification/src/main/scala/scalus/verify/Prop.scala:514`, `:569`), and those a
   function states in its body with `Spec`, read by `FunctionContract.inSource` (`Prop.scala:197`).
 - The caller's side: `Verifier.obligations`
-  (`scalus-verification/src/main/scala/scalus/verify/Verifier.scala:393-406`, `Obligations.scala`).
+  (`scalus-verification/src/main/scala/scalus/verify/Verifier.scala:410-429`, `Obligations.scala`).
 - The unknown, its key and the trivial contract: `CallsAsUnknowns`
   (`scalus-verification/src/main/scala/scalus/verify/uplcblaster/CallsAsUnknowns.scala`; what is an
   unknown, `go` `:597`, `call` `:626`, `walk` `:647`; the key, `keyOf` `:808`).
 - A postcondition given by hand as a premise: the probe's lemma on `Value`,
   `lovelaceOfTheRestFollows`
-  (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingWalksProbeTest.scala:264-265`),
-  with which #4 of a copy of the vesting validator is proved (`:96-113`), and without which it is
-  refuted (`:118-135`).
+  (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingWalksProbeTest.scala:270-271`),
+  with which #4 of a copy of the vesting validator is proved (`:98-116`), and without which it is
+  refuted (`:121-139`).
 - A mapping proved by hand, the strongest `ensures`: the compiled `isSignedBy` returns
   CardanoLedgerApi's `txSignedBy pk tx`
   (`scalus-verification/src/main/lean/ScalusProofs/Mappings/IsSignedBy.lean:189`), with runs
@@ -73,8 +73,8 @@ library functions are in `scalus-core/shared/src/main/scala/scalus/cardano/oncha
 | 4 | it returns the input whose `outRef` is the given one, or fails where there is none; it ends | `TxInfo.findInputOrFail` (`v3/Contexts.scala:986`, its loop `:994-998`) | #3, #4: `lockedBy` (`VestingValidator.scala:167-168`) | not started |
 | 5 | it returns the one element of which the predicate holds, or fails; it ends | `List.findUniqueOrFail`, `List.findUniqueOrElse` (`prelude/List.scala:1119`, `:1139`) | the validator's check of one vesting input (`VestingValidator.scala:82`), #4's continuing output (`v3/Contexts.scala:1046`) | not started |
 | 6 | each ends | `TxInfo.findInputsByCredential`, `findOutputsByCredential` (`v3/Contexts.scala:1019`, `:1029`), the folds over values (`VestingValidator.scala:110-111`) | the rejecting form of #4, which runs the validator past them | not started |
-| 7 | vesting #4 of the validator itself, of every context, with the contract of 2 | `vesting.spend.state_is_carried` (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:408`), clause `VestingValidator.scala:64-66`, `carriesTheRest` `:174-184` | the step of the vesting thread ([several transactions](multi-transaction.md#vesting)) | not finished by Lean as written (`VestingVerificationTest.scala:413`) |
-| 8 | #1 and #3 again under the rule, with no contract used | `VestingVerificationTest.scala:344`, `:383` | that the move of `CallsAsUnknowns` keeps them | proved with `CallsAsUnknowns` |
+| 7 | vesting #4 of the validator itself, of every context, with the contract of 2 | `vesting.spend.state_is_carried` (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:420`), clause `VestingValidator.scala:64-66`, `carriesTheRest` `:174-184` | the step of the vesting thread ([several transactions](multi-transaction.md#vesting)) | not finished by Lean as written (`VestingVerificationTest.scala:425`) |
+| 8 | #1 and #3 again under the rule, with no contract used | `VestingVerificationTest.scala:353`, `:394` | that the move of `CallsAsUnknowns` keeps them | proved with `CallsAsUnknowns` |
 
 2 is a lemma about a walk over a map of any size: proved by hand, by induction, as 3 was, or by
 `blaster-uplc` with the walks of `Value`'s arithmetic as unknowns where that is enough. 4 to 6 are

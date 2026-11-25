@@ -51,12 +51,15 @@ class BigIntVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     test("proof: doubling the result is between the magnitude and magnitude + 1") {
         val result = verify(doubledIsNearTheMagnitude, budget = 160)
-        assert(result.isProven, describe(result))
+        assert(result.meets(doubledIsNearTheMagnitude), explain(doubledIsNearTheMagnitude, result))
     }
 
     test("counterexample: doubling the result does not always recover a nonnegative input") {
         val result = verify(doublingRecoversANonnegativeInput, budget = 160)
-        assert(result.isRefuted, describe(result))
+        assert(
+          result.meets(doublingRecoversANonnegativeInput),
+          explain(doublingRecoversANonnegativeInput, result)
+        )
         val counterexample = counterexampleOf(result)
         // The solver chooses the value; check its meaning, rather than expecting a fixed one.
         val x = integer(counterexample.values.head)
@@ -68,7 +71,7 @@ class BigIntVerificationTest extends AnyFunSuite with LeanProofsSuite {
     test("no solutions: no integer input produces a negative result") {
         // Prove the universal statement, equivalently: not exists x. half(x) < 0.
         val result = verify(neverNegative, budget = 100)
-        assert(result.isProven, describe(result))
+        assert(result.meets(neverNegative), explain(neverNegative, result))
     }
 
     test("inconclusive: too few evaluation steps cannot establish the same true property") {
@@ -76,7 +79,7 @@ class BigIntVerificationTest extends AnyFunSuite with LeanProofsSuite {
           neverNegativeInFewSteps,
           UplcBlaster(Budget.LeanSteps(3), lean, 30.seconds)
         )
-        assert(result.isInconclusive, describe(result))
+        assert(result.isInconclusive, explain(neverNegativeInFewSteps, result))
         val reason = result.why.getOrElse("")
         // A candidate from the bounded model passes CEK replay: it is not a real counterexample.
         assert(reason.contains("spurious"), reason)

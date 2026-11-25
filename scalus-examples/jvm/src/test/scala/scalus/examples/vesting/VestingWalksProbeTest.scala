@@ -65,7 +65,10 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
             )
           )
         )
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(unvestedStaysLockedGivenWalks),
+          explain(unvestedStaysLockedGivenWalks, result)
+        )
     }
 
     /** The negative control: a withdrawal leaves what was locked whole. */
@@ -86,7 +89,10 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
             )
           )
         )
-        assert(result.isRefuted, describe(result))
+        assert(
+          result.meets(nothingIsWithdrawnGivenWalks),
+          explain(nothingIsWithdrawnGivenWalks, result)
+        )
     }
 
     // spend: Spec.ensures(amountOf(redeemer) === lockedBy(txInfo, txOutRef) ||
@@ -112,7 +118,7 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
             )
           )
         )
-        assert(result.isProven, describe(result))
+        assert(result.meets(stateIsCarriedGivenWalks), explain(stateIsCarriedGivenWalks, result))
     }
 
     /** The control of the lemma: without it, the value the validator checks says nothing of the
@@ -135,7 +141,10 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
             )
           )
         )
-        assert(result.isRefuted, describe(result))
+        assert(
+          result.meets(stateIsCarriedWithoutTheLemma),
+          explain(stateIsCarriedWithoutTheLemma, result)
+        )
     }
 
     /** The control of the datum check: without it, a withdrawal leaves the rest under another
@@ -159,7 +168,10 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
             )
           )
         )
-        assert(result.isRefuted, describe(result))
+        assert(
+          result.meets(stateIsCarriedWithoutDatumCheck),
+          explain(stateIsCarriedWithoutDatumCheck, result)
+        )
     }
 
     /** Says how `statement` was decided: the budget, the time, and a refutation's values. */

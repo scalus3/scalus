@@ -112,7 +112,10 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     test("an output without a datum cannot be spent") {
         val result = verify(outputWithoutADatumIsRejected, rejectionBudget)
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(outputWithoutADatumIsRejected),
+          explain(outputWithoutADatumIsRejected, result)
+        )
     }
 
     private val onlySpendingIsValidated = verifier.statement(
@@ -124,7 +127,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     test("the script validates nothing but spending") {
         val result = verify(onlySpendingIsValidated, rejectionBudget)
-        assert(result.isProven, describe(result))
+        assert(result.meets(onlySpendingIsValidated), explain(onlySpendingIsValidated, result))
     }
 
     private val redeemerOfNeitherActionIsRejected = verifier.statement(
@@ -142,7 +145,10 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // `Reveal` the one of tag 1. For a redeemer that is not a constructor the premise's test
         // fails, so its negation holds, and the validator fails as well.
         val result = verify(redeemerOfNeitherActionIsRejected, rejectionBudget)
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(redeemerOfNeitherActionIsRejected),
+          explain(redeemerOfNeitherActionIsRejected, result)
+        )
     }
 
     // A negative control, declared with `refute`, is of every script context, valid or not: that
@@ -173,8 +179,8 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
           statement,
           UplcBlaster(Budget.LeanSteps(budget), lean, unfinishedTime)
         )
-        assert(result.isInconclusive, describe(result))
-        assert(result.why.exists(_.contains("did not finish")), describe(result))
+        assert(result.isInconclusive, explain(statement, result))
+        assert(result.why.exists(_.contains("did not finish")), explain(result))
     }
 
     // A refund
@@ -216,13 +222,22 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // Of every context of two signatures at most: one that nobody signed, one that another key
         // signed, and one that two other keys signed, whenever.
         val unlessTheCommitterSigns = verify(refundRejectedUnlessTheCommitterSignsLimited, budget)
-        assert(unlessTheCommitterSigns.isProven, describe(unlessTheCommitterSigns))
+        assert(
+          unlessTheCommitterSigns.meets(refundRejectedUnlessTheCommitterSignsLimited),
+          explain(refundRejectedUnlessTheCommitterSignsLimited, unlessTheCommitterSigns)
+        )
         // negative controls: with any signature, the solver finds a refund that is accepted, of
         // these contexts and of every one
         val whoeverSignsLimited = verify(refundRejectedWhoeverSignsLimited, budget)
-        assert(whoeverSignsLimited.isRefuted, describe(whoeverSignsLimited))
+        assert(
+          whoeverSignsLimited.meets(refundRejectedWhoeverSignsLimited),
+          explain(refundRejectedWhoeverSignsLimited, whoeverSignsLimited)
+        )
         val whoeverSigns = verify(refundRejectedWhoeverSigns, budget)
-        assert(whoeverSigns.isRefuted, describe(whoeverSigns))
+        assert(
+          whoeverSigns.meets(refundRejectedWhoeverSigns),
+          explain(refundRejectedWhoeverSigns, whoeverSigns)
+        )
     }
 
     private val refundRejectedBeforeTheTimeout = verifier.statement(
@@ -244,10 +259,16 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // committer too waits for the timeout. A range that starts at no time, at an infinity,
         // says nothing of when the transaction is not valid yet.
         val beforeTheTimeout = verify(refundRejectedBeforeTheTimeout, budget)
-        assert(beforeTheTimeout.isProven, describe(beforeTheTimeout))
+        assert(
+          beforeTheTimeout.meets(refundRejectedBeforeTheTimeout),
+          explain(refundRejectedBeforeTheTimeout, beforeTheTimeout)
+        )
         // negative control: at the timeout itself a refund is accepted
         val atTheTimeout = verify(refundRejectedAtTheTimeout, budget)
-        assert(atTheTimeout.isRefuted, describe(atTheTimeout))
+        assert(
+          atTheTimeout.meets(refundRejectedAtTheTimeout),
+          explain(refundRejectedAtTheTimeout, atTheTimeout)
+        )
     }
 
     private val committerRefundsFromTheTimeout = verifier.statement(
@@ -294,12 +315,21 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // transaction has: an upper bound of its validity range, and another signature before or
         // after the committer's.
         val fromTheTimeout = verify(committerRefundsFromTheTimeoutLimited, budget)
-        assert(fromTheTimeout.isProven, describe(fromTheTimeout))
+        assert(
+          fromTheTimeout.meets(committerRefundsFromTheTimeoutLimited),
+          explain(committerRefundsFromTheTimeoutLimited, fromTheTimeout)
+        )
         // negative controls: not at every time, of these contexts and of every one
         val atAnyTimeLimited = verify(committerRefundsAtAnyTimeLimited, budget)
-        assert(atAnyTimeLimited.isRefuted, describe(atAnyTimeLimited))
+        assert(
+          atAnyTimeLimited.meets(committerRefundsAtAnyTimeLimited),
+          explain(committerRefundsAtAnyTimeLimited, atAnyTimeLimited)
+        )
         val atAnyTime = verify(committerRefundsAtAnyTime, budget)
-        assert(atAnyTime.isRefuted, describe(atAnyTime))
+        assert(
+          atAnyTime.meets(committerRefundsAtAnyTime),
+          explain(committerRefundsAtAnyTime, atAnyTime)
+        )
     }
 
     // A reveal
@@ -331,7 +361,10 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // Of every context of two signatures at most, whatever is revealed, and whenever. That a
         // reveal the receiver signed is accepted, the samples show.
         val result = verify(revealRejectedUnlessTheReceiverSignsLimited, budget)
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(revealRejectedUnlessTheReceiverSignsLimited),
+          explain(revealRejectedUnlessTheReceiverSignsLimited, result)
+        )
     }
 
     private val revealRejectedAfterTheTimeout = verifier.statement(
@@ -347,7 +380,10 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // the time first. A range that ends at no time, at an infinity, could be included after
         // the timeout. That one which ends at the timeout is accepted, the samples show.
         val result = verify(revealRejectedAfterTheTimeout, budget)
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(revealRejectedAfterTheTimeout),
+          explain(revealRejectedAfterTheTimeout, result)
+        )
     }
 
     private val revealRejectedWithoutAPreimage = verifier.statement(
@@ -378,7 +414,10 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     test("a reveal of what is not a preimage of the image is rejected, of two signatures at most") {
         // Whoever signs it, and whenever.
         val result = verify(revealRejectedWithoutAPreimageLimited, budget)
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(revealRejectedWithoutAPreimageLimited),
+          explain(revealRejectedWithoutAPreimageLimited, result)
+        )
     }
 
     private val noRevealIsAccepted = verifier.statement(
@@ -400,7 +439,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
           noRevealIsAccepted,
           UplcBlaster(Budget.LeanSteps(budget), lean, 2.minutes)
         )
-        assert(result.isInconclusive, describe(result))
+        assert(result.isInconclusive, explain(noRevealIsAccepted, result))
         val spurious = result.why.getOrElse("")
         assert(spurious.contains("is spurious"), spurious)
         assert(spurious.contains("The programs apply sha3_256"), spurious)
@@ -439,7 +478,10 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // The receiver who knows the secret is paid, whatever else the transaction has: a lower
         // bound of its validity range, and another signature before or after the receiver's.
         val result = verify(receiverRevealsUpToTheTimeoutLimited, budget)
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(receiverRevealsUpToTheTimeoutLimited),
+          explain(receiverRevealsUpToTheTimeoutLimited, result)
+        )
     }
 
     // A refund and a reveal, and the bounds
@@ -472,7 +514,10 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // reveal that ends at the timeout and a refund that starts at it are both accepted, the
         // samples show. The validator checks the time before it searches the signatures.
         val result = verify(revealEndsBeforeRefundBegins, budget)
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(revealEndsBeforeRefundBegins),
+          explain(revealEndsBeforeRefundBegins, result)
+        )
     }
 
     private val closureOfTheLowerBoundDoesNotMatter = verifier.statement(
@@ -511,8 +556,8 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
                   statement,
                   UplcBlaster(Budget.LeanSteps(budget), lean, unfinishedTime)
                 )
-                assert(result.isInconclusive, describe(result))
-                assert(result.why.exists(_.contains("did not finish")), describe(result))
+                assert(result.isInconclusive, explain(statement, result))
+                assert(result.why.exists(_.contains("did not finish")), explain(result))
         }
     }
 
@@ -545,9 +590,15 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // refund's lower bound is inclusive, and a reveal's upper one exclusive, is how the ledger
         // gives them, and what the comparisons with the timeout rely on.
         val lowerBound = verify(closureOfTheLowerBoundDoesNotMatterLimited, budget)
-        assert(lowerBound.isProven, describe(lowerBound))
+        assert(
+          lowerBound.meets(closureOfTheLowerBoundDoesNotMatterLimited),
+          explain(closureOfTheLowerBoundDoesNotMatterLimited, lowerBound)
+        )
         val upperBound = verify(closureOfTheUpperBoundDoesNotMatterLimited, budget)
-        assert(upperBound.isProven, describe(upperBound))
+        assert(
+          upperBound.meets(closureOfTheUpperBoundDoesNotMatterLimited),
+          explain(closureOfTheUpperBoundDoesNotMatterLimited, upperBound)
+        )
     }
 
     // Samples
@@ -670,7 +721,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // it are both accepted.
         def kind(statement: Statement): ProofKind = {
             val result = verify(statement, budget)
-            assert(result.isProven, describe(result))
+            assert(result.meets(statement), explain(statement, result))
             artifactOf(result).kind
         }
         assert(kind(sampleRevealIsAccepted) == ProofKind.LeanNative)
@@ -738,7 +789,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // windows overlap, each of a transaction the ledger accepts.
         def kind(statement: Statement): ProofKind = {
             val result = verify(statement, budget)
-            assert(result.isProven, describe(result))
+            assert(result.meets(statement), explain(statement, result))
             artifactOf(result).kind
         }
         assert(kind(validSpendWithoutADatum) == ProofKind.LeanNative)

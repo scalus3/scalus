@@ -283,67 +283,82 @@ class PreludeProofsTest extends AnyFunSuite with LeanProofsSuite {
         test(s"the samples of ${sample.function.name} hold on the Lean model") {
             // A closed statement: Lean decides it by running the programs.
             val result = verify(sample.statement, sample.budget)
-            assert(result.isProven, describe(result))
+            assert(result.meets(sample.statement), explain(sample.statement, result))
             assert(artifactOf(result).kind == ProofKind.LeanNative)
         }
     }
 
     test("abs is a non-negative magnitude") {
         val nonNegative = verify(absIsNonNegative, 100)
-        assert(nonNegative.isProven, describe(nonNegative))
+        assert(nonNegative.meets(absIsNonNegative), explain(absIsNonNegative, nonNegative))
         val argumentOrNegation = verify(absIsTheArgumentOrItsNegation, 100)
-        assert(argumentOrNegation.isProven, describe(argumentOrNegation))
+        assert(
+          argumentOrNegation.meets(absIsTheArgumentOrItsNegation),
+          explain(absIsTheArgumentOrItsNegation, argumentOrNegation)
+        )
         val positive = verify(absIsPositive, 100)
-        assert(positive.isRefuted, describe(positive))
+        assert(positive.meets(absIsPositive), explain(absIsPositive, positive))
     }
 
     test("min is a lower bound and one of its arguments") {
         val lowerBound = verify(minIsALowerBound, 100)
-        assert(lowerBound.isProven, describe(lowerBound))
+        assert(lowerBound.meets(minIsALowerBound), explain(minIsALowerBound, lowerBound))
         val anArgument = verify(minIsAnArgument, 100)
-        assert(anArgument.isProven, describe(anArgument))
+        assert(anArgument.meets(minIsAnArgument), explain(minIsAnArgument, anArgument))
         val upperBound = verify(minIsAnUpperBound, 100)
-        assert(upperBound.isRefuted, describe(upperBound))
+        assert(upperBound.meets(minIsAnUpperBound), explain(minIsAnUpperBound, upperBound))
     }
 
     test("max is an upper bound, and min + max is the sum") {
         val upperBound = verify(maxIsAnUpperBound, 100)
-        assert(upperBound.isProven, describe(upperBound))
+        assert(upperBound.meets(maxIsAnUpperBound), explain(maxIsAnUpperBound, upperBound))
         val sum = verify(minPlusMaxIsTheSum, 120)
-        assert(sum.isProven, describe(sum))
+        assert(sum.meets(minPlusMaxIsTheSum), explain(minPlusMaxIsTheSum, sum))
         val atMostTheFirst = verify(maxIsAtMostTheFirst, 100)
-        assert(atMostTheFirst.isRefuted, describe(atMostTheFirst))
+        assert(
+          atMostTheFirst.meets(maxIsAtMostTheFirst),
+          explain(maxIsAtMostTheFirst, atMostTheFirst)
+        )
     }
 
     test("clamp stays in range, and keeps a value already in range") {
         val inRange = verify(clampStaysInRange, 120)
-        assert(inRange.isProven, describe(inRange))
+        assert(inRange.meets(clampStaysInRange), explain(clampStaysInRange, inRange))
         val keepsAValue = verify(clampKeepsAValueInRange, 120)
-        assert(keepsAValue.isProven, describe(keepsAValue))
+        assert(
+          keepsAValue.meets(clampKeepsAValueInRange),
+          explain(clampKeepsAValueInRange, keepsAValue)
+        )
         val inAnyRange = verify(clampStaysInAnyRange, 120)
-        assert(inAnyRange.isRefuted, describe(inAnyRange))
+        assert(inAnyRange.meets(clampStaysInAnyRange), explain(clampStaysInAnyRange, inAnyRange))
     }
 
     test("exp2 of a negative exponent is zero") {
         val zero = verify(exp2OfANegativeExponentIsZero, 60)
-        assert(zero.isProven, describe(zero))
+        assert(
+          zero.meets(exp2OfANegativeExponentIsZero),
+          explain(exp2OfANegativeExponentIsZero, zero)
+        )
         val one = verify(exp2OfANegativeExponentIsOne, 60)
-        assert(one.isRefuted, describe(one))
+        assert(one.meets(exp2OfANegativeExponentIsOne), explain(exp2OfANegativeExponentIsOne, one))
     }
 
     test("an Option match doubles a positive value and defaults otherwise") {
         val doubled = verify(aPositiveValueIsDoubled, 160)
-        assert(doubled.isProven, describe(doubled))
+        assert(doubled.meets(aPositiveValueIsDoubled), explain(aPositiveValueIsDoubled, doubled))
         val theDefault = verify(otherwiseTheDefault, 160)
-        assert(theDefault.isProven, describe(theDefault))
+        assert(theDefault.meets(otherwiseTheDefault), explain(otherwiseTheDefault, theDefault))
         val everyValueDoubled = verify(everyValueIsDoubled, 160)
-        assert(everyValueDoubled.isRefuted, describe(everyValueDoubled))
+        assert(
+          everyValueDoubled.meets(everyValueIsDoubled),
+          explain(everyValueIsDoubled, everyValueDoubled)
+        )
     }
 
     test("a fold over a two-element list is the sum") {
         val sum = verify(theFoldIsTheSum, 320)
-        assert(sum.isProven, describe(sum))
+        assert(sum.meets(theFoldIsTheSum), explain(theFoldIsTheSum, sum))
         val product = verify(theFoldIsTheProduct, 320)
-        assert(product.isRefuted, describe(product))
+        assert(product.meets(theFoldIsTheProduct), explain(theFoldIsTheProduct, product))
     }
 }

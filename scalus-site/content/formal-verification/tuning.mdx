@@ -27,7 +27,7 @@ Blaster reasons about that bounded run.
 
 ### Let Scalus Find It
 
-`check(statement)`, without a budget, searches for one (`Budget.Auto`). It starts at 100 steps.
+`verify(statement)`, without a budget, searches for one (`Budget.Auto`). It starts at 100 steps.
 Where Lean's counterexample is spurious, Lean's machine counts what each program does on it, and
 the search goes on at the least budget at which the statement holds there. For a statement that
 the vesting validator rejects an early withdrawal, the search went 100, 262, 649, 694, 1315, 1573,
@@ -39,7 +39,7 @@ budget, so a statement still decided there takes one check.
 
 ### Give It Yourself
 
-`check(statement, budget = 4000)` checks at a fixed budget (`Budget.LeanSteps(4000)`). Use it when
+`verify(statement, budget = 4000)` checks at a fixed budget (`Budget.LeanSteps(4000)`). Use it when
 you know the cost of the statement, or to save the search on a run without kept results.
 
 - **Stay close above the worst path.** Proof cost grows faster than the budget. For a `gcd`
@@ -198,7 +198,7 @@ reaches it is given up, and is `Inconclusive`. The reason says where the check w
 To give a check another limit, pass the tactic yourself:
 
 ```scala
-check(VerificationRequest(statement, UplcBlaster(Budget.Auto, lean, 20.minutes)))
+verify(VerificationRequest(statement, UplcBlaster(Budget.Auto, lean, 20.minutes)))
 ```
 
 - With `Budget.Auto`, the limit is that of the whole search. `withAttemptTimeout(t)` adds one for

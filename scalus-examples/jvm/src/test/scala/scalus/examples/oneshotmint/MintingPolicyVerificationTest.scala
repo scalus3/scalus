@@ -148,8 +148,9 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
         assert(mintGuarantees.unsupported.isEmpty, mintGuarantees.unsupported)
         assert(mintGuarantees.statements.size == 2)
         // They are proved together, so that the tactic runs the policy once for both.
-        val result = verify(mintGuarantees.together.getOrElse(fail("mint states no guarantee")))
-        assert(result.isProven, describe(result))
+        val guarantees = mintGuarantees.together.getOrElse(fail("mint states no guarantee"))
+        val result = verify(guarantees)
+        assert(result.meets(guarantees), explain(guarantees, result))
     }
 
     private val seedMintsTheTokens = verifier.statement(
@@ -170,10 +171,10 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
     test("the transaction that spends the seed mints the tokens") {
         // Wherever the seed is among its inputs, and whether the mint has another policy.
         val mints = verify(seedMintsTheTokens)
-        assert(mints.isProven, describe(mints))
+        assert(mints.meets(seedMintsTheTokens), explain(seedMintsTheTokens, mints))
         // negative control: in a quantity other than the tokens', it is rejected
         val anyQuantity = verify(seedMintsAnyQuantity)
-        assert(anyQuantity.isRefuted, describe(anyQuantity))
+        assert(anyQuantity.meets(seedMintsAnyQuantity), explain(seedMintsAnyQuantity, anyQuantity))
     }
 
     private val burnsWithoutTheSeed = verifier.statement(
@@ -191,10 +192,13 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
     test("a transaction that does not spend the seed burns the tokens") {
         // The tokens are not stuck once minted.
         val burns = verify(burnsWithoutTheSeed)
-        assert(burns.isProven, describe(burns))
+        assert(burns.meets(burnsWithoutTheSeed), explain(burnsWithoutTheSeed, burns))
         // negative control: so the policy accepts a transaction that does not spend the seed
         val onlyWithTheSeed = verify(acceptedOnlyWithTheSeed)
-        assert(onlyWithTheSeed.isRefuted, describe(onlyWithTheSeed))
+        assert(
+          onlyWithTheSeed.meets(acceptedOnlyWithTheSeed),
+          explain(acceptedOnlyWithTheSeed, onlyWithTheSeed)
+        )
     }
 
     // The deployed script, on the context the node gives it
@@ -239,7 +243,7 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
           deployedOnlyTheSeedMints,
           UplcBlaster(Budget.Within(2000), lean, 60.seconds)
         )
-        assert(result.isInconclusive, describe(result))
+        assert(result.isInconclusive, explain(deployedOnlyTheSeedMints, result))
         val reason = result.why.getOrElse("")
         assert(reason.contains("did not finish"), reason)
     }
@@ -260,7 +264,10 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // the proof is of the statement: a theorem. The other lists of the transaction are not
         // limited, and the script does not read them.
         val result = verify(deployedOnlyTheSeedMintsLimited, 2500)
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(deployedOnlyTheSeedMintsLimited),
+          explain(deployedOnlyTheSeedMintsLimited, result)
+        )
     }
 
     /** Only the seed mints, as the script reads the context, of every script context. */
@@ -280,7 +287,7 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
           deployedOnlyTheSeedMintsAsRead,
           UplcBlaster(Budget.Within(2000), lean, 60.seconds)
         )
-        assert(result.isInconclusive, describe(result))
+        assert(result.isInconclusive, explain(deployedOnlyTheSeedMintsAsRead, result))
         val reason = result.why.getOrElse("")
         assert(reason.contains("did not finish"), reason)
     }
@@ -311,7 +318,10 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // steps the statement with `==>:` was proved at, the runs are cut, and at 5000 it is proved
         // in 75 s.
         val result = verify(deployedOnlyTheSeedMintsAsReadLimited, 5000)
-        assert(result.isProven, describe(result))
+        assert(
+          result.meets(deployedOnlyTheSeedMintsAsReadLimited),
+          explain(deployedOnlyTheSeedMintsAsReadLimited, result)
+        )
     }
 }
 

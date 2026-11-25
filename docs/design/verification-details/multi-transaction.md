@@ -389,10 +389,14 @@ of Scalus's Lean library; adding them makes every kept result stale once.
   (`scalus-verification/src/main/lean/ScalusProofs/Thread.lean`), `Steps`, `Thread`, and
   `invariant` and `property` by induction over the thread. Their axioms are Lean's own.
 - The vesting theorem, of every thread, from guarantees #3 and #4 as hypotheses:
-  `LinearVesting.Proofs.Thread.withdrawn_at_most_vested`, and `withdrawn_at_most_vested_later`,
-  at any later time with the schedule's not decreasing
+  `LinearVesting.Proofs.Thread.withdrawn_at_most_vested`, from a deposit of `initialAmount C0`
+  under `C0`, the amounts withdrawn up to each withdrawal are at most what has vested at its time;
+  `withdrawn_at_most_vested_later`, at any later time, for an amount that is not negative, with
+  the schedule's not decreasing
   (`scalus-examples/jvm/src/test/lean/LinearVesting/LinearVesting/Proofs/Thread.lean`). A
-  withdrawal of everything ends the thread. #3 is proved of the validator, #4 is open, and that
+  withdrawal of everything ends the thread. #3 is proved of the validator, #4 is open. A
+  hypothesis is its guarantee read with `==>:`, where Scalus proves the rejecting form `==>?:`:
+  that the clause returns wherever the validator accepts is tested on samples, not proved. That
   each hypothesis is the statement Scalus proved is step 4.
 
 ## Steps
@@ -403,6 +407,8 @@ of Scalus's Lean library; adding them makes every kept result stale once.
 3. **The trace lemma** in Scalus's Lean library, `ScalusProofs.Thread`. Built (2026-11-25).
 4. **The lemma from a statement.** A statement is written into the workspace in the form of its
    lowering, the rejecting form among them. A lemma for each form gives `step` from the statement.
+   The rejecting form, `accepts ==>?: claim`, gives `accepts ⇒ claim` where the claim returns: the
+   lemma needs too that it returns wherever the validator accepts, a statement of its own.
 5. **The vesting theorem**: in every thread from a deposit of `initialAmount` under `C0`, what has
    been withdrawn is at most what has vested, at every step. Written by hand, checked by `lean-manual`.
    Its proof from the guarantees as hypotheses is built (2026-11-25); with step 4 it rests on the

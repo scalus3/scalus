@@ -41,7 +41,8 @@ class HalfProofsTest extends AnyFunSuite with LeanProofsSuite {
         verifier.statement("half.never_negative", forAll[BigInt](x => half(x) >= 0))
 
     test("no integer input gives a negative result") {
-        check(neverNegative, budget = 100) // proved for every BigInt
+        val result = verify(neverNegative, budget = 100)
+        assert(result.meets(neverNegative), explain(neverNegative, result)) // proved for every BigInt
     }
 }
 ```

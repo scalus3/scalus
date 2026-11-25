@@ -35,7 +35,7 @@ object Unfinished extends Tag("scalus.verify.uplcblaster.Unfinished")
   *
   *     test("x + 0 is x") {
   *         val result = verify(plusZero, 40)
-  *         assert(result.isProven, describe(result))
+  *         assert(result.meets(plusZero), explain(plusZero, result))
   *     }
   * }
   * }}}

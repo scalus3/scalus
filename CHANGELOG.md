@@ -15,6 +15,10 @@
 - `scalus-verification` (experimental): `p ==> q` is now `p ==>: q`, and `p implies q` is now
   `p implies_: q`. Both new operators are right-associative, and `implies_:` binds loosest, so
   `p && q implies_: r` needs no parentheses.
+- `scalus-verification` (experimental): `LeanProofs.check` is `verify`, which returns the result
+  and asserts nothing: assert `result.meets(statement)`, with `explain(statement, result)` for the
+  message. `checkByHand` is `verifyByHand`; `inconclusive` and `failure` of a statement are
+  `verifyWithoutKeeping`.
 
 ### Added
 

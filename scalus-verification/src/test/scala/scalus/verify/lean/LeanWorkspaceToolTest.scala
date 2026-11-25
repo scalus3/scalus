@@ -370,7 +370,7 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
                   forAll[BigInt](x => x + BigInt(0) == x)
                 )
                 val result = proofs.verify(held, 40)
-                assert(result.isProven, proofs.describe(result))
+                assert(result.isProven, proofs.explain(result))
                 assert(proofs.writeStatement(held, result) == "Created.Generated.held_to_the_code")
                 val (_, module) = LeanWorkspace.generated(workspace, "held_to_the_code")
                 // The programs are beside it; their texts are not committed.
@@ -386,7 +386,7 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
                 )
                 // Checked again, the module is of the code.
                 val again = proofs.verify(held, 40)
-                assert(again.isProven, proofs.describe(again))
+                assert(again.isProven, proofs.explain(again))
                 // A module of other programs than the code's fails the statement's check.
                 Files.writeString(
                   module,

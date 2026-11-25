@@ -24,7 +24,7 @@ import scala.util.Using
   * val proofs = LeanProofs(LeanProofs.projectWorkspace, Some(keptFile))
   * val zero = proofs.verifier.statement("plus_zero", forAll[BigInt](x => x + BigInt(0) == x))
   * val result = proofs.verify(zero, 40)
-  * assert(result.isProven, proofs.describe(result))
+  * assert(result.meets(zero), proofs.explain(zero, result))
   * }}}
   *
   * The anonymous `proven`, `refuted` and `inconclusive` state a statement without a name, in a
@@ -32,8 +32,10 @@ import scala.util.Using
   * which look into its results. Proofs about code declare named statements.
   *
   * It asks for no test framework, and says what happened in two ways.
-  *   - An expectation that does not hold, as a statement that is refuted where a proof was
-  *     expected, throws an `AssertionError`. Every test framework takes that for a failed test.
+  *   - The result: what the caller expects of it is the caller's to assert, as `result.meets
+  *     (statement)`, what the statement was declared to give. A result that is not what it is by
+  *     its own account, as a proof that Blaster did not say valid, throws an `AssertionError`,
+  *     which every test framework takes for a failed test.
   *   - A statement that cannot be checked here is another thing: Lean does not run here, or the
   *     result kept for the statement is stale and there is no Lean to ask. What happens then is
   *     `notChecked`, the caller's. A test framework has its own way to say that a test did not run,
@@ -415,8 +417,11 @@ final class LeanProofs private (
                 proof.artifact match
                     case artifact: UplcBlaster.Artifact =>
                         checkedProof(artifact)
+                        // A negative control that is proved fails its test: it is not exported
+                        // as a statement proved.
                         request.tactic match
-                            case blaster: UplcBlaster =>
+                            case blaster: UplcBlaster
+                                if statement.expected == ExpectedOutcome.Valid =>
                                 exportProved(
                                   verifier,
                                   statement,
@@ -501,12 +506,14 @@ final class LeanProofs private (
     }
 
     /** A verifier of its own, with the functions of [[verifier]] and nothing kept, and `statement`
-      * declared in it under its name: a check there makes no theorem and keeps no result.
+      * declared in it as it is in [[verifier]], with its origin and what it is expected to give, so
+      * that the tactic lowers it as it would there: a check there makes no theorem and keeps no
+      * result.
       */
     private def ownStatement(statement: Statement): (Verifier, Statement) = {
         val own = Verifier.empty
         own.addFunctions(verifier.functions)
-        own -> own.statement(statement.name, statement.prop)
+        own -> own.declare(statement)
     }
 
     /** That `statement`, declared in [[verifier]], holds on `values` read with `==>:` for each
@@ -910,7 +917,11 @@ final class LeanProofs private (
     /** `result` in words, for the message of a test that expected another: what was proved, or the
       * counterexample of a refutation, or why there is no result.
       */
-    def describe(result: VerificationResult): String = LeanProofs.describe(result)
+    def explain(result: VerificationResult): String = LeanProofs.describe(result)
+
+    /** `result` of `statement` in words, with the statement's name. */
+    def explain(statement: Statement, result: VerificationResult): String =
+        s"${statement.name}: ${LeanProofs.describe(result)}"
 
     /** The integer `value` is, as a variable of a counterexample. */
     def integer(value: Constant): BigInt = value match
