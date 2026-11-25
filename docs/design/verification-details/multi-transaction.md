@@ -303,7 +303,8 @@ proved in Lean with each walk's termination, replaces the trust.
      unknowns that differ, each spurious, up to 1100 steps, and did not finish in 30 minutes. The
      key of a call of a definition that does not loop is now the key of its code, with each
      argument that is a value standing for its parameter, and any other bound as a `let`.
-2. **Lemmas**: their statements, patterns and the premises they give; vesting's #4.
+2. **Lemmas**, as the contracts of [the call rule](call-rule.md), which this tactic moves into:
+   their statements, the premises they give; vesting's #4.
 3. **The proofs of the lemmas** and of each walk's termination, by induction.
 4. **The rewrite's lemma** in Lean.
 
