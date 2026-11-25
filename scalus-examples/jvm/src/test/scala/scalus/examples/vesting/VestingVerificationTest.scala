@@ -285,10 +285,11 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     /** The validator on a script context of its type: what the verifier's statements about its code
       * are of. `spend` is inlined into `validate`, so the verifier finds the clauses of `spend` in
-      * the code of this function. Its statements are of three sets of contexts, each named in
-      * theirs: every context (`any_context`), where Lean does not finish them, as the validator
-      * walks lists of any length; the contexts of [[fewInputs]] (`few_inputs`); and those of
-      * [[partialWithdrawalLimited]] (`partial_withdrawal`).
+      * the code of this function. Its statements are of three sets of contexts: every context,
+      * under the plain names, and the contexts of [[fewInputs]] (`few_inputs`) and of
+      * [[partialWithdrawalLimited]] (`partial_withdrawal`), under names with the set's
+      * (`spends[few_inputs]/...`). Lean finishes some of the statements of every context, as the
+      * second guarantee's, and not those that walk the context's lists of any length.
       */
     private val spends = FunctionDef.named(
       "spends",
@@ -298,7 +299,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     verifier.addFunction(spends)
 
     /** [[fewInputs]], as the verifier takes the contexts of the obligations it declares. */
-    private val fewInputsData = limitedData[ScriptContext](ctx => fewInputs(ctx))
+    private val fewInputsData =
+        limitedData[ScriptContext](ctx => fewInputs(ctx)).named("few_inputs")
 
     /** Every script context: the parameter a `forAllData[ScriptContext]` variable. */
     private val anyContext = unlimitedData[ScriptContext]
@@ -335,8 +337,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       * clause so ([[Verifier.specifications]]). A clause changed in the code, or a statement here,
       * would leave the clause unchecked, and fail the suite.
       */
-    verifier.guarantees(spends.ref, fewInputsData, Connective.Rejects, "few_inputs")
-    verifier.guarantees(spends.ref, anyContext, Connective.Rejects, "any_context")
+    verifier.guarantees(spends.ref, fewInputsData, Connective.Rejects)
+    verifier.guarantees(spends.ref, anyContext, Connective.Rejects)
 
     // spend: Spec.ensures(txInfo.isSignedBy(configOf(datum).beneficiary))
     private val beneficiarySigned = verifier.statement(
@@ -442,9 +444,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     // the contexts of a few inputs leave free.
     verifier.guarantees(
       spends.ref,
-      limitedData[ScriptContext](ctx => partialWithdrawalLimited(ctx)),
-      Connective.Rejects,
-      "partial_withdrawal"
+      limitedData[ScriptContext](ctx => partialWithdrawalLimited(ctx)).named("partial_withdrawal"),
+      Connective.Rejects
     )
 
     private val stateIsCarriedLimited = verifier.statement(
@@ -610,7 +611,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     /** What the validator's call of the schedule owes to `vested_in_range`, of every context. */
-    private val spendObligations = verifier.obligations(spends.ref, anyContext, "any_context")
+    private val spendObligations = verifier.obligations(spends.ref, anyContext)
 
     test(
       "the obligation of the schedule's call, of every script context, is not finished by Lean",
@@ -627,8 +628,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     /** The same, of the contexts of [[fewInputs]]. */
-    private val spendObligationsLimited =
-        verifier.obligations(spends.ref, fewInputsData, "few_inputs")
+    private val spendObligationsLimited = verifier.obligations(spends.ref, fewInputsData)
 
     test("the validator would not establish a precondition on the amount") {
         // Why the schedule states its bound with a condition. Of the contexts of a few inputs.
@@ -652,10 +652,10 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     /** A contract of the validator that expects a datum whose initial amount `vested_in_range` asks
-      * for, of every context.
+      * for.
       */
-    private val spendOnAnyContextOfAnAmount = verifier.contract(
-      "spend_on_any_context_of_an_amount",
+    private val spendOfAnAmount = verifier.contract(
+      "spend_of_an_amount",
       contract(spends)(
         expects = ctx => initialAmountIsNotNegative(ctx),
         ensures = ctx => done => true
@@ -665,8 +665,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     /** The obligation of the schedule's call, where the validator's contract holds, of every
       * context.
       */
-    private val obligationsOfAnAmount =
-        verifier.obligations(spendOnAnyContextOfAnAmount, anyContext)
+    private val obligationsOfAnAmount = verifier.obligations(spendOfAnAmount, anyContext)
 
     test(
       "where the validator's contract expects such an amount, the obligation, of every script " +
@@ -682,15 +681,6 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         )
         assert(unfinished.contains("did not finish"), unfinished)
     }
-
-    /** The same contract, of the contexts of [[fewInputs]]. */
-    private val spendOfAnAmount = verifier.contract(
-      "spend_of_an_amount",
-      contract(spends)(
-        expects = ctx => initialAmountIsNotNegative(ctx),
-        ensures = ctx => done => true
-      )
-    )
 
     /** The same obligation, of the contexts of [[fewInputs]]. */
     private val obligationsOfAnAmountLimited = verifier.obligations(spendOfAnAmount, fewInputsData)

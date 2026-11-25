@@ -308,8 +308,14 @@ function's code, and declares for each the statement
 
 where `check` is the body cut along the path to the clause, as for a call-site obligation, with
 the clause's condition in its place. It says: where the function returns through the clause, the
-condition holds. The statements are named `function/ensures#n` (`Origin.Guarantee`). A clause
-inside a function value is reported as unsupported. For a validator the function is one that
+condition holds. The statements are named `function/ensures#n` (`Origin.Guarantee`). Over a
+set of values with a name, as `limitedData[ScriptContext](...).named("few_inputs")`, they are
+named after the function and the set, `function[few_inputs]/ensures#n`, so that one function's
+clauses can be stated over several sets of values in one verifier: a validator's of every script
+context under the plain names, and of a few inputs under the named ones. A call's obligations
+are named the same way, `caller[set]/contract#n`. Of the statements of one clause, its status is
+checked by a proof of every value before one within limits. A clause inside a function value is
+reported as unsupported. For a validator the function is one that
 builds the context of a transaction shape and validates it (see call-site obligations above).
 A call inside a clause is no call of the function, and owes nothing.
 

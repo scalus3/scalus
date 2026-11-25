@@ -10,7 +10,7 @@
     }
   },
   "results": {
-    "spend_of_an_amount/vested_in_range#1": {
+    "spend_of_an_amount[few_inputs]/vested_in_range#1": {
       "tactic": "uplc-blaster",
       "result": "proved",
       "statement": "c4121f6ba1215a11",

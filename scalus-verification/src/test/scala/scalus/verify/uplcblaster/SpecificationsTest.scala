@@ -239,6 +239,105 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
         assert(proved.isInstanceOf[VerificationResult.Proven], proved)
     }
 
+    /** `statement` taken as proved, as a theorem imported is: the record of clauses has a proof of
+      * it, of no tactic.
+      */
+    private def provedAs(verifier: Verifier, statement: Statement): Unit =
+        verifier.addTheorem(
+          new Theorem(statement, Proof(new ProofArtifact { def kind = ProofKind.Blaster }))
+        )
+
+    private def onlyStatus(verifier: Verifier, kind: Clause.Kind): ClauseStatus =
+        verifier.specifications.filter(_.clause.kind == kind).map(_.status) match
+            case List(status) => status
+            case other        => fail(s"expected one clause of kind $kind, got $other")
+
+    test("the statements over a named set of values are named after it, beside the plain ones") {
+        val verifier = Verifier.empty
+        verifier.addFunction(positives)
+        val owner = positives.ref.displayName
+        val List(everyList) =
+            verifier.guarantees(positives.ref, Props.unlimitedData[PList[BigInt]]).statements
+        val few = Props.limitedData[PList[BigInt]](xs => xs.length <= 2).named("few")
+        val List(ofFew) = verifier.guarantees(positives.ref, few).statements
+        assert(everyList.name == s"$owner/ensures#1")
+        assert(ofFew.name == s"$owner[few]/ensures#1")
+        onlyStatus(verifier, Clause.Kind.Ensures) match
+            case ClauseStatus.Unchecked(candidates, _) =>
+                assert(candidates.toSet == Set(everyList.name, ofFew.name), candidates)
+            case other => fail(s"expected an unchecked clause, got $other")
+    }
+
+    test("a clause is checked by its proof of every value before one within limits") {
+        // Named so that the limited statement's name comes first: the names say nothing of which
+        // proof is stronger.
+        val verifier = Verifier.empty
+        verifier.addFunction(positives)
+        val few = Props.limitedData[PList[BigInt]](xs => xs.length <= 2).named("a_few")
+        val List(ofFew) = verifier.guarantees(positives.ref, few).statements
+        val every = Props.unlimitedData[PList[BigInt]].named("every")
+        val List(everyList) = verifier.guarantees(positives.ref, every).statements
+        assert(ofFew.name < everyList.name)
+        provedAs(verifier, ofFew)
+        onlyStatus(verifier, Clause.Kind.Ensures) match
+            case ClauseStatus.Checked(List(by), _, _, within) =>
+                assert(by == ofFew.name && within.nonEmpty, within)
+            case other => fail(s"expected a clause checked within limits, got $other")
+        provedAs(verifier, everyList)
+        onlyStatus(verifier, Clause.Kind.Ensures) match
+            case ClauseStatus.Checked(List(by), _, _, within) =>
+                assert(by == everyList.name && within.isEmpty, within)
+            case other => fail(s"expected a clause checked of every value, got $other")
+    }
+
+    test("a function's statements over one set of values twice are refused, and named are not") {
+        val verifier = Verifier.empty
+        verifier.addFunction(positives)
+        val first = verifier.guarantees(positives.ref)
+        val error = intercept[IllegalArgumentException](
+          verifier.guarantees(positives.ref, Props.unlimitedData[PList[BigInt]])
+        )
+        assert(error.getMessage.contains("LimitedData.named"), error.getMessage)
+        val again = Props.unlimitedData[PList[BigInt]].named("again")
+        assert(verifier.guarantees(positives.ref, again).statements.size == first.statements.size)
+    }
+
+    test("the name of a set of values is ASCII letters, digits and _") {
+        val values = Props.unlimitedData[PList[BigInt]]
+        assert(values.named("few_inputs_2").name.contains("few_inputs_2"))
+        for name <- List("", "a]/b", "x#1", "über") do
+            assertThrows[IllegalArgumentException](values.named(name))
+    }
+
+    test("a call's obligation over two sets of values is met by either, and open where one is") {
+        // violates calls clamp(x, 10, 0): these statements are not proved, but taken as proved,
+        // to see what the record of clauses makes of them.
+        def stated(): (Verifier, Statement, Statement) = {
+            val verifier = Verifier.empty
+            verifier.addFunction(clamp)
+            verifier.addFunction(violates)
+            verifier.contract("clamp_in_range", inSource(clamp))
+            val List(every) =
+                verifier.obligations(violates.ref, Props.unlimitedData[BigInt]).statements
+            val again = Props.unlimitedData[BigInt].named("again")
+            val List(ofAgain) = verifier.obligations(violates.ref, again).statements
+            (verifier, every, ofAgain)
+        }
+        val (neither, _, _) = stated()
+        assert(onlyStatus(neither, Clause.Kind.Expects).isInstanceOf[ClauseStatus.Unchecked])
+        val (oneProved, _, ofAgain) = stated()
+        provedAs(oneProved, ofAgain)
+        onlyStatus(oneProved, Clause.Kind.Expects) match
+            case ClauseStatus.Checked(List(by), _, _, _) => assert(by == ofAgain.name)
+            case other => fail(s"expected the clause checked, got $other")
+        val (oneOpen, every, _) = stated()
+        oneOpen.open(every, "Lean does not finish it")
+        assert(
+          onlyStatus(oneOpen, Clause.Kind.Expects) ==
+              ClauseStatus.Open(every.name, "Lean does not finish it")
+        )
+    }
+
     test("a clause anywhere on a path states what holds where the function returns through it") {
         requireLean()
         def stated(function: FunctionDef[?, ?]): (Verifier, Statement) = {
