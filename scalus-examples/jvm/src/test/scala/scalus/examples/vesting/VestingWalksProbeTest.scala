@@ -187,6 +187,36 @@ class VestingWalksProbeTest extends AnyFunSuite with LeanProofsSuite {
         )
     }
 
+    // spend: Spec.ensures(txInfo.isSignedBy(configOf(datum).beneficiary)), of the validator itself
+    // with its walks made unknowns. Lean does not finish it of every context with the walks
+    // (`VestingVerificationTest`). The clause's isSignedBy and the validator's are one walk.
+    private val beneficiarySignedOfTheValidator = verifier.statement(
+      "vesting.probe.beneficiary_signed_calls_as_unknowns",
+      forAllData[ScriptContext](ctx => accepts(ctx) ==>?: signedByTheBeneficiary(ctx))
+    )
+
+    test("the tactic makes one unknown of the clause's isSignedBy and the validator's") {
+        val unknowns = CallsAsUnknowns
+            .rewrite(beneficiarySignedOfTheValidator.prop, CallsAsUnknowns.inLibrary)
+            .fold(reason => fail(reason), _.unknowns)
+        info(CallsAsUnknowns.described(unknowns))
+        assert(unknowns.count(_.written.contains("isSignedBy")) == 1, unknowns)
+    }
+
+    test(
+      "spend's first guarantee of the validator holds of every context, with calls as unknowns"
+    ) {
+        report(
+          beneficiarySignedOfTheValidator,
+          check(
+            VerificationRequest(
+              beneficiarySignedOfTheValidator,
+              new CallsAsUnknowns(UplcBlaster(Budget.Auto, lean, 30.minutes))
+            )
+          )
+        )
+    }
+
     /** Says how `statement` was decided: the budget, the time, and a refutation's values. */
     private def report(statement: Statement, result: => VerificationResult): Unit = {
         val start = System.nanoTime()
