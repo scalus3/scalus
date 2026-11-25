@@ -604,7 +604,7 @@ final class Verifier private (results: Option[KeptResults]) {
 
     /** The name the statements of a function or a contract are named after: with the name of the
       * set of values they are of, where it has one ([[LimitedData.named]]), as
-      * `spends[few_inputs]`.
+      * `validate[few_inputs]`.
       */
     private def ownerName(owner: String, parameter: Option[LimitedData]): String =
         parameter.flatMap(_.name).fold(owner)(of => s"$owner[$of]")

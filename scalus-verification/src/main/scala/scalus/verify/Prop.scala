@@ -392,12 +392,12 @@ object Props {
       * parameter of type `A`, as the validator's entry point on a typed context:
       *
       * {{{
-      * val spends = FunctionDef.named(
-      *   "spends",
+      * val validate = FunctionDef.named(
+      *   "validate",
       *   (ctx: ScriptContext) => VestingValidator.validate(ctx.toData)
       * )
       * verifier.guarantees(
-      *   spends.ref,
+      *   validate.ref,
       *   limitedData[ScriptContext](ctx => ctx.txInfo.inputs.length <= 2)
       * )
       * }}}

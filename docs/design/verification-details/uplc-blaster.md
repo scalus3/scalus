@@ -1557,10 +1557,10 @@ context, and otherwise its test is `Unfinished`, which shows what the limits are
 The times are of single checks with Blaster compiled, in the suite's Lean server (2026-11-06).
 
 The validator's specification is written in `VestingValidator` itself. `spend` states its three
-guarantees at its head; `Verifier.guarantees(spends.ref, fewInputs, Connective.Rejects)` finds them
-in the code of `spends`, the validator on a typed context, where the inlined handler ends up, over
+guarantees at its head; `Verifier.guarantees(validate.ref, fewInputs, Connective.Rejects)` finds them
+in the code of `validate`, the validator on a typed context, where the inlined handler ends up, over
 the contexts `fewInputs` says, a set of values named `few_inputs` (`LimitedData.named`), so that
-the statements are named `spends[few_inputs]/ensures#n` beside those of every context ([`Props.limitedData`](../verification-overview.md#37-function-contracts-pre--and-postconditions)). Each
+the statements are named `validate[few_inputs]/ensures#n` beside those of every context ([`Props.limitedData`](../verification-overview.md#37-function-contracts-pre--and-postconditions)). Each
 is proved alone: one rejecting program of all three would run every way one of them is false on
 into the validator. They are stated with `==>?:`, as a clause reads the datum, the redeemer and the
 spent input as the validator does, and fails where they cannot be read, where the validator
@@ -1576,7 +1576,7 @@ condition; the monotonicity statement has one. The samples are what the statemen
 withdrawals are not vacuous of: the validator accepts a withdrawal, and the bound of what stays
 locked is exact.
 
-The obligation is `Verifier.obligations` of `spends` over the same contexts; see
+The obligation is `Verifier.obligations` of `validate` over the same contexts; see
 [call-site obligations](prop-semantics.md#call-site-obligations). It is checked as written, as
 every obligation is ([The rejecting form](#the-rejecting-form)).
 
