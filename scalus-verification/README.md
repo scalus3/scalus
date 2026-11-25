@@ -306,9 +306,9 @@ of whatever calls `validate`; `verifier.guarantees(function)` finds every clause
 function's code and declares one statement for each:
 
 ```scala
-val spends = FunctionDef.named("spends", (w: Withdrawal) => VestingValidator.validate(context(w)))
-verifier.addFunction(spends)
-val stated = verifier.guarantees(spends.ref)
+val validate = FunctionDef.named("validate", (ctx: ScriptContext) => VestingValidator.validate(ctx.toData))
+verifier.addFunction(validate)
+val stated = verifier.guarantees(validate.ref)
 stated.statements.foreach(verifier.verify(_, UplcBlaster(Budget.LeanSteps(12000), lean)))   // clause by clause
 stated.together.foreach(verifier.verify(_, UplcBlaster(Budget.LeanSteps(12000), lean)))     // or as one statement
 ```
@@ -316,9 +316,9 @@ stated.together.foreach(verifier.verify(_, UplcBlaster(Budget.LeanSteps(12000), 
 Each statement says that the function returns, so a tactic runs the function's body once per
 clause for the statements one by one, and once for `together`, their conjunction.
 
-Over a set of values with a name, `verifier.guarantees(spends.ref, limitedData[ScriptContext](ctx =>
+Over a set of values with a name, `verifier.guarantees(validate.ref, limitedData[ScriptContext](ctx =>
 ctx.txInfo.inputs.length <= 2).named("few_inputs"))`, the statements are named
-`spends[few_inputs]/ensures#n`, beside the plain names of the statements of every value: one
+`validate[few_inputs]/ensures#n`, beside the plain names of the statements of every value: one
 function's clauses can be stated over several sets of values in one verifier. Obligations are
 named the same way.
 

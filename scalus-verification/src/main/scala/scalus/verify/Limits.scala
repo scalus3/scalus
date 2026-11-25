@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
   *   the limits the values meet, none for every value
   * @param name
   *   the name of the set of values, in the names of the statements made over it, as
-  *   `spends[few_inputs]/ensures#1` ([[named]]); none for the statements over every value, whose
+  *   `validate[few_inputs]/ensures#1` ([[named]]); none for the statements over every value, whose
   *   names are the plain ones
   */
 final class LimitedData private[verify] (
@@ -38,7 +38,7 @@ final class LimitedData private[verify] (
     /** The same values, named `name` in the statements made over them: so that one function's
       * statements can be made over several sets of values in one verifier, as a validator's of
       * every script context, under the plain names, and of those of a few inputs, under
-      * `spends[few_inputs]/...`. A name is ASCII letters, digits and `_`, as it is part of the
+      * `validate[few_inputs]/...`. A name is ASCII letters, digits and `_`, as it is part of the
       * names of Lean modules.
       */
     def named(name: String): LimitedData = {

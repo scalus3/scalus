@@ -28,7 +28,7 @@
         "where the validator's contract expects such an amount, the obligation holds"
       ]
     },
-    "spends[few_inputs]/vested_in_range#1": {
+    "validate[few_inputs]/vested_in_range#1": {
       "tactic": "uplc-blaster",
       "result": "refuted",
       "statement": "52204a6488d1de3d",
