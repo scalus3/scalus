@@ -306,6 +306,39 @@ proved in Lean with each walk's termination, replaces the trust.
 3. **Calls under a lambda,** as the walks of a `forall`: an unknown there is a function, which a
    program of UPLC cannot take as a value Lean quantifies over.
 
+## Calls as Lean functions
+
+Proposed, 2026-11-25. A written statement is Lean, and `#prep_uplc_run` is only how a program
+becomes a term Blaster reasons about: a statement can have parts of Lean and parts of UPLC, as
+one with `isValid(ctx)` has already. So a walk's result need not be an unknown, any value: it
+can be a Lean function of the same arguments, as `txSignedBy pk tx` of CardanoLedgerApi for
+`isSignedBy(tx, pk)`.
+
+- The program left has no loop, as with unknowns: `#prep_uplc_run` finishes, of every context.
+- The statement has the walk's value, not any: a claim that needs a fact of the walk, as #4 the
+  lovelace of `v - lovelace(a)`, has it from the Lean function's definition, as a lemma of Lean
+  about a Lean function, proved by hand by induction over a Lean list.
+- What a statement rests on is no trusted rewrite but lemmas: for each walk, a
+  [function mapping](function-mappings.md), that the compiled walk computes the Lean function,
+  `∀ tx pk, returns isSignedBy [toData tx, toData pk] (txSignedBy pk tx)`, of one loop, proved
+  once for the library, by hand, by induction over the list; and, once for the machine, that a
+  part of a program that ends in a value can be replaced by that value. Both are of the machine's
+  run itself, `runProgramFor`, within some number of steps, and not of Blaster's run of one
+  budget, and are checked by `lean-manual`.
+
+`returns`, `succeeds` and `fails` of a program, within some number of steps, are new definitions
+of Scalus's Lean library; adding them makes every kept result stale once.
+
+### Its steps
+
+1. **The mapping of `isSignedBy`**: its compiled program, the Lean function it maps to, and the
+   lemma, proved by hand. This says what such a proof takes: lemmas of the machine's run that
+   PlutusCore has, and those to write.
+2. **A walk as a Lean function** in the rewrite: a call of a library function with a mapping is
+   replaced by the mapped Lean function of its arguments, and the statement cites the mapping.
+3. **Vesting's #1 of every context** with it, resting on the mapping of `isSignedBy` and on no
+   trusted rewrite; then the mappings of `findInputOrFail` and `getLovelace`, and #3 and #4.
+
 ## Relation to other notes
 
 - [Protocol steps](protocol-steps.md): a model's theorem over many steps, as
