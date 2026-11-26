@@ -23,7 +23,9 @@ conditions return true on the samples the validator accepts"), not proved.
 
 The theorems are proved of every thread, of any length, from the hypotheses: they rest on Lean's
 kernel and on them. That each hypothesis is the statement Scalus proved, read as a proposition of
-Lean, is step 4 of the design, and is not built yet.
+Lean, is step 4 of the design, and is not built yet. #3 as Scalus proved it is
+`LinearVesting.Generated.vesting_spend_unvested_stays_locked.statement`, of the validator's
+programs and runs of any number of steps, and its axiom `proved`.
 -/
 
 namespace LinearVesting.Proofs.Thread
