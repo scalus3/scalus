@@ -104,7 +104,8 @@ object TransactionBody:
             if value.votingProcedures.isDefined then mapSize += 1
             if value.proposalProcedures.toSeq.nonEmpty then mapSize += 1
             if value.currentTreasuryValue.isDefined then mapSize += 1
-            if value.donation.isDefined then mapSize += 1
+            // key 22 is written only for a positive donation, below
+            if value.donation.exists(_.nonZero) then mapSize += 1
 
             w.writeMapHeader(mapSize)
 
@@ -215,7 +216,8 @@ object TransactionBody:
                 w.write(coin)
             }
 
-            // Deposit return (key 22)
+            // Treasury donation (key 22). A zero donation is omitted, as the ledger's encoder omits
+            // it (`Omit (== mempty)`, Conway/TxBody.hs:617) and its decoder refuses `22: 0`.
             value.donation.foreach { coin =>
                 if coin.nonZero then
                     w.writeInt(22)

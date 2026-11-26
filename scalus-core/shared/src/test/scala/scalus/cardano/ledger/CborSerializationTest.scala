@@ -6,6 +6,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import scalus.serialization.cbor.Cbor
+import scalus.utils.Hex.toHex
 
 class CborSerializationTest extends AnyFunSuite, ScalaCheckPropertyChecks, ArbitraryInstances {
     test(s"Hash should serialize and deserialize correctly"):
@@ -211,6 +212,14 @@ class CborSerializationTest extends AnyFunSuite, ScalaCheckPropertyChecks, Arbit
 
     test(s"TransactionBody should serialize and deserialize correctly"):
         testSerializationRoundTrip[TransactionBody]
+
+    test("TransactionBody encodes a zero donation as an absent one"):
+        forAll: (body: TransactionBody) =>
+            val absent = Cbor.encode(body.copy(donation = None))
+            val zero = Cbor.encode(body.copy(donation = Some(Coin.zero)))
+            assert(zero.toHex == absent.toHex)
+            given OriginalCborByteArray = OriginalCborByteArray(zero)
+            assert(Cbor.decode[TransactionBody](zero).donation.isEmpty)
 
     test(s"Block should serialize and deserialize correctly"):
         testSerializationRoundTrip[Block]

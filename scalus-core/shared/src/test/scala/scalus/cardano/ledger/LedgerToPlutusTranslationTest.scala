@@ -148,6 +148,28 @@ class LedgerToPlutusTranslationTest extends AnyFunSuite {
         }
     }
 
+    // cardano-ledger's V3 TxInfo maps a zero donation to Nothing (Conway/TxInfo.hs:539-542).
+    for (donation, expectedCbor) <- Seq(
+          None -> "d87a80",
+          Some(Coin.zero) -> "d87a80",
+          Some(Coin(1)) -> "d8799f01ff"
+        )
+    do {
+        test(s"V3 treasuryDonation Data for donation $donation is $expectedCbor") {
+            val tx = Transaction(
+              TransactionBody(
+                inputs = TaggedSortedSet.from(Set.empty[TransactionInput]),
+                outputs = IndexedSeq.empty,
+                fee = Coin.zero,
+                donation = donation
+              )
+            )
+            val info =
+                LedgerToPlutusTranslation.getTxInfoV3(tx, Map.empty, SlotConfig.mainnet, pv)
+            assert(Hex.bytesToHex(info.treasuryDonation.toData.toCbor) == expectedCbor)
+        }
+    }
+
     test("general-purpose Plutus Value still normalizes zero lovelace") {
         assert(Hex.bytesToHex(pv1.Value.lovelace(0).toData.toCbor) == "a0")
         assert(Hex.bytesToHex(pv1.Value.zero.toData.toCbor) == "a0")
