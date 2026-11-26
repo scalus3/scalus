@@ -1,8 +1,8 @@
 # The call rule
 
 Hoare logic's rule for a call, on statements about compiled programs: a call of a function whose
-contract is proved is replaced by a fresh value, of which the contract's postcondition is assumed,
-where its precondition is checked at the call. It is the contract VCG for modular proofs of phase
+contract is proved is replaced by a fresh value, of which the contract's postcondition is assumed
+where its precondition holds. It is the contract VCG for modular proofs of phase
 2 ([overview §3.7, §9](../verification-overview.md#37-function-contracts-pre--and-postconditions)),
 which the overview says `blaster-uplc` cannot do, as it cannot abstract a callee inside compiled
 code. [Calls as unknowns](multi-transaction.md#calls-as-unknowns-in-the-tactic) now does: it is the
@@ -15,15 +15,21 @@ Status: proposed, 2026-11-25. Nothing of it is built but what [What exists](#wha
 At a call `f(a)` in a statement's program, where `f` has a contract (`expects`, `ensures`, and
 `returnsWhen`, `failsWhen`; [statement semantics §6](prop-semantics.md#6-contracts)):
 
-1. **`expects_f(a)` is checked at the call**: an obligation of the caller, as
-   `Verifier.obligations` declares today. Assumed instead, a call where it is false would make the
-   statement hold vacuously.
+1. **`expects_f(a)` at the call is a statement of its own**: the caller's obligation, as
+   `Verifier.obligations` declares today. The proof does not rest on it: the premises of 3 hold
+   under `expects_f(a)`, and where it is false they say nothing of `u`. Its refutation is a caller
+   that calls `f` outside its precondition, where the contract gave the proof nothing. Two other
+   forms are unsound: `expects_f(a)` assumed as a premise makes the statement hold vacuously where
+   it is false, and the premises of 3 assumed without it may be false of what the call returns
+   there.
 2. **The call is an unknown `u`**, of `Option` of `f`'s result type: `None` is the call failing.
 3. **Premises of `u`**, from the contract, under `expects_f(a)`: `u = Some(r) ⇒ ensures_f(a)(r)`;
-   `returnsWhen_f(a) ⇒ u ≠ None`; `failsWhen_f(a) ⇒ u = None`.
+   `returnsWhen_f(a) ⇒ u ≠ None`; `failsWhen_f(a) ⇒ u = None`. By the contract's theorem they
+   hold of what the call returns, for every `a`: the rule needs no check of `expects_f(a)` to be
+   sound.
 4. **Equal calls share `u`**: two calls of `f` with one key, as the calls as unknowns key them.
-5. **The proof cites the contract's theorem** as a lemma (`Proof.usedLemmas`), and the call's
-   obligation: it rests on both.
+5. **The proof cites the contract's theorem** as a lemma (`Proof.usedLemmas`): it rests on it,
+   and not on the call's obligation (1).
 
 A call of a function with no contract is the rule with the trivial one, `expects = true` and
 `ensures = true`: the unknown of `CallsAsUnknowns` today.
@@ -85,8 +91,9 @@ of loops over a list, each as `loop_returns` of `isSignedBy` (`IsSignedBy.lean:1
 - **Contracts in the tactic.** Where the function of a walk has a contract that is a theorem of
   the verifier, its unknown gets the premises of the rule, and the proof cites the theorem; where
   it has none, no premise, as today.
-- **Obligations in the proof.** A walk's `expects` is the caller's obligation at that call, a
-  statement `Verifier.obligations` declares; the proof rests on it.
+- **Obligations beside the proof.** A walk's `expects` is the caller's obligation at that call, a
+  statement `Verifier.obligations` declares, proved or refuted on its own; the proof does not rest
+  on it (the rule, 1).
 - **The kind.** A proof rests on the tie and on the contracts it cites. With the tie proved (1),
   it is a proof of the statement as written, of the kind of its parts.
 - **The library's contracts.** Stated with `Spec` in the library's source, as `spend` states its
