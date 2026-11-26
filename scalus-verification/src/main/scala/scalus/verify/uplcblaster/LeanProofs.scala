@@ -127,9 +127,11 @@ final class LeanProofs private (
 
     /** Exports `statement`, proved by `result` in `verifier` with `tactic`, where these proofs
       * export: as a Lean module, and as a property that says what runs, the test's name. Each is
-      * made by `tactic`, as it lowered the statement for its proof. A statement without a name is
-      * not exported: a module and a property are referred to by it. One that has no form in the
-      * language, as a proof within a budget, is passed over.
+      * made by `tactic`, as it lowered the statement for its proof; of a proof with calls as
+      * unknowns, by the tactic inside, and the module states the statement of runs of any number of
+      * steps ([[UplcBlaster.statementModule]]). A statement without a name is not exported: a
+      * module and a property are referred to by it. One that has no form in the language, as a
+      * proof within a budget or one with calls as unknowns, is passed over.
       *
       * Where the modules are not written, a module of the statement that the workspace has is held
       * to the code, as the module the export would write now ([[heldToTheCode]]): a proof by hand
@@ -418,10 +420,14 @@ final class LeanProofs private (
                     case artifact: UplcBlaster.Artifact =>
                         checkedProof(artifact)
                         // A negative control that is proved fails its test: it is not exported
-                        // as a statement proved.
-                        request.tactic match
-                            case blaster: UplcBlaster
-                                if statement.expected == ExpectedOutcome.Valid =>
+                        // as a statement proved. A proof with calls as unknowns is exported by the
+                        // tactic inside, which lowers the statement as written.
+                        val lowering = request.tactic match
+                            case blaster: UplcBlaster      => Some(blaster)
+                            case unknowns: CallsAsUnknowns => Some(unknowns.inner)
+                            case _                         => None
+                        lowering match
+                            case Some(blaster) if statement.expected == ExpectedOutcome.Valid =>
                                 exportProved(
                                   verifier,
                                   statement,

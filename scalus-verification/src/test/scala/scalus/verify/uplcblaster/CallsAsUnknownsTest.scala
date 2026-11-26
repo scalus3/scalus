@@ -7,7 +7,9 @@ import scalus.cardano.onchain.plutus.prelude.require
 import scalus.compiler.Compile
 import scalus.verify.*
 import scalus.verify.Props.*
+import scalus.verify.lean.LeanServer.{Message, Result, Severity}
 
+import java.nio.file.{Files, Path}
 import scala.concurrent.duration.*
 
 /** A helper of a contract's own, and not of the library: the rewrite inlines it. */
@@ -113,6 +115,53 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
           result.meets(longerThanNothingStatement),
           explain(longerThanNothingStatement, result)
         )
+    }
+
+    test("a statement proved with calls as unknowns is written of its programs, of any run") {
+        // The proof is of the programs with unknowns, at a budget. The statement's own programs
+        // walk lists longer than any budget reaches, so the module states it of runs of any
+        // number of steps, and a proof by hand can cite it.
+        val lowered =
+            UplcBlaster.lower(longerThanNothing, FunctionTable.empty).fold(fail(_), identity)
+        val module = "Scalus.CallsAsUnknownsTest.longer_than_nothing"
+        // In a workspace the programs are at paths from its directory; here, in a directory of
+        // the test, by their whole paths.
+        val directory = Files.createTempDirectory("scalus-unknowns-module")
+        val written = UplcBlaster.statementModule(
+          lowered,
+          120,
+          Some(ProofKind.BlasterOfUnknowns),
+          400000,
+          module,
+          directory.toString
+        )
+        written.programs.foreach((path, program) =>
+            Files.writeString(Path.of(path), UplcBlaster.programHex(program))
+        )
+        assert(written.programs.map(_._2) == lowered.leaves, "the programs as written")
+        assert(written.text.contains("at any number of steps of the machine"), written.text)
+        assert(!written.text.contains("#prep_uplc_run"), written.text)
+        assert(written.text.contains("(ScalusProofs.Runs.returns "), written.text)
+        assert(written.text.contains("\nimport ScalusProofs.Runs\n"), written.text)
+        assert(UplcBlaster.statementModuleOf(written.text).isEmpty, "no budget in the header")
+        assert(written.text.contains("\naxiom proved : statement\n"), written.text)
+        assert(written.text.contains("a proof of the kind `BlasterOfUnknowns`"), written.text)
+
+        requireLean()
+        val cited = s"theorem longer_than_nothing_cited : $module.statement := $module.proved\n" +
+            "#print axioms longer_than_nothing_cited\n"
+        leanServer.check(written.text + "\n" + cited, Some(5.minutes)) match
+            case Result.Finished(messages) =>
+                val errors = messages.filter(_.severity == Severity.Error)
+                assert(errors.isEmpty, errors.map((m: Message) => s"${m.line}: ${m.text}"))
+                assert(
+                  messages.exists(m =>
+                      m.text.contains("longer_than_nothing_cited' depends on axioms") &&
+                          m.text.contains(s"$module.proved")
+                  ),
+                  messages.map((m: Message) => s"${m.line}: ${m.text}")
+                )
+            case other => fail(s"Lean did not check the statement: $other")
     }
 
     test("a refutation whose unknown is no value its walk returns is spurious") {

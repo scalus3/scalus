@@ -301,6 +301,8 @@ final class UplcBlaster private (
 
     /** The Lean module `module` that states `goal`, which `artifact` proved, as it was proved: at
       * the artifact's budget, and as written where that decided ([[UplcBlaster.statementModule]]).
+      * A proof with calls as unknowns ([[ProofKind.BlasterOfUnknowns]]) is of other programs: the
+      * module states `goal`, which this tactic lowers as written, of runs of any number of steps.
       * The reason where the goal is not in the tactic's language.
       */
     def statementModule(
@@ -325,20 +327,29 @@ final class UplcBlaster private (
             }
 
     /** `goal`, which `artifact` proved, as a statement of the Universal Annotation Language whose
-      * functions are named after `id` ([[UplcBlaster.ualStatement]]), as it was proved.
+      * functions are named after `id` ([[UplcBlaster.ualStatement]]), as it was proved. The
+      * language has no form of a proof with calls as unknowns: the statement at its budget is of
+      * the programs with unknowns, and of the programs as written it does not hold at that budget.
       */
     def ualStatement(
         goal: Goal,
         artifact: UplcBlaster.Artifact,
         id: String
     ): Either[String, UplcBlaster.UalStatement] =
-        prepare(goal).left
-            .map(report => s"${goal.statement.name} is not in the tactic's language: $report")
-            .flatMap { lowered =>
-                val proved =
-                    if artifact.asWritten then lowered.unrewritten.getOrElse(lowered) else lowered
-                UplcBlaster.ualStatement(proved, artifact.budget, id)
-            }
+        if artifact.kind == ProofKind.BlasterOfUnknowns then
+            Left(
+              s"${goal.statement.name} is proved with its walks as unknowns, which the Universal " +
+                  "Annotation Language has no form of"
+            )
+        else
+            prepare(goal).left
+                .map(report => s"${goal.statement.name} is not in the tactic's language: $report")
+                .flatMap { lowered =>
+                    val proved =
+                        if artifact.asWritten then lowered.unrewritten.getOrElse(lowered)
+                        else lowered
+                    UplcBlaster.ualStatement(proved, artifact.budget, id)
+                }
 
     /** A search starts at the budget that was kept, also with another revision of Blaster or of the
       * library, or for another statement of its name: where the statement is still decided there,
@@ -4810,6 +4821,11 @@ object UplcBlaster {
     /** The library's module that every check imports: the run of a program, and what it imports. */
     private val libraryRun = "ScalusProofs.Run"
 
+    /** The library's module of runs of any number of steps, which a module of a statement proved
+      * with calls as unknowns states it of ([[anyRunBody]]).
+      */
+    private val libraryRuns = "ScalusProofs.Runs"
+
     /** The library's modules that [[libraryRun]] imports itself, so a check imports them through it
       * (`ScalusProofs/Run.lean`): a workspace that builds the run builds them.
       */
@@ -4965,57 +4981,79 @@ object UplcBlaster {
                   )
                 )
             else
-                val names = goal.binders.indices.map(index => s"x$index").toList
-                // A binder of a Lean type is a variable of it, whose `Data` its programs are given.
-                val declarations =
-                    goal.binders.zip(names).zipWithIndex.map { case ((binder, name), index) =>
-                        val tp = goal.typedAt(index).fold(leanType(binder.tp))(_.leanType)
-                        s"($name : $tp)"
-                    }
-                val arguments = goal.leafBinders.zipWithIndex.map { (scope, leaf) =>
-                    val parameters = scope.map(declarations)
-                    val terms = scope.map { index =>
-                        val binder = goal.binders(index)
-                        goal.typedAt(index) match
-                            case Some(binding) =>
-                                s"Term.Const (Const.Data ${binding.toData(names(index))})"
-                            case None => variable(binder.tp).argument(names(index))
-                    }
-                    ((s"def arguments$leaf" +: parameters) :+
-                        s": List Term := [${terms.mkString(", ")}]").mkString(" ")
-                }
+                val variables = leanVariables(goal)
                 val prepared = goal.leaves.indices.map(index =>
                     s"#prep_uplc_run ${prefix}prepared$index ${prefix}leaf$index arguments$index $budget"
                 )
-                val state = (leaf: Int) => {
-                    val arguments = goal.leafBinders(leaf).map(index => " " + names(index)).mkString
-                    s"(${prefix}prepared$leaf$arguments)"
-                }
-                val declaration = (index: Int) => declarations(index)
-                val premise = (index: Int) =>
-                    goal.predicates.lift(index).flatten.map(p => s"($p ${names(index)} = true)")
+                val state = (leaf: Int) =>
+                    s"(${prefix}prepared$leaf${variables.applied(goal, leaf)})"
                 val formula =
                     renderFormula(
                       goal.body,
                       state,
-                      declaration,
-                      premise,
+                      variables.declarations,
+                      variables.premises,
                       positive = true,
                       goal.within.isDefined
                     )
-                s"""${arguments.mkString("\n")}
+                s"""${variables.arguments.mkString("\n")}
                    |
                    |${prepared.mkString("\n")}
                    |
                    |${quantified(formula)}""".stripMargin
-        // The definitions a check uses where a variable is restricted to its type's values, and
-        // the recursive ones: the walks of their lists and maps, and the blocks of the types among
-        // them that contain themselves. A check without such a variable has none of them in its
-        // text.
-        if goal.predicates.exists(_.isDefined) then
-            (List(DataEncoding.leanDefinitions) ++ goal.recursions :+ check).mkString("\n\n")
-        else check
+        withTypeDefinitions(goal, check)
     }
+
+    /** The variables of a lowered statement as Lean has them: the name of each, `x<n>`, its
+      * declaration, the premise that restricts it to its type's values, where it has one, and the
+      * definition of what each program is given, `arguments<n>`, over the variables in its scope. A
+      * variable of a Lean type is one of it, whose `Data` the programs are given.
+      */
+    private final case class LeanVariables(
+        names: List[String],
+        declarations: List[String],
+        premises: Vector[Option[String]],
+        arguments: Vector[String]
+    ) {
+
+        /** The variables `leaf` is given, as the arguments of a Lean function: ` x0 x2`. */
+        def applied(goal: Lowered, leaf: Int): String =
+            goal.leafBinders(leaf).map(index => " " + names(index)).mkString
+    }
+
+    private def leanVariables(goal: Lowered): LeanVariables = {
+        val names = goal.binders.indices.map(index => s"x$index").toList
+        val declarations =
+            goal.binders.zip(names).zipWithIndex.map { case ((binder, name), index) =>
+                val tp = goal.typedAt(index).fold(leanType(binder.tp))(_.leanType)
+                s"($name : $tp)"
+            }
+        val premises = names.indices.toVector.map(index =>
+            goal.predicates.lift(index).flatten.map(p => s"($p ${names(index)} = true)")
+        )
+        val arguments = goal.leafBinders.zipWithIndex.map { (scope, leaf) =>
+            val parameters = scope.map(declarations)
+            val terms = scope.map { index =>
+                val binder = goal.binders(index)
+                goal.typedAt(index) match
+                    case Some(binding) =>
+                        s"Term.Const (Const.Data ${binding.toData(names(index))})"
+                    case None => variable(binder.tp).argument(names(index))
+            }
+            ((s"def arguments$leaf" +: parameters) :+
+                s": List Term := [${terms.mkString(", ")}]").mkString(" ")
+        }
+        LeanVariables(names, declarations, premises, arguments)
+    }
+
+    /** `commands` after the definitions they use where a variable is restricted to its type's
+      * values, and the recursive ones: the walks of their lists and maps, and the blocks of the
+      * types among them that contain themselves. A text without such a variable has none of them.
+      */
+    private def withTypeDefinitions(goal: Lowered, commands: String): String =
+        if goal.predicates.exists(_.isDefined) then
+            (List(DataEncoding.leanDefinitions) ++ goal.recursions :+ commands).mkString("\n\n")
+        else commands
 
     /** What the result of a check of `goal` rests on (docs/design/verification-overview.md §5.6):
       * the text of the check, without its budget, its limit of Lean's work and the places of its
@@ -5412,6 +5450,12 @@ object UplcBlaster {
       * proof of that kind that the statement was written for. A proof by hand may use it as a
       * lemma, and rests on that result where it does: `#print axioms` names `<module>.proved` among
       * its axioms. Without it, the module is of a statement no proof found, to be proved by hand.
+      *
+      * A proof with calls as unknowns ([[ProofKind.BlasterOfUnknowns]]) is of other programs, the
+      * statement's with each walk over a list an unknown, at `budget`. Of the statement's own
+      * programs it does not hold at that budget: they walk lists longer than its runs reach. So the
+      * module states `goal` of runs of any number of steps ([[anyRunBody]]), with no
+      * `#prep_uplc_run`, and its header says no budget.
       */
     def statementModule(
         goal: Lowered,
@@ -5424,12 +5468,16 @@ object UplcBlaster {
         val paths = goal.leaves.indices.map(index => s"$directory/Leaf$index.flat").toVector
         val hashes = goal.programHashes.zipWithIndex.map((hash, index) => s"  leaf$index $hash")
         val named = if goal.name.isEmpty then "A statement" else s"The statement `${goal.name}`"
+        val ofUnknowns = kind.contains(ProofKind.BlasterOfUnknowns)
+        val steps = if ofUnknowns then "any number of" else budget.toString
         val header =
             s"""
                |/-!
-               |$named, at $budget steps of the machine.${
+               |$named, at $steps steps of the machine.${
                   if kind.isEmpty then
                       "\nNo proof of Scalus found it: it is written to be proved by hand."
+                  else if ofUnknowns then
+                      "\nScalus proved it with the walks of its programs as unknowns."
                   else ""
               }
                |Generated by Scalus (`scalus.verify.uplcblaster.UplcBlaster.statementModule`): do not
@@ -5439,14 +5487,26 @@ object UplcBlaster {
                |${hashes.mkString("\n")}
                |-/
                |""".stripMargin
-        val proved = kind.fold("")(kind =>
-            s"""
-               |
-               |/-- That `statement` holds, as Scalus proved it: by the tactic `blaster-uplc`, at $budget
-               |    steps, a proof of the kind `$kind`. An axiom, and no proof that Lean checks: a
-               |    theorem that uses it rests on that result, and `#print axioms` names it. -/
-               |axiom proved : statement""".stripMargin
-        )
+        val proved = kind.fold("") {
+            case ProofKind.BlasterOfUnknowns =>
+                s"""
+                   |
+                   |/-- That `statement` holds, as Scalus proved it: by the tactic `blaster-uplc` with calls
+                   |    as unknowns, a proof of the kind `BlasterOfUnknowns`. Blaster proved the statement
+                   |    of the programs with each walk over a list an unknown, for every value of the
+                   |    unknowns, within a budget of steps, which implies it of any number of steps. That
+                   |    each program does what its form with unknowns does, with each unknown the value its
+                   |    walk returns, is tested, not proved. An axiom, and no proof that Lean checks: a
+                   |    theorem that uses it rests on that result, and `#print axioms` names it. -/
+                   |axiom proved : statement""".stripMargin
+            case kind =>
+                s"""
+                   |
+                   |/-- That `statement` holds, as Scalus proved it: by the tactic `blaster-uplc`, at $budget
+                   |    steps, a proof of the kind `$kind`. An axiom, and no proof that Lean checks: a
+                   |    theorem that uses it rests on that result, and `#print axioms` names it. -/
+                   |axiom proved : statement""".stripMargin
+        }
         val stated = (formula: String) => s"def statement : Prop :=\n  $formula$proved"
         // `#import_uplc` and `#prep_uplc_run` declare their names outside the namespace they are
         // written in: the names of a module's programs have the module's name, so that a proof
@@ -5455,15 +5515,52 @@ object UplcBlaster {
         StatementModule(
           document(
             paths,
-            body(goal, budget, stated, stated, prefix),
+            if ofUnknowns then anyRunBody(goal, stated, prefix)
+            else body(goal, budget, stated, stated, prefix),
             maxHeartbeats,
             module,
             header,
             prefix,
-            leanImports(goal)
+            if ofUnknowns then (leanImports(goal) :+ libraryRuns).distinct else leanImports(goal)
           ),
           paths.zip(goal.leaves)
         )
+    }
+
+    /** The commands of a module of `goal` of runs of any number of steps, after its programs: the
+      * definitions its variables' types need, what each program is given, and what `stated` makes
+      * of the proposition. A test is read as `ScalusProofs.Runs.returns … true`, and a `denotes` as
+      * `ScalusProofs.Runs.succeeds`, in any position. The proposition a check reads at a budget
+      * implies this one ([[renderFormula]]): a test claimed that returns `true` within the budget
+      * returns it, and one assumed that returns `true` at some step neither returns `false` nor
+      * fails within the budget; so does a `denotes`.
+      */
+    private def anyRunBody(goal: Lowered, stated: String => String, prefix: String): String = {
+        val variables = leanVariables(goal)
+        def run(leaf: Int): String = {
+            val arguments =
+                if goal.binders.isEmpty then "[]"
+                else s"(arguments$leaf${variables.applied(goal, leaf)})"
+            s"${prefix}leaf$leaf.script $arguments"
+        }
+        val reading = new LeafReading {
+            def test(leaf: Int, positive: Boolean): String =
+                s"(ScalusProofs.Runs.returns ${run(leaf)} true)"
+            def denotes(leaf: Int, positive: Boolean): String =
+                s"(ScalusProofs.Runs.succeeds ${run(leaf)})"
+        }
+        val formula = renderFormula(
+          goal.body,
+          _ => "",
+          variables.declarations,
+          variables.premises,
+          positive = true,
+          within = false,
+          Some(reading)
+        )
+        val definitions =
+            if goal.binders.isEmpty then "" else variables.arguments.mkString("", "\n", "\n\n")
+        withTypeDefinitions(goal, definitions + stated(formula))
     }
 
     /** A program of a statement as a compiled function of the Universal Annotation Language: its

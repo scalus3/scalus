@@ -398,6 +398,11 @@ of Scalus's Lean library; adding them makes every kept result stale once.
   hypothesis is its guarantee read with `==>:`, where Scalus proves the rejecting form `==>?:`:
   that the clause returns wherever the validator accepts is tested on samples, not proved. That
   each hypothesis is the statement Scalus proved is step 4.
+- The statements proved with calls as unknowns, in the workspace, for a proof by hand to cite: #1
+  and #3 are `LinearVesting.Generated.vesting_spend_beneficiary_signed` and
+  `vesting_spend_unvested_stays_locked`, of the validator's own programs, of runs of any number of
+  steps ([statements as Lean modules](lean-export.md#a-statement-as-a-lean-module)). Step 4 starts
+  from them.
 
 ## Steps
 

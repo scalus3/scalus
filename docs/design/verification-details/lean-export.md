@@ -53,6 +53,33 @@ def statement : Prop :=
   declare their names outside the namespace they are written in, so two modules whose programs
   were both named `leaf0` could not be imported by one proof.
 
+**A statement proved with calls as unknowns** ([`CallsAsUnknowns`](multi-transaction.md#calls-as-unknowns-in-the-tactic),
+`ProofKind.BlasterOfUnknowns`) is written as well, in another form. Blaster proved it of other
+programs, the statement's with each walk over a list an unknown, at a budget. Of the statement's
+own programs it does not hold at that budget: they walk lists longer than its runs reach, so an
+axiom of it at the budget would be false. The module states it of the programs as written, of runs
+of any number of steps, with no `#prep_uplc_run`:
+
+```lean
+import ScalusProofs.Run
+import ScalusProofs.Runs
+…
+def statement : Prop :=
+  (∀ (x0 : Data), ((… x0 = true) →
+    (¬ (ScalusProofs.Runs.succeeds …_leaf0.script (arguments0 x0)))))
+
+axiom proved : statement
+```
+
+A test is `ScalusProofs.Runs.returns … true` and a `denotes` is `ScalusProofs.Runs.succeeds`, in
+any position: the proposition a check reads at a budget implies this one, so the proof with
+unknowns does too, by the tie of each program to its form with unknowns, which is tested and not
+proved. The axiom's comment says so, and the header says no budget, so a search that finds another
+budget leaves the module as it is. A proof by hand cites it as any other: vesting's first and third
+guarantees are `LinearVesting.Generated.vesting_spend_beneficiary_signed` and
+`vesting_spend_unvested_stays_locked`. The Universal Annotation Language has no form of such a
+proof, and `ualExport` passes it over.
+
 `LeanProofs.writeStatement(statement, result)` writes a statement that `result` proved into the
 workspace of the proofs, as `<Package>.Generated.<name>`: the statement's name, with `_` for every
 character a Lean name cannot have. It runs no Lean: a statement whose result is kept is written as
