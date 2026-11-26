@@ -111,7 +111,8 @@ Not built yet:
   of a step that it takes
   ([several transactions](verification-details/multi-transaction.md), phase 3a of §9).
 
-§9 has the plan with the status of each phase.
+§9 has the phases with the status of each. [The plan](verification-plan.md) orders what is not
+built yet.
 
 ---
 
@@ -1282,7 +1283,8 @@ budget proves, as one about every list
   two inputs, policies and tokens in about 2 minutes, and at three Lean's symbolic run alone took
   3.5 hours.
 - Programs must be compiled without the CIP-153 `Value` and CIP-138 array builtins, which the
-  Lean model lacks. A ledger `Value` represented as `Data` is unaffected.
+  Lean model lacks at the revision Scalus pins (upstream `main` has them since 2026-11-13). A
+  ledger `Value` represented as `Data` is unaffected.
 - Programs that read single bytes or reach the CIP-121/122 bitwise builtins cannot be proved over
   symbolic inputs.
 - PlutusCore is pinned to a fork until PR #40 merges.
@@ -1584,6 +1586,9 @@ ledger's validity predicates as premises, is phase 3 (§9).
 ---
 
 ## 9. Plan
+
+The table records what each phase built. What comes next, and in what order, is in
+[the plan](verification-plan.md).
 
 | Phase | Deliverables | Exit criterion | Status (2026-11-17; 3a 2026-11-25) |
 |---|---|---|---|

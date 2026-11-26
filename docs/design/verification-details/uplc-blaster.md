@@ -1477,9 +1477,11 @@ is canceled.
   `byteStringToInteger(shiftByteString(hex"01", exp % 8) ++ integerToByteString(true, exp / 8, 0))`,
   so it is proved only for `exp < 0`.
 - **`Value` and array builtins.** PlutusCoreBlaster's flat decoder has the CIP-153 `Value` and
-  CIP-138 array builtins commented out. As of 2026-09-23, the upstream PRs were
-  input-output-hk/PlutusCoreBlaster#15 (`Value`: conflicting, no review since 2026-05) and #12
-  (arrays: mergeable). Until they land, programs are compiled with `valueBuiltins = false`.
+  CIP-138 array builtins commented out in the revision Scalus pins. Upstream, they were merged
+  into `main` on 2026-11-12 (input-output-hk/PlutusCoreBlaster#12, arrays) and 2026-11-13 (#15,
+  `Value`). Until the pin moves to a revision that has them
+  ([the plan](../verification-plan.md#m5-the-published-script-g3-closes-phase-3)), programs are
+  compiled with `valueBuiltins = false`.
 - **One check at a time per workspace.** The workspace's language server elaborates one check
   after another, so the statements of a suite take turns; a pool of servers is a later step
   ([the Lean server](lean-server.md)).
