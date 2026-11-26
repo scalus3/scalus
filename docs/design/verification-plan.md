@@ -32,13 +32,16 @@ with two spikes that measure it.
 What the goals rest on:
 
 - **The call rule.** A call whose callee has a contract is replaced by a value of which the
-  postcondition holds, and a call of a function with no contract by any value: `CallsAsUnknowns`
-  is the rule with the trivial contract. The contracts are proved as statements of their own; one
-  not proved yet is cited as a premise and named in the result. The rule's soundness, and its
-  implementation, are trusted, as a Hoare-logic tool's VC generator is. The implementation
-  rewrites SIR, the program it makes is compiled apart from the original, and calls with one key
-  share one unknown: a review found one key unsound (fixed in `d892e6d53`). G4 proves the rule in
-  Lean, with the rewrite moved to UPLC, so that the lemma is about the two programs themselves.
+  postcondition holds where the precondition does, and a call of a function with no contract by
+  any value: `CallsAsUnknowns` is the rule with the trivial contract. The contracts are proved as
+  statements of their own; one not proved yet is cited as a premise and named in the result. The
+  precondition at a call is the caller's obligation, a statement of its own that the proof does
+  not rest on ([the call rule](verification-details/call-rule.md#the-rule), 1). The rule's
+  soundness, and its implementation, are trusted, as a Hoare-logic tool's VC generator is. The
+  implementation rewrites SIR, the program it makes is compiled apart from the original, and calls
+  with one key share one unknown: a review found one key unsound (fixed in `d892e6d53`). G4
+  proves the rule in Lean, with the rewrite moved to UPLC, so that the lemma is about the two
+  programs themselves.
 - **Blaster's optimizer.** `#prep_uplc_run` optimizes a run with Blaster's `Optimize.main`, and
   the statement is about that term, which is not `runProgramFor` by `rfl`. For a result Blaster
   closes, the optimizer is part of Blaster. For a proof by hand it is the one step left, which G5
