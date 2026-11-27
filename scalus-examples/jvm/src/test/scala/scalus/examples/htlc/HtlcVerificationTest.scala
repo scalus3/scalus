@@ -435,9 +435,13 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // on the Scalus CEK, with the real hash, that reveal is rejected: the counterexample is
         // spurious, and the statement is not refuted. The tactic says that the budget is not at
         // fault, and names the hash. Of every context, as of two signatures at most.
+        //
+        // The test waits for that result, which nothing keeps: Lean comes to it in 15 s on CI and
+        // in a minute here alone, but took more than two beside the other suites of `sbt quick`
+        // (2026-11-27). The limit is for a check that does not end.
         val result = verifyWithoutKeeping(
           noRevealIsAccepted,
-          UplcBlaster(Budget.LeanSteps(budget), lean, 2.minutes)
+          UplcBlaster(Budget.LeanSteps(budget), lean, 10.minutes)
         )
         assert(result.isInconclusive, explain(noRevealIsAccepted, result))
         val spurious = result.why.getOrElse("")
