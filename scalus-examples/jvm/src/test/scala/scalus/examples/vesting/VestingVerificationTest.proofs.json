@@ -181,6 +181,7 @@
         "kind": "Blaster"
       },
       "tests": [
+        "spend's fourth guarantee holds of every script context, with the library's contracts",
         "the schedule's contract, stated in its body, holds of its compiled program"
       ]
     },
@@ -232,7 +233,7 @@
         "951c9caed0f1019c"
       ],
       "notes": {
-        "budget": "983",
+        "budget": "984",
         "kind": "BlasterOfUnknowns"
       },
       "tests": [
@@ -252,6 +253,25 @@
       },
       "tests": [
         "spend's second guarantee holds of every script context: something is withdrawn"
+      ]
+    },
+    "vesting.spend.state_is_carried": {
+      "tactic": "uplc-blaster-unknowns",
+      "result": "proved",
+      "statement": "f4507ee8e5ed6290",
+      "programs": [
+        "a6a05387fd3e7256",
+        "9815ca8130644945",
+        "749a7df698514d77",
+        "4969668929a3ea56",
+        "28467df4b9b6195b"
+      ],
+      "notes": {
+        "budget": "2400",
+        "kind": "BlasterOfUnknowns"
+      },
+      "tests": [
+        "spend's fourth guarantee holds of every script context, with the library's contracts"
       ]
     },
     "vesting.spend.unvested_stays_locked": {

@@ -42,15 +42,36 @@ object Clause {
       *
       * It is where the code states its condition, the call's last argument, or the body of that
       * argument where it is a lambda. `Spec.ensures` is inline: its call is that of
-      * `Spec.holdsOnReturn(_ => condition)`, at the definition of `Spec.ensures`, and only the
-      * condition is in the code that states it. The call itself is the place of a condition that
-      * has none.
+      * `Spec.holdsOnReturn(_ => condition)`, at the definition of `Spec.ensures`, and the code that
+      * states the clause is where it was inlined to (the first place of [[SIRPosition]]'s
+      * `inlinedFrom`). `ensuring` and `Spec.expects` are not inline: their call is in that code. A
+      * condition that is an inline function's code, as `a === b`, has the place of that function's
+      * definition, and the places it was inlined to: its place is the first of them inside the
+      * call, or else in its file. The call itself is the place of a condition that has none.
       */
     private[verify] def at(node: SIR, kind: Kind, function: String, occurrence: Int): Clause = {
+        val call = positionOf(node)
+        val site = if kind == Kind.Ensures then call.inlinedFrom.headOption else Some(call)
         val stated = positionOf(condition(node))
-        val position = if stated.file.isEmpty then positionOf(node) else stated
+        val places = (stated :: stated.inlinedFrom).filter(!_.file.isEmpty)
+        val position = site.filter(!_.file.isEmpty) match
+            case Some(code) =>
+                places
+                    .find(inside(_, code))
+                    .orElse(places.find(_.file == code.file))
+                    .getOrElse(code)
+            case None => places.headOption.getOrElse(call)
         if position.file.isEmpty then Clause(s"<$function>", 0, 0, kind, occurrence)
         else Clause(position.file, position.startLine + 1, position.startColumn, kind, occurrence)
+    }
+
+    /** Whether `place` is inside `code`, of the same file. */
+    private def inside(place: SIRPosition, code: SIRPosition): Boolean = {
+        def notAfter(line: Int, column: Int, otherLine: Int, otherColumn: Int): Boolean =
+            line < otherLine || (line == otherLine && column <= otherColumn)
+        place.file == code.file &&
+        notAfter(code.startLine, code.startColumn, place.startLine, place.startColumn) &&
+        notAfter(place.endLine, place.endColumn, code.endLine, code.endColumn)
     }
 
     /** The condition of the call `node`: its last argument, or the body of that argument. */
@@ -84,13 +105,16 @@ enum ClauseStatus {
       * the tactic finds it the same statement as one of those: the same proposition, about the same
       * programs. `within` says what the statements are of where it is less than every value: the
       * limits of their variables ([[Props.forAllDataLimited]]), one for each variable that has
-      * them. Beyond them the clause is not checked.
+      * them. Beyond them the clause is not checked. `assuming` are the clauses of the contracts the
+      * proofs rest on, which no proof here proves ([[Proof.assumed]]): the clause holds where they
+      * do.
       */
     case Checked(
         statements: List[String],
         tactic: String,
         kinds: Set[ProofKind],
-        within: List[String]
+        within: List[String],
+        assuming: List[Clause]
     )
 
     /** Declared not proved, with the reason: by [[Verifier.open]] of the statement `by`, or of the
@@ -114,11 +138,14 @@ final case class Specification(clause: Clause, functions: List[String], status: 
     def describe: String = {
         val of = s"${clause.where}, in ${functions.mkString(", ")}"
         status match
-            case ClauseStatus.Checked(statements, tactic, kinds, within) =>
+            case ClauseStatus.Checked(statements, tactic, kinds, within, assuming) =>
                 val limited =
                     if within.isEmpty then "" else s", only where ${within.mkString("; ")}"
+                val assumed =
+                    if assuming.isEmpty then ""
+                    else assuming.map(_.where).mkString(", assuming the contracts of ", ", ", "")
                 s"$of: checked by ${statements.mkString(", ")} ($tactic, " +
-                    s"${kinds.mkString(", ")})$limited"
+                    s"${kinds.mkString(", ")})$limited$assumed"
             case ClauseStatus.Open(by, reason) =>
                 val declared = if by.isEmpty then "" else s", $by"
                 s"$of: open$declared: $reason"

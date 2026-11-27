@@ -136,21 +136,39 @@ trait ProofArtifact {
     def kind: ProofKind
 }
 
-/** Evidence supplied by a proof tactic, including its artifact and the lemmas it used. */
+/** Evidence supplied by a proof tactic, including its artifact and the lemmas it used.
+  *
+  * @param premises
+  *   the clauses of the contracts that the proof assumes of the functions its programs call, as the
+  *   call rule assumes them (docs/design/verification-details/call-rule.md), and that no lemma of
+  *   it proves: the statement holds where they hold
+  */
 final class Proof private[verify] (
     val artifact: ProofArtifact,
-    val usedLemmas: List[Theorem]
+    val usedLemmas: List[Theorem],
+    val premises: List[Clause]
 ) {
     def kinds: Set[ProofKind] = Set(artifact.kind) ++ usedLemmas.flatMap(_.proof.kinds)
+
+    /** The clauses of the contracts the proof rests on: its premises, and those of its lemmas. A
+      * proof that cites a lemma resting on a contract rests on it too.
+      */
+    def assumed: List[Clause] = (premises ++ usedLemmas.flatMap(_.proof.assumed)).distinct
 }
 
 object Proof {
-    private[verify] def apply(artifact: ProofArtifact): Proof = new Proof(artifact, Nil)
+    private[verify] def apply(artifact: ProofArtifact): Proof = new Proof(artifact, Nil, Nil)
 
     private[verify] def apply(
         artifact: ProofArtifact,
         usedLemmas: List[Theorem]
-    ): Proof = new Proof(artifact, usedLemmas)
+    ): Proof = new Proof(artifact, usedLemmas, Nil)
+
+    private[verify] def apply(
+        artifact: ProofArtifact,
+        usedLemmas: List[Theorem],
+        premises: List[Clause]
+    ): Proof = new Proof(artifact, usedLemmas, premises)
 }
 
 /** A statement paired with a proof. It can be supplied as a lemma for later goals. */
@@ -934,7 +952,8 @@ final class Verifier private (results: Option[KeptResults]) {
             )
         }
         prepared.execute() match
-            case VerificationResult.Proven(proof) =>
+            case VerificationResult.Proven(found) =>
+                val proof = cited(found)
                 checked(proof)
                 val theorem = new Theorem(prepared.statement, proof)
                 proven = proven.updated(prepared.statement.name, theorem)
@@ -944,13 +963,39 @@ final class Verifier private (results: Option[KeptResults]) {
                     .foreach(identity => provedAs = provedAs.updated(identity, theorem))
                 VerificationResult.Proven(proof)
             // A proof within a bound is of a weaker statement: no theorem is registered.
-            case within @ VerificationResult.ProvenWithin(proof, _) =>
+            case VerificationResult.ProvenWithin(found, bound) =>
+                val proof = cited(found)
                 checked(proof)
-                within
+                VerificationResult.ProvenWithin(proof, bound)
             case VerificationResult.Refuted(proof) => VerificationResult.Refuted(proof)
             case inconclusive @ VerificationResult.Inconclusive(_) => inconclusive
             case failed @ VerificationResult.Failed(_)             => failed
     }
+
+    /** `proof`, with each of its premises that a theorem of this verifier proves cited as that
+      * lemma: the theorem of a statement that states the clause ([[statement]] of a contract read
+      * from the code), of every value, as the premise is assumed of every call. Of several, the one
+      * that rests on the fewest contracts, and then the first by name. The others stay its
+      * premises; what a lemma rests on, the proof rests on ([[Proof.assumed]]).
+      */
+    private def cited(proof: Proof): Proof =
+        if proof.premises.isEmpty then proof
+        else
+            val byClause = proven.values.toList
+                .filter(theorem => limitsOf(theorem.statement.prop).isEmpty)
+                .flatMap(theorem =>
+                    stating.getOrElse(theorem.statement.name, Set.empty).map(_ -> theorem)
+                )
+                .groupBy(_._1)
+                .map((clause, stating) =>
+                    clause -> stating
+                        .map(_._2)
+                        .minBy(theorem => (theorem.proof.assumed.size, theorem.statement.name))
+                )
+            val (proved, open) = proof.premises.partition(byClause.contains)
+            val lemmas =
+                proved.map(byClause).filterNot(lemma => proof.usedLemmas.exists(_ eq lemma))
+            Proof(proof.artifact, proof.usedLemmas ++ lemmas.distinct, open)
 
     /** What `tactic` says a statement it prepared is. */
     private def identityOf(tactic: Tactic)(prepared: tactic.Prepared): Option[StatementIdentity] = {
@@ -1093,8 +1138,8 @@ final class Verifier private (results: Option[KeptResults]) {
             )
     }
 
-    /** The theorems as a status: the statements, the tactics, the proofs, and the limits of their
-      * variables.
+    /** The theorems as a status: the statements, the tactics, the proofs, the limits of their
+      * variables, and the contracts they rest on.
       */
     private def checkedBy(theorems: List[Theorem]): ClauseStatus.Checked = {
         ClauseStatus.Checked(
@@ -1104,7 +1149,8 @@ final class Verifier private (results: Option[KeptResults]) {
               .distinct
               .mkString(", "),
           theorems.flatMap(_.proof.kinds).toSet,
-          theorems.flatMap(theorem => limitsOf(theorem.statement.prop)).distinct
+          theorems.flatMap(theorem => limitsOf(theorem.statement.prop)).distinct,
+          theorems.flatMap(_.proof.assumed).distinct
         )
     }
 

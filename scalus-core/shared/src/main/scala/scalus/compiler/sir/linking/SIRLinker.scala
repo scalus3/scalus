@@ -427,10 +427,20 @@ object SIRLinker {
         }
     }
 
-    /** Whether a binding is a definition linking put around a program: its name is a qualified one,
-      * which a local value's never is.
+    /** Whether a binding is a definition linking put around a program: its name is a qualified one.
+      * A local value's name has no dot, but for the names the plugin gives the values of a match,
+      * `_File.scala_15_8_match_scrutinee_1`, which have the file's: a program can start with one.
       */
-    def isDefinition(binding: Binding): Boolean = binding.name.contains('.')
+    def isDefinition(binding: Binding): Boolean =
+        binding.name.contains('.') && !isValueOfMatch(binding.name)
+
+    /** Whether `name` is one the plugin gives a value of a match, `_<file>_<line>_<column>_match_…`
+      * (`PatternMatchingCompiler`): the file's name, with its extension, after one underscore, then
+      * its line and column.
+      */
+    private def isValueOfMatch(name: String): Boolean = valueOfMatch.matches(name)
+
+    private val valueOfMatch = """_[^/$]*\.[A-Za-z]+_\d+_\d+_match_.*""".r
 
     /** Visits what linking looks into of `sir`, each node before the ones under it, in the order
       * linking meets them. An error's message is not looked into.

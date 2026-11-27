@@ -663,11 +663,15 @@ final class LeanProofs private (
         val id = LeanProofs.moduleName(statement.name)
         val (module, file) = LeanWorkspace.generated(workspace, id)
         val directory = workspace.relativize(file.getParent.resolve(id)).toString
+        val assumed = result match
+            case VerificationResult.Proven(proof) => proof.assumed
+            case _                                => Nil
         tactic.statementModule(
           verifier.goalOf(statement),
           artifactOf(result),
           module,
-          directory
+          directory,
+          assumed
         ) match
             case Left(reason)   => failed(reason)
             case Right(written) => (module, file, directory, written)
@@ -1042,9 +1046,14 @@ object LeanProofs {
       * the reason there is no result.
       */
     private[uplcblaster] def describe(result: VerificationResult): String = {
+        // A proof names the contracts it assumes, which no lemma of it proves.
+        def assuming(proof: Proof): String =
+            if proof.assumed.isEmpty then ""
+            else proof.assumed.map(_.where).mkString(", assuming the contracts of ", ", ", "")
         result match
-            case VerificationResult.Proven(_)              => "a proof"
-            case VerificationResult.ProvenWithin(_, bound) => s"a proof within $bound"
+            case VerificationResult.Proven(proof) => s"a proof${assuming(proof)}"
+            case VerificationResult.ProvenWithin(proof, bound) =>
+                s"a proof within $bound${assuming(proof)}"
             case VerificationResult.Refuted(proof) =>
                 proof.artifact match
                     case artifact: UplcBlaster.Artifact if artifact.counterexample.nonEmpty =>

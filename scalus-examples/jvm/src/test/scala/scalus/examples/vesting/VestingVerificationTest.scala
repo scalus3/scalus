@@ -35,10 +35,11 @@ import scala.concurrent.duration.*
   *     differ from those of [[VestingContract]]: Lean's model has no `Value` builtins yet. The
   *     statements are about the same source, not about the published script's bytes;
   *   - the validator walks the inputs and the outputs, and `UplcBlaster` cannot follow a loop over
-  *     a list of unknown length. Of every context, the first and third guarantees are proved with
-  *     the walks as unknowns (`CallsAsUnknowns`), resting on the tie of the validator to its
-  *     program with unknowns (`ProofKind.BlasterOfUnknowns`); the fourth, and that everything can
-  *     be withdrawn after the end, are open.
+  *     a list of unknown length. Of every context, the first, third and fourth guarantees are
+  *     proved with the walks as unknowns (`CallsAsUnknowns`), resting on the tie of the validator
+  *     to its program with unknowns (`ProofKind.BlasterOfUnknowns`); the fourth also on the
+  *     contracts the library's `Value` functions state, which are not proved yet, and which its
+  *     proof names. That everything can be withdrawn after the end is open.
   *
   * Without Lean, that is without `lake` and a built workspace, the tests pass on the results kept
   * beside this file (see [[LeanProofs]]). The tests tagged `Unfinished` are about what Lean does
@@ -381,10 +382,12 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         val result = verify(
           VerificationRequest(
             beneficiarySigned,
-            new CallsAsUnknowns(UplcBlaster(Budget.Auto, lean, 30.minutes))
+            new CallsAsUnknowns(UplcBlaster(Budget.Auto, lean, 30.minutes)).withoutContracts
           )
         )
         assert(result.meets(beneficiarySigned), explain(beneficiarySigned, result))
+        // It needs no contract of the functions the validator calls, and assumes none.
+        assert(proofOf(result).assumed.isEmpty, explain(result))
     }
 
     // spend: Spec.ensures(amountOf(redeemer) > 0)
@@ -417,10 +420,11 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         val result = verify(
           VerificationRequest(
             unvestedStaysLocked,
-            new CallsAsUnknowns(UplcBlaster(Budget.Auto, lean, 60.minutes))
+            new CallsAsUnknowns(UplcBlaster(Budget.Auto, lean, 60.minutes)).withoutContracts
           )
         )
         assert(result.meets(unvestedStaysLocked), explain(unvestedStaysLocked, result))
+        assert(proofOf(result).assumed.isEmpty, explain(result))
     }
 
     // spend: Spec.ensures(amountOf(redeemer) === lockedBy(txInfo, txOutRef) ||
@@ -429,19 +433,49 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     // The step of a thread of withdrawals (docs/design/verification-details/multi-transaction.md):
     // the output a withdrawal leaves is the one the next withdrawal spends, and the next reads the
     // datum and the lovelace of it as the state.
+    /** The budget of the fourth guarantee with calls as unknowns: its rejecting program runs the
+      * validator to its last check. `Budget.Auto` climbed from 100 to 983 in an hour, each
+      * counterexample a run the budget cut a few steps further on; at 2400 Lean proves it in two
+      * minutes (2026-11-26).
+      */
+    private val stateIsCarriedBudget = 2400
+
     private val stateIsCarried = verifier.statement(
       "vesting.spend.state_is_carried",
       forAllData[ScriptContext](ctx => accepts(ctx) ==>?: carriesTheState(ctx))
     )
 
-    test("spend's fourth guarantee, of every script context, is not finished by Lean", Unfinished) {
-        val result = verifyWithoutKeeping(
-          stateIsCarried,
-          UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
+    test("spend's fourth guarantee holds of every script context, with the library's contracts") {
+        // As the first and the third, with each walk an unknown. The clause reads the lovelace of
+        // the output that keeps the rest; the validator compares that output's whole value with
+        // the spent one's less the lovelace withdrawn. What ties the two is the library's: the
+        // contracts that `Value.eq`, `Value.minus` and `Value.lovelace` state in their code, which
+        // the statement assumes of the unknowns of their calls
+        // (docs/design/verification-details/call-rule.md). No proof here proves them yet, and the
+        // proof names them. It also assumes the contract of `linearVesting`, which the validator
+        // calls, and cites the proof of it as a lemma: so that proof comes first.
+        val schedule = statedContractHolds.getOrElse(fail("linearVesting states no contract"))
+        val scheduleResult = verify(schedule, scheduleBudget)
+        assert(scheduleResult.meets(schedule), explain(schedule, scheduleResult))
+        val result = verify(
+          VerificationRequest(
+            stateIsCarried,
+            new CallsAsUnknowns(
+              UplcBlaster(Budget.LeanSteps(stateIsCarriedBudget), lean, 60.minutes)
+            )
+          )
         )
-        assert(result.isInconclusive, explain(stateIsCarried, result))
-        val unfinished = result.why.getOrElse("")
-        assert(unfinished.contains("did not finish"), unfinished)
+        assert(result.meets(stateIsCarried), explain(stateIsCarried, result))
+        val proof = proofOf(result)
+        assert(
+          proof.premises.map(_.file).forall(_.endsWith("plutus/v1/Value.scala")) &&
+              proof.premises.size == 3,
+          explain(result)
+        )
+        assert(
+          proof.usedLemmas.map(_.statement.name) == statedContractHolds.map(_.name).toList,
+          explain(result)
+        )
     }
 
     // The contexts of a partial withdrawal bound the outputs that the fourth guarantee reads, and
@@ -474,8 +508,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // spent output's address, under the same datum, with as much less lovelace. The search
         // for its budget did not finish in 10 minutes (2026-11-24): the rejecting program runs
         // the validator to its end, its last check, over the outputs. Of every context it is
-        // proved with the walks as unknowns once their lemmas are premises
-        // (docs/design/verification-details/multi-transaction.md). The time limit ends it.
+        // proved with the walks as unknowns and the library's contracts as their premises (the
+        // test above). The time limit ends it.
         val result = verifyWithoutKeeping(
           stateIsCarriedLimited,
           UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
@@ -484,6 +518,10 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         val unfinished = result.why.getOrElse("")
         assert(unfinished.contains("did not finish"), unfinished)
     }
+
+    private def proofOf(result: VerificationResult): Proof = result match
+        case VerificationResult.Proven(proof) => proof
+        case other                            => fail(s"no proof: $other")
 
     /** The validator without its check of the datum of the output that keeps the rest. */
     private val withoutDatumCheck = FunctionDef.named(
@@ -499,22 +537,32 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val stateIsCarriedWithoutDatumCheck = verifier.refute(
       "vesting.control.state_is_carried_without_datum_check",
       forAllData[ScriptContext](ctx =>
-          succeeds(withoutDatumCheck, ctx.toData) ==>?: carriesTheState(ctx)
+          succeeds(VestingWithoutDatumCheck.validate(ctx.toData)) ==>?: carriesTheState(ctx)
       )
     )
 
     test(
-      "without the datum check, the fourth guarantee, of every script context, is not finished " +
-          "by Lean",
-      Unfinished
+      "without the datum check, the fourth guarantee has a counterexample under the contracts, " +
+          "which no context realizes"
     ) {
+        // With the walks as unknowns and the library's contracts as premises, Lean finds a spend
+        // the copy accepts and that leaves the rest under another datum: the premises do not
+        // contradict each other, and the proof of the guarantee rests on the datum check. But the
+        // unknowns' values are of no context: on the context Lean gives, the copy's walks return
+        // other values, and the statement as written holds there. A refutation by unknowns is
+        // confirmed only where Lean's context realizes them, so this one is no refutation, but one
+        // whose context does is. The context that refutes the statement is the sample below,
+        // which the copy accepts.
         val result = verifyWithoutKeeping(
           stateIsCarriedWithoutDatumCheck,
-          UplcBlaster(Budget.LeanSteps(guaranteesBudget), lean, 60.seconds)
+          new CallsAsUnknowns(UplcBlaster(Budget.LeanSteps(stateIsCarriedBudget), lean, 10.minutes))
         )
-        assert(result.isInconclusive, explain(stateIsCarriedWithoutDatumCheck, result))
-        val unfinished = result.why.getOrElse("")
-        assert(unfinished.contains("did not finish"), unfinished)
+        val spurious = result.isInconclusive &&
+            result.why.exists(_.contains("values that their walks do not return"))
+        assert(
+          spurious || result.meets(stateIsCarriedWithoutDatumCheck),
+          explain(stateIsCarriedWithoutDatumCheck, result)
+        )
     }
 
     private val stateIsCarriedWithoutDatumCheckLimited = verifier.refute(

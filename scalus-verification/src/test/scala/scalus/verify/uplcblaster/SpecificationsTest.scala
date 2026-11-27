@@ -280,12 +280,12 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
         assert(ofFew.name < everyList.name)
         provedAs(verifier, ofFew)
         onlyStatus(verifier, Clause.Kind.Ensures) match
-            case ClauseStatus.Checked(List(by), _, _, within) =>
+            case ClauseStatus.Checked(List(by), _, _, within, _) =>
                 assert(by == ofFew.name && within.nonEmpty, within)
             case other => fail(s"expected a clause checked within limits, got $other")
         provedAs(verifier, everyList)
         onlyStatus(verifier, Clause.Kind.Ensures) match
-            case ClauseStatus.Checked(List(by), _, _, within) =>
+            case ClauseStatus.Checked(List(by), _, _, within, _) =>
                 assert(by == everyList.name && within.isEmpty, within)
             case other => fail(s"expected a clause checked of every value, got $other")
     }
@@ -328,7 +328,7 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
         val (oneProved, _, ofAgain) = stated()
         provedAs(oneProved, ofAgain)
         onlyStatus(oneProved, Clause.Kind.Expects) match
-            case ClauseStatus.Checked(List(by), _, _, _) => assert(by == ofAgain.name)
+            case ClauseStatus.Checked(List(by), _, _, _, _) => assert(by == ofAgain.name)
             case other => fail(s"expected the clause checked, got $other")
         val (oneOpen, every, _) = stated()
         oneOpen.open(every, "Lean does not finish it")
