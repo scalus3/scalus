@@ -251,6 +251,14 @@ enum VerificationResult {
       * bounded check, as UPLC Blaster within a budget (`Budget.Within`).
       */
     case ProvenWithin(proof: Proof, bound: String)
+
+    /** The statement holds where the contracts `proof.premises` hold, of the functions its programs
+      * call: a proof of a weaker statement, as a proof with calls as unknowns that assumed them
+      * (docs/design/verification-details/call-rule.md). It is no theorem, and no lemma of another,
+      * until a theorem of the verifier proves each of them, when the proof cites it and is a proof
+      * of the statement. The verifier gives it, of a proof whose premises it proves none of.
+      */
+    case ProvenAssuming(proof: Proof)
     case Refuted(proof: Proof)
     case Unsupported(report: CompatibilityReport)
     case Inconclusive(reason: String)
@@ -265,6 +273,13 @@ enum VerificationResult {
     def isProvenWithin: Boolean = this match
         case ProvenWithin(_, _) => true
         case _                  => false
+
+    /** Whether the statement is proved where contracts that are not proved hold
+      * ([[ProvenAssuming]]), which is no theorem.
+      */
+    def isProvenAssuming: Boolean = this match
+        case ProvenAssuming(_) => true
+        case _                 => false
 
     /** Whether the statement is refuted, with a counterexample. */
     def isRefuted: Boolean = this match
@@ -298,6 +313,7 @@ enum VerificationResult {
         case Unsupported(report)  => Some(report.issues.mkString("; "))
         case Proven(_)            => None
         case ProvenWithin(_, _)   => None
+        case ProvenAssuming(_)    => None
         case Refuted(_)           => None
 }
 
@@ -305,7 +321,8 @@ enum VerificationResult {
   * [[VerificationResult.Unsupported]].
   */
 type ExecutionResult = VerificationResult.Proven | VerificationResult.ProvenWithin |
-    VerificationResult.Refuted | VerificationResult.Inconclusive | VerificationResult.Failed
+    VerificationResult.ProvenAssuming | VerificationResult.Refuted |
+    VerificationResult.Inconclusive | VerificationResult.Failed
 
 /** Opaque evidence that a tactic successfully prepared a statement in a particular verifier. */
 final class PreparedRun private[verify] (
@@ -334,6 +351,11 @@ final class Verifier private (results: Option[KeptResults]) {
       * [[guarantees]] states, and those of a contract read from the code.
       */
     private var stating: Map[String, Set[Clause]] = Map.empty
+
+    /** The statements proved only where contracts that no theorem proves hold
+      * ([[VerificationResult.ProvenAssuming]]), with the clauses of those contracts.
+      */
+    private var assuming: Map[String, List[Clause]] = Map.empty
 
     /** The tactic that proved each theorem, by the statement's name: what says whether another
       * statement is the same as it.
@@ -951,23 +973,32 @@ final class Verifier private (results: Option[KeptResults]) {
               s"tactic ${prepared.tacticName} supplied no proof artifact"
             )
         }
+        val name = prepared.statement.name
         prepared.execute() match
             case VerificationResult.Proven(found) =>
-                val proof = cited(found, prepared.statement.name)
+                val proof = cited(found, name)
                 checked(proof)
-                val theorem = new Theorem(prepared.statement, proof)
-                proven = proven.updated(prepared.statement.name, theorem)
-                provedBy = provedBy.updated(prepared.statement.name, prepared.tactic)
-                prepared
-                    .identity()
-                    .foreach(identity => provedAs = provedAs.updated(identity, theorem))
-                VerificationResult.Proven(proof)
+                // A proof that rests on contracts no theorem here proves is of a weaker statement:
+                // no theorem is registered, so that no later proof rests on them unawares.
+                if proof.premises.nonEmpty then
+                    assuming = assuming.updated(name, proof.premises)
+                    VerificationResult.ProvenAssuming(proof)
+                else
+                    assuming = assuming - name
+                    val theorem = new Theorem(prepared.statement, proof)
+                    proven = proven.updated(name, theorem)
+                    provedBy = provedBy.updated(name, prepared.tactic)
+                    prepared
+                        .identity()
+                        .foreach(identity => provedAs = provedAs.updated(identity, theorem))
+                    VerificationResult.Proven(proof)
             // A proof within a bound is of a weaker statement: no theorem is registered.
             case VerificationResult.ProvenWithin(found, bound) =>
                 val proof = cited(found, prepared.statement.name)
                 checked(proof)
                 VerificationResult.ProvenWithin(proof, bound)
-            case VerificationResult.Refuted(proof) => VerificationResult.Refuted(proof)
+            case assumed @ VerificationResult.ProvenAssuming(_) => assumed
+            case VerificationResult.Refuted(proof)              => VerificationResult.Refuted(proof)
             case inconclusive @ VerificationResult.Inconclusive(_) => inconclusive
             case failed @ VerificationResult.Failed(_)             => failed
     }
@@ -1144,8 +1175,8 @@ final class Verifier private (results: Option[KeptResults]) {
             )
     }
 
-    /** The theorems as a status: the statements, the tactics, the proofs, the limits of their
-      * variables, and the contracts they rest on.
+    /** The theorems as a status: the statements, the tactics, the proofs, and the limits of their
+      * variables.
       */
     private def checkedBy(theorems: List[Theorem]): ClauseStatus.Checked = {
         ClauseStatus.Checked(
@@ -1155,8 +1186,7 @@ final class Verifier private (results: Option[KeptResults]) {
               .distinct
               .mkString(", "),
           theorems.flatMap(_.proof.kinds).toSet,
-          theorems.flatMap(theorem => limitsOf(theorem.statement.prop)).distinct,
-          theorems.flatMap(_.proof.assumed).distinct
+          theorems.flatMap(theorem => limitsOf(theorem.statement.prop)).distinct
         )
     }
 
@@ -1222,11 +1252,10 @@ final class Verifier private (results: Option[KeptResults]) {
             .toList
             .sortBy(_.name)
         // A proof of every value first, then one of the fewest limits: the names, as of the sets of
-        // values, say nothing of which is stronger. Of those, one that rests on the fewest
-        // contracts ([[Proof.assumed]]), as a premise is cited.
+        // values, say nothing of which is stronger.
         candidates
             .flatMap(provedFor)
-            .sortBy(theorem => (limitsOf(theorem.statement.prop).size, theorem.proof.assumed.size))
+            .sortBy(theorem => limitsOf(theorem.statement.prop).size)
             .headOption match
             case Some(theorem) => checkedBy(List(theorem))
             case None =>
@@ -1240,6 +1269,14 @@ final class Verifier private (results: Option[KeptResults]) {
                             case Some(reason) =>
                                 s"$reason, so no statement states it: declare it open with " +
                                     s"verifier.open(function, ${clause.line}, reason)"
+                            // A statement proved where contracts no theorem proves hold.
+                            case None if candidates.exists(c => assuming.contains(c.name)) =>
+                                val (name, clauses) = candidates.collectFirst {
+                                    case c if assuming.contains(c.name) =>
+                                        c.name -> assuming(c.name)
+                                }.get
+                                s"$name is proved only${Clause.assuming(clauses)}, which no " +
+                                    "theorem here proves: prove them, or declare it open"
                             case None if candidates.nonEmpty =>
                                 "prove one of its statements, or one that is the same, or " +
                                     "declare it open"
@@ -1363,7 +1400,9 @@ object Verifier {
     private def outcome(result: ExecutionResult): String = result match
         case VerificationResult.Proven(_)              => "a proof"
         case VerificationResult.ProvenWithin(_, bound) => s"a proof within $bound"
-        case VerificationResult.Refuted(_)             => "a refutation"
-        case VerificationResult.Inconclusive(reason)   => s"no result: $reason"
-        case VerificationResult.Failed(reason)         => s"a failure: $reason"
+        case VerificationResult.ProvenAssuming(proof) =>
+            s"a proof${Clause.assuming(proof.premises)}"
+        case VerificationResult.Refuted(_)           => "a refutation"
+        case VerificationResult.Inconclusive(reason) => s"no result: $reason"
+        case VerificationResult.Failed(reason)       => s"a failure: $reason"
 }

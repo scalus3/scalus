@@ -109,6 +109,7 @@ class MappingMeasurementTest extends AnyFunSuite with LeanProofsSuite {
         case VerificationResult.Proven(proof) =>
             ("proven", budgetOf(proof), "")
         case VerificationResult.ProvenWithin(proof, _) => ("within", budgetOf(proof), "")
+        case VerificationResult.ProvenAssuming(proof)  => ("assuming", budgetOf(proof), "")
         case VerificationResult.Refuted(proof)         => ("refuted", budgetOf(proof), "")
         case VerificationResult.Unsupported(report) =>
             ("unsupported", "", report.toString.take(300).replace('\n', ' '))

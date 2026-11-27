@@ -375,17 +375,17 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
     private val countIsNotNegativeStatement =
         verifier.statement("calls_as_unknowns.count_not_negative", countIsNotNegative)
 
-    test("with the contract of its call, a statement of every list is proved, and names it") {
+    test("with the contract of its call, a statement of every list is proved assuming it") {
         // Without its contract, the unknown of `count` could be negative, as that of `length` is
-        // below: the contract is what the proof rests on, and no proof here proves it.
+        // below: the contract is what the proof rests on, and no proof here proves it. So the
+        // statement is proved only where the contract holds, which is no theorem.
         val result = verify(VerificationRequest(countIsNotNegativeStatement, unknowns))
-        assert(
-          result.meets(countIsNotNegativeStatement),
-          explain(countIsNotNegativeStatement, result)
-        )
+        assert(result.isProvenAssuming, explain(countIsNotNegativeStatement, result))
+        assert(!result.meets(countIsNotNegativeStatement))
         val premises = proofOf(result).premises
         assert(premises == assumedOf(countIsNotNegative), premises)
         assert(explain(result).contains("assuming the contracts of ensuring at"), explain(result))
+        assert(!verifier.theorems.exists(_.statement eq countIsNotNegativeStatement))
     }
 
     private val twice = FunctionDef(CallsAsUnknownsContracts.twice)
@@ -439,8 +439,9 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
     )
 
     test("a contract through two functions whose code calls the next binds each one's arguments") {
+        // Proved assuming the contract of `difference`, which nothing here proves.
         val result = verify(VerificationRequest(outerIsTheDifference, unknowns))
-        assert(result.meets(outerIsTheDifference), explain(outerIsTheDifference, result))
+        assert(result.isProvenAssuming, explain(outerIsTheDifference, result))
         assert(proofOf(result).premises == assumedOf(outerIsTheDifference.prop))
     }
 
@@ -457,57 +458,54 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
       )
     )
 
-    test("a proof rests on what the lemmas it cites rest on") {
-        // `ninefold`'s guarantee is proved assuming the contract of `thrice`, which nothing here
-        // proves. A statement that assumes `ninefold`'s contract cites that proof, and so rests on
-        // `thrice`'s contract too.
+    private val thrice = FunctionDef(CallsAsUnknownsContracts.thrice)
+    verifier.addFunction(thrice)
+
+    private val thriceContract = verifier.statement(
+      "calls_as_unknowns.thrice_contract",
+      FunctionContract.inSource(thrice).getOrElse(fail("thrice states no contract"))
+    )
+
+    test("a proof that rests on a contract no theorem proves is no lemma, until one proves it") {
+        // `ninefold`'s guarantee is proved assuming the contract of `thrice`: no theorem, so a
+        // statement that assumes `ninefold`'s contract cannot cite it, and rests on that contract.
         val List(guarantee) = ninefoldHolds.statements: @unchecked
-        val proved = verify(VerificationRequest(guarantee, unknowns))
-        assert(proved.meets(guarantee), explain(guarantee, proved))
-        val thrice = proofOf(proved).premises
-        assert(thrice.size == 1, thrice)
-        val result = verify(VerificationRequest(ninefoldMinusOne, unknowns))
-        assert(result.meets(ninefoldMinusOne), explain(ninefoldMinusOne, result))
-        val proof = proofOf(result)
-        assert(proof.premises.isEmpty, proof.premises)
-        assert(proof.usedLemmas.map(_.statement.name) == List(guarantee.name))
-        assert(proof.assumed == thrice, proof.assumed)
-        assert(explain(result).contains(thrice.head.where), explain(result))
-        // The clause of `ninefold` is checked, assuming that of `thrice`.
+        val assuming = verify(VerificationRequest(guarantee, unknowns))
+        assert(assuming.isProvenAssuming, explain(guarantee, assuming))
+        val ofThrice = proofOf(assuming).premises
+        assert(
+          ofThrice.size == 1 && ofThrice.head.file.endsWith("CallsAsUnknownsTest.scala"),
+          ofThrice
+        )
+        val before = verify(VerificationRequest(ninefoldMinusOne, unknowns))
+        assert(before.isProvenAssuming, explain(ninefoldMinusOne, before))
+        assert(proofOf(before).usedLemmas.isEmpty)
+        assert(!proofOf(before).premises.contains(ofThrice.head), proofOf(before).premises)
+        // The clause of `ninefold` is not checked: its statement is proved only assuming another.
         val ninefolds =
             verifier.specifications.filter(_.functions.contains(ninefold.ref.displayName))
         assert(
           ninefolds.exists(_.status match
-              case ClauseStatus.Checked(_, _, _, _, assuming) => assuming == thrice
-              case _                                          => false),
+              case ClauseStatus.Unchecked(_, missing) => missing.contains(ofThrice.head.where)
+              case _                                  => false),
           ninefolds.map(_.describe)
         )
+        // With `thrice`'s contract proved, the guarantee cites it and is a theorem, and so is the
+        // statement that cites the guarantee.
+        val contract = verify(thriceContract)
+        assert(contract.meets(thriceContract), explain(thriceContract, contract))
+        val proved = verify(VerificationRequest(guarantee, unknowns))
+        assert(proved.meets(guarantee), explain(guarantee, proved))
+        assert(proofOf(proved).usedLemmas.map(_.statement.name) == List(thriceContract.name))
+        val after = verify(VerificationRequest(ninefoldMinusOne, unknowns))
+        assert(after.meets(ninefoldMinusOne), explain(ninefoldMinusOne, after))
+        assert(proofOf(after).usedLemmas.map(_.statement.name) == List(guarantee.name))
     }
 
     private def proofOf(result: VerificationResult): Proof = result match
-        case VerificationResult.Proven(proof) => proof
-        case other                            => fail(s"no proof: $other")
-
-    test("the module of a proof that assumed contracts names them by the axiom") {
-        val lowered =
-            UplcBlaster.lower(longerThanNothing, FunctionTable.empty).fold(fail(_), identity)
-        val clause = assumedOf(countIsNotNegative).head
-        val written = UplcBlaster.statementModule(
-          lowered,
-          120,
-          Some(ProofKind.BlasterOfUnknowns),
-          400000,
-          "Scalus.CallsAsUnknownsTest.assuming",
-          "programs",
-          List(clause)
-        )
-        assert(
-          written.text.contains(
-            s"It assumes the contracts of ${clause.where}, which are not proved."
-          ),
-          written.text
-        )
-    }
+        case VerificationResult.Proven(proof)         => proof
+        case VerificationResult.ProvenAssuming(proof) => proof
+        case other                                    => fail(s"no proof: $other")
 
     test("a refutation whose unknown is no value its walk returns is spurious") {
         // A length is never negative, but an unknown of it can be: the replay on the statement as

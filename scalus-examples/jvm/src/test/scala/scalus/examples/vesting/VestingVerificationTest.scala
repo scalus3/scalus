@@ -445,15 +445,24 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       forAllData[ScriptContext](ctx => accepts(ctx) ==>?: carriesTheState(ctx))
     )
 
+    // Proved only assuming the contracts of `Value.eq`, `Value.minus` and `Value.lovelace` (the
+    // test below), which is no theorem: declared open until they are proved.
+    verifier.open(
+      stateIsCarried,
+      "proved only assuming the contracts of Value.eq, Value.minus and Value.lovelace, which " +
+          "are not proved yet (verification plan, M1 item 2)"
+    )
+
     test("spend's fourth guarantee holds of every script context, with the library's contracts") {
         // As the first and the third, with each walk an unknown. The clause reads the lovelace of
         // the output that keeps the rest; the validator compares that output's whole value with
         // the spent one's less the lovelace withdrawn. What ties the two is the library's: the
         // contracts that `Value.eq`, `Value.minus` and `Value.lovelace` state in their code, which
         // the statement assumes of the unknowns of their calls
-        // (docs/design/verification-details/call-rule.md). No proof here proves them yet, and the
-        // proof names them. It also assumes the contract of `linearVesting`, which the validator
-        // calls, and cites the proof of it as a lemma: so that proof comes first.
+        // (docs/design/verification-details/call-rule.md). No proof here proves them yet: the
+        // statement is proved only where they hold, which is no theorem, and the proof names them.
+        // It also assumes the contract of `linearVesting`, which the validator calls, and cites
+        // the proof of it as a lemma: so that proof comes first.
         val schedule = statedContractHolds.getOrElse(fail("linearVesting states no contract"))
         val scheduleResult = verify(schedule, scheduleBudget)
         assert(scheduleResult.meets(schedule), explain(schedule, scheduleResult))
@@ -465,7 +474,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
             )
           )
         )
-        assert(result.meets(stateIsCarried), explain(stateIsCarried, result))
+        assert(result.isProvenAssuming, explain(stateIsCarried, result))
         val proof = proofOf(result)
         assert(
           proof.premises.map(_.file).forall(_.endsWith("plutus/v1/Value.scala")) &&
@@ -520,8 +529,9 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     private def proofOf(result: VerificationResult): Proof = result match
-        case VerificationResult.Proven(proof) => proof
-        case other                            => fail(s"no proof: $other")
+        case VerificationResult.Proven(proof)         => proof
+        case VerificationResult.ProvenAssuming(proof) => proof
+        case other                                    => fail(s"no proof: $other")
 
     /** The validator without its check of the datum of the output that keeps the rest. */
     private val withoutDatumCheck = FunctionDef.named(

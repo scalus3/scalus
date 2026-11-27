@@ -455,6 +455,13 @@ final class LeanProofs private (
                     case _ =>
                 if isTheorem && !wasTheorem then
                     failed(s"$name: proved within a budget, and made a theorem of")
+            // A proof that rests on contracts no theorem proves is no theorem, and is not exported.
+            case VerificationResult.ProvenAssuming(proof) =>
+                proof.artifact match
+                    case artifact: UplcBlaster.Artifact => checkedProof(artifact)
+                    case _                              =>
+                if isTheorem && !wasTheorem then
+                    failed(s"$name: proved assuming contracts, and made a theorem of")
             case VerificationResult.Refuted(_) =>
                 if isTheorem then failed(s"$name: refuted, and the verifier has a theorem of it")
             case _ =>
@@ -663,15 +670,11 @@ final class LeanProofs private (
         val id = LeanProofs.moduleName(statement.name)
         val (module, file) = LeanWorkspace.generated(workspace, id)
         val directory = workspace.relativize(file.getParent.resolve(id)).toString
-        val assumed = result match
-            case VerificationResult.Proven(proof) => proof.assumed
-            case _                                => Nil
         tactic.statementModule(
           verifier.goalOf(statement),
           artifactOf(result),
           module,
-          directory,
-          assumed
+          directory
         ) match
             case Left(reason)   => failed(reason)
             case Right(written) => (module, file, directory, written)
@@ -755,6 +758,7 @@ final class LeanProofs private (
         val proof = result match
             case VerificationResult.Proven(proof)          => proof
             case VerificationResult.ProvenWithin(proof, _) => proof
+            case VerificationResult.ProvenAssuming(proof)  => proof
             case VerificationResult.Refuted(proof)         => proof
             case other =>
                 failed(s"expected a proof or a refutation, got ${LeanProofs.describe(other)}")
@@ -1046,11 +1050,12 @@ object LeanProofs {
       * the reason there is no result.
       */
     private[uplcblaster] def describe(result: VerificationResult): String = {
-        // A proof names the contracts it rests on, which no lemma of it proves.
+        // A proof names the contracts it rests on, which no theorem proves.
         result match
-            case VerificationResult.Proven(proof) => s"a proof${Clause.assuming(proof.assumed)}"
-            case VerificationResult.ProvenWithin(proof, bound) =>
-                s"a proof within $bound${Clause.assuming(proof.assumed)}"
+            case VerificationResult.Proven(_)              => "a proof"
+            case VerificationResult.ProvenWithin(_, bound) => s"a proof within $bound"
+            case VerificationResult.ProvenAssuming(proof) =>
+                s"a proof${Clause.assuming(proof.premises)}, which are not proved"
             case VerificationResult.Refuted(proof) =>
                 proof.artifact match
                     case artifact: UplcBlaster.Artifact if artifact.counterexample.nonEmpty =>
