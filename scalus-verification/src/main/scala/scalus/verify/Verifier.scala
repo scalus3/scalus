@@ -953,7 +953,7 @@ final class Verifier private (results: Option[KeptResults]) {
         }
         prepared.execute() match
             case VerificationResult.Proven(found) =>
-                val proof = cited(found)
+                val proof = cited(found, prepared.statement.name)
                 checked(proof)
                 val theorem = new Theorem(prepared.statement, proof)
                 proven = proven.updated(prepared.statement.name, theorem)
@@ -964,7 +964,7 @@ final class Verifier private (results: Option[KeptResults]) {
                 VerificationResult.Proven(proof)
             // A proof within a bound is of a weaker statement: no theorem is registered.
             case VerificationResult.ProvenWithin(found, bound) =>
-                val proof = cited(found)
+                val proof = cited(found, prepared.statement.name)
                 checked(proof)
                 VerificationResult.ProvenWithin(proof, bound)
             case VerificationResult.Refuted(proof) => VerificationResult.Refuted(proof)
@@ -975,14 +975,19 @@ final class Verifier private (results: Option[KeptResults]) {
     /** `proof`, with each of its premises that a theorem of this verifier proves cited as that
       * lemma: the theorem of a statement that states the clause ([[statement]] of a contract read
       * from the code), of every value, as the premise is assumed of every call. Of several, the one
-      * that rests on the fewest contracts, and then the first by name. The others stay its
-      * premises; what a lemma rests on, the proof rests on ([[Proof.assumed]]).
+      * that rests on the fewest contracts, and then the first by name; none of `proving`, the
+      * statement the proof is of. The others stay its premises; what a lemma rests on, the proof
+      * rests on ([[Proof.assumed]]).
       */
-    private def cited(proof: Proof): Proof =
+    private def cited(proof: Proof, proving: String): Proof = {
         if proof.premises.isEmpty then proof
         else
+            // A statement is no lemma of its own, as an earlier proof of it would be.
             val byClause = proven.values.toList
-                .filter(theorem => limitsOf(theorem.statement.prop).isEmpty)
+                .filter(theorem =>
+                    theorem.statement.name != proving &&
+                        limitsOf(theorem.statement.prop).isEmpty
+                )
                 .flatMap(theorem =>
                     stating.getOrElse(theorem.statement.name, Set.empty).map(_ -> theorem)
                 )
@@ -996,6 +1001,7 @@ final class Verifier private (results: Option[KeptResults]) {
             val lemmas =
                 proved.map(byClause).filterNot(lemma => proof.usedLemmas.exists(_ eq lemma))
             Proof(proof.artifact, proof.usedLemmas ++ lemmas.distinct, open)
+    }
 
     /** What `tactic` says a statement it prepared is. */
     private def identityOf(tactic: Tactic)(prepared: tactic.Prepared): Option[StatementIdentity] = {
@@ -1216,10 +1222,11 @@ final class Verifier private (results: Option[KeptResults]) {
             .toList
             .sortBy(_.name)
         // A proof of every value first, then one of the fewest limits: the names, as of the sets of
-        // values, say nothing of which is stronger.
+        // values, say nothing of which is stronger. Of those, one that rests on the fewest
+        // contracts ([[Proof.assumed]]), as a premise is cited.
         candidates
             .flatMap(provedFor)
-            .sortBy(theorem => limitsOf(theorem.statement.prop).size)
+            .sortBy(theorem => (limitsOf(theorem.statement.prop).size, theorem.proof.assumed.size))
             .headOption match
             case Some(theorem) => checkedBy(List(theorem))
             case None =>

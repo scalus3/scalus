@@ -1046,14 +1046,11 @@ object LeanProofs {
       * the reason there is no result.
       */
     private[uplcblaster] def describe(result: VerificationResult): String = {
-        // A proof names the contracts it assumes, which no lemma of it proves.
-        def assuming(proof: Proof): String =
-            if proof.assumed.isEmpty then ""
-            else proof.assumed.map(_.where).mkString(", assuming the contracts of ", ", ", "")
+        // A proof names the contracts it rests on, which no lemma of it proves.
         result match
-            case VerificationResult.Proven(proof) => s"a proof${assuming(proof)}"
+            case VerificationResult.Proven(proof) => s"a proof${Clause.assuming(proof.assumed)}"
             case VerificationResult.ProvenWithin(proof, bound) =>
-                s"a proof within $bound${assuming(proof)}"
+                s"a proof within $bound${Clause.assuming(proof.assumed)}"
             case VerificationResult.Refuted(proof) =>
                 proof.artifact match
                     case artifact: UplcBlaster.Artifact if artifact.counterexample.nonEmpty =>

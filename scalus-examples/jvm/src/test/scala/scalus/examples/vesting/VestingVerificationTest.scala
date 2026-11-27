@@ -552,7 +552,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // other values, and the statement as written holds there. A refutation by unknowns is
         // confirmed only where Lean's context realizes them, so this one is no refutation, but one
         // whose context does is. The context that refutes the statement is the sample below,
-        // which the copy accepts.
+        // which the copy accepts. What the test catches is a proof: that would say the premises
+        // contradict each other, and so prove anything, the fourth guarantee among it.
         val result = verifyWithoutKeeping(
           stateIsCarriedWithoutDatumCheck,
           new CallsAsUnknowns(UplcBlaster(Budget.LeanSteps(stateIsCarriedBudget), lean, 10.minutes))

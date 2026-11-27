@@ -28,6 +28,18 @@ object CallsAsUnknownsHelpers {
 
     /** A helper that does not loop and does not read its parameter. */
     def one(p: BigInt): BigInt = BigInt(1)
+
+    /** A function value that does not read its parameter, which a program can bind to a name. */
+    val constantOne: BigInt => BigInt = p => BigInt(1)
+
+    /** The length of a list that begins with `constantOne` of a value that fails where `c` is not
+      * positive, called by a name bound to it, as an inline instance's `self`. It loops and is no
+      * library's, so the rewrite writes its code into the program, the name among it.
+      */
+    def lengthWithOne(c: BigInt, xs: prelude.List[BigInt]): BigInt = {
+        val g = constantOne
+        prelude.List.Cons({ val x = { require(c > BigInt(0)); BigInt(0) }; g(x) }, xs).length
+    }
 }
 
 /** Functions whose code states a contract: the rewrite assumes it of the unknowns of their calls.
@@ -61,6 +73,15 @@ object CallsAsUnknownsContracts {
         Spec.expects(xs.head == xs.head)
         xs.length
     }.ensuring(n => n >= BigInt(1))
+
+    /** A contract through two functions whose code calls the next: `outer` has `swapped`'s, which
+      * has `difference`'s, of its arguments the other way round.
+      */
+    def difference(a: BigInt, b: BigInt): BigInt = (a - b).ensuring(r => r == a - b)
+
+    def swapped(a: BigInt, b: BigInt): BigInt = difference(b, a)
+
+    def outer(a: BigInt, b: BigInt): BigInt = swapped(a, b)
 
     private val notNegative: BigInt => Boolean = n => n >= BigInt(0)
 
@@ -242,6 +263,32 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
         assert(unknownsOf(prop).size == 2, unknownsOf(prop))
     }
 
+    test("a `let` that may fail stays in the key of a call of a name for a definition") {
+        // As the test above, where the function is called by a name the program binds to it, as
+        // an inline instance's `self`: the name is the definition, whose code drops the argument.
+        val prop = forAll[BigInt, prelude.List[BigInt]]((c, xs) =>
+            (CallsAsUnknownsHelpers.lengthWithOne(c, xs) >= BigInt(0)) ==>: (prelude.List
+                .Cons(CallsAsUnknownsHelpers.constantOne(BigInt(0)), xs)
+                .length >= BigInt(0))
+        )
+        assert(unknownsOf(prop).size == 2, unknownsOf(prop))
+    }
+
+    test("a call whose arguments read a lambda's parameter gets no premise") {
+        // `one(p)` drops `p` from the key of the call of `count`, which is of the statement's
+        // variable only, and an unknown; its arguments read `p`, which a premise does not bind.
+        val prop = forAll[prelude.List[BigInt]](xs => {
+            val f = (p: BigInt) =>
+                CallsAsUnknownsContracts.count(prelude.List.Cons(CallsAsUnknownsHelpers.one(p), xs))
+            f(BigInt(0)) >= BigInt(0)
+        })
+        assert(
+          unknownsOf(prop) == List("scalus.verify.uplcblaster.CallsAsUnknownsContracts$.count"),
+          unknownsOf(prop)
+        )
+        assert(assumedOf(prop).isEmpty, assumedOf(prop))
+    }
+
     test("without contracts, a statement assumes none") {
         val rewritten = CallsAsUnknowns
             .rewrite(countIsNotNegative, CallsAsUnknowns.inLibrary, contracts = false)
@@ -381,6 +428,20 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
         // does not hide it.
         val result = verifyWithoutKeeping(lengthOfSomeIsPositive, unknowns)
         assert(result.meets(lengthOfSomeIsPositive), explain(lengthOfSomeIsPositive, result))
+    }
+
+    private val outerIsTheDifference = verifier.statement(
+      "calls_as_unknowns.outer_is_the_difference",
+      forAll[BigInt, BigInt]((x, y) =>
+          succeeds(CallsAsUnknownsContracts.outer(x, y)) ==>:
+              (CallsAsUnknownsContracts.outer(x, y) == y - x)
+      )
+    )
+
+    test("a contract through two functions whose code calls the next binds each one's arguments") {
+        val result = verify(VerificationRequest(outerIsTheDifference, unknowns))
+        assert(result.meets(outerIsTheDifference), explain(outerIsTheDifference, result))
+        assert(proofOf(result).premises == assumedOf(outerIsTheDifference.prop))
     }
 
     private val ninefold = FunctionDef(CallsAsUnknownsContracts.ninefold)

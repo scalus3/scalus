@@ -65,6 +65,13 @@ object Clause {
         else Clause(position.file, position.startLine + 1, position.startColumn, kind, occurrence)
     }
 
+    /** What a result says it rests on, of the clauses of the contracts `assumed`: nothing for none,
+      * and ", assuming the contracts of …" for some.
+      */
+    def assuming(assumed: List[Clause]): String =
+        if assumed.isEmpty then ""
+        else assumed.map(_.where).mkString(", assuming the contracts of ", ", ", "")
+
     /** Whether `place` is inside `code`, of the same file. */
     private def inside(place: SIRPosition, code: SIRPosition): Boolean = {
         def notAfter(line: Int, column: Int, otherLine: Int, otherColumn: Int): Boolean =
@@ -141,11 +148,8 @@ final case class Specification(clause: Clause, functions: List[String], status: 
             case ClauseStatus.Checked(statements, tactic, kinds, within, assuming) =>
                 val limited =
                     if within.isEmpty then "" else s", only where ${within.mkString("; ")}"
-                val assumed =
-                    if assuming.isEmpty then ""
-                    else assuming.map(_.where).mkString(", assuming the contracts of ", ", ", "")
                 s"$of: checked by ${statements.mkString(", ")} ($tactic, " +
-                    s"${kinds.mkString(", ")})$limited$assumed"
+                    s"${kinds.mkString(", ")})$limited${Clause.assuming(assuming)}"
             case ClauseStatus.Open(by, reason) =>
                 val declared = if by.isEmpty then "" else s", $by"
                 s"$of: open$declared: $reason"
