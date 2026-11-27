@@ -303,15 +303,13 @@ final class UplcBlaster private (
       * the artifact's budget, and as written where that decided ([[UplcBlaster.statementModule]]).
       * A proof with calls as unknowns ([[ProofKind.BlasterOfUnknowns]]) is of other programs: the
       * module states `goal`, which this tactic lowers as written, of runs of any number of steps.
-      * The reason where the goal is not in the tactic's language. `assumed` are the clauses of the
-      * contracts the proof rests on ([[scalus.verify.Proof.assumed]]), which the module names.
+      * The reason where the goal is not in the tactic's language.
       */
     def statementModule(
         goal: Goal,
         artifact: UplcBlaster.Artifact,
         module: String,
-        directory: String,
-        assumed: List[Clause]
+        directory: String
     ): Either[String, UplcBlaster.StatementModule] =
         prepare(goal).left
             .map(report => s"${goal.statement.name} is not in the tactic's language: $report")
@@ -324,8 +322,7 @@ final class UplcBlaster private (
                   Some(artifact.kind),
                   maxHeartbeats,
                   module,
-                  directory,
-                  assumed
+                  directory
                 )
             }
 
@@ -724,6 +721,7 @@ object UplcBlaster {
     private def described(result: ExecutionResult): String = result match
         case _: VerificationResult.Proven            => "proved"
         case _: VerificationResult.ProvenWithin      => "proved within the budget"
+        case _: VerificationResult.ProvenAssuming    => "proved assuming contracts"
         case _: VerificationResult.Refuted           => "refuted"
         case VerificationResult.Inconclusive(reason) => s"inconclusive: $reason"
         case VerificationResult.Failed(reason)       => s"failed: $reason"
@@ -5460,9 +5458,6 @@ object UplcBlaster {
       * programs it does not hold at that budget: they walk lists longer than its runs reach. So the
       * module states `goal` of runs of any number of steps ([[anyRunBody]]), with no
       * `#prep_uplc_run`, and its header says no budget.
-      *
-      * A proof that assumed the contracts of functions its programs call, `assumed`, rests on them:
-      * the axiom's comment names them.
       */
     def statementModule(
         goal: Lowered,
@@ -5471,17 +5466,6 @@ object UplcBlaster {
         maxHeartbeats: Int,
         module: String,
         directory: String
-    ): StatementModule = statementModule(goal, budget, kind, maxHeartbeats, module, directory, Nil)
-
-    /** [[statementModule]] of a proof that assumed the contracts `assumed`. */
-    def statementModule(
-        goal: Lowered,
-        budget: Int,
-        kind: Option[ProofKind],
-        maxHeartbeats: Int,
-        module: String,
-        directory: String,
-        assumed: List[Clause]
     ): StatementModule = {
         val paths = goal.leaves.indices.map(index => s"$directory/Leaf$index.flat").toVector
         val hashes = goal.programHashes.zipWithIndex.map((hash, index) => s"  leaf$index $hash")
@@ -5505,14 +5489,6 @@ object UplcBlaster {
                |${hashes.mkString("\n")}
                |-/
                |""".stripMargin
-        // The contracts the proof assumed, which no proof here proves: the statement holds where
-        // they hold.
-        val assuming =
-            if assumed.isEmpty then ""
-            else
-                assumed
-                    .map(_.where)
-                    .mkString("\n    It assumes the contracts of ", ", ", ", which are not proved.")
         val proved = kind.fold("") {
             case ProofKind.BlasterOfUnknowns =>
                 s"""
@@ -5523,14 +5499,14 @@ object UplcBlaster {
                    |    unknowns, within a budget of steps, which implies it of any number of steps. That
                    |    each program does what its form with unknowns does, with each unknown the value its
                    |    walk returns, is tested, not proved. An axiom, and no proof that Lean checks: a
-                   |    theorem that uses it rests on that result, and `#print axioms` names it.$assuming -/
+                   |    theorem that uses it rests on that result, and `#print axioms` names it. -/
                    |axiom proved : statement""".stripMargin
             case kind =>
                 s"""
                    |
                    |/-- That `statement` holds, as Scalus proved it: by the tactic `blaster-uplc`, at $budget
                    |    steps, a proof of the kind `$kind`. An axiom, and no proof that Lean checks: a
-                   |    theorem that uses it rests on that result, and `#print axioms` names it.$assuming -/
+                   |    theorem that uses it rests on that result, and `#print axioms` names it. -/
                    |axiom proved : statement""".stripMargin
         }
         val stated = (formula: String) => s"def statement : Prop :=\n  $formula$proved"

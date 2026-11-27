@@ -112,16 +112,14 @@ enum ClauseStatus {
       * the tactic finds it the same statement as one of those: the same proposition, about the same
       * programs. `within` says what the statements are of where it is less than every value: the
       * limits of their variables ([[Props.forAllDataLimited]]), one for each variable that has
-      * them. Beyond them the clause is not checked. `assuming` are the clauses of the contracts the
-      * proofs rest on, which no proof here proves ([[Proof.assumed]]): the clause holds where they
-      * do.
+      * them. Beyond them the clause is not checked. A proof that rests on contracts no theorem
+      * proves ([[VerificationResult.ProvenAssuming]]) is none of these: its clause is not checked.
       */
     case Checked(
         statements: List[String],
         tactic: String,
         kinds: Set[ProofKind],
-        within: List[String],
-        assuming: List[Clause]
+        within: List[String]
     )
 
     /** Declared not proved, with the reason: by [[Verifier.open]] of the statement `by`, or of the
@@ -145,11 +143,11 @@ final case class Specification(clause: Clause, functions: List[String], status: 
     def describe: String = {
         val of = s"${clause.where}, in ${functions.mkString(", ")}"
         status match
-            case ClauseStatus.Checked(statements, tactic, kinds, within, assuming) =>
+            case ClauseStatus.Checked(statements, tactic, kinds, within) =>
                 val limited =
                     if within.isEmpty then "" else s", only where ${within.mkString("; ")}"
                 s"$of: checked by ${statements.mkString(", ")} ($tactic, " +
-                    s"${kinds.mkString(", ")})$limited${Clause.assuming(assuming)}"
+                    s"${kinds.mkString(", ")})$limited"
             case ClauseStatus.Open(by, reason) =>
                 val declared = if by.isEmpty then "" else s", $by"
                 s"$of: open$declared: $reason"
