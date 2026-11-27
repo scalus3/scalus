@@ -511,7 +511,7 @@ object CallsAsUnknowns {
         def close(premise: AnnotatedSIR): SIR =
             if declared.contains(optionName) then rebuild(premise)
             else SIR.Decl(table.option, rebuild(premise))
-        val leaf = Leaf(definitions.toMap, loops, library, contracts, table, close)
+        val leaf = Leaf(definitions.toMap, loops, library, contracts, variables, table, close)
         val initial = Scope(variables.map(name => name -> Key.Variable(name)).toMap, Map.empty)
         val rewritten = rebuild(leaf.goSir(expression, initial))
         if table.unknowns.nonEmpty && !declared.contains(optionName) then
@@ -651,41 +651,45 @@ object CallsAsUnknowns {
             returned: String,
             suffix: String
         ): (Option[AnnotatedSIR], AnnotatedSIR) = {
-            val names = parameters.map(p => p.name -> s"${p.name}$$contract$suffix")
-            def bound(test: AnnotatedSIR, renames: Map[String, String]): AnnotatedSIR =
-                SIR.Let(
-                  parameters.zip(arguments).zip(names).map {
-                      case ((parameter, argument), (_, name)) =>
-                          Binding(name, parameter.tp, argument)
-                  },
-                  SIR.renameFreeVars(test, renames),
-                  SIR.LetFlags.None,
-                  noAnnotations
-                )
+            val names = parameters.map(p => p.name -> s"${p.name}$$contract$suffix").toMap
             (
-              expects.map(bound(_, names.toMap)),
-              bound(ensures, names.toMap + (resultName -> returned))
+              expects.map(bindParameters(parameters, arguments, names, _, Map.empty)),
+              bindParameters(parameters, arguments, names, ensures, Map(resultName -> returned))
             )
         }
 
         /** This contract, of a function whose code calls this one on `arguments`, of its own
-          * parameters `outer`.
+          * parameters `outer`. The parameters of this one are bound to the arguments under names of
+          * their own, with `suffix`, which no other contract of the chain has.
           */
-        def through(outer: List[SIR.Var], arguments: List[SIR]): Contract = {
-            val names = parameters.map(p => p.name -> s"${p.name}$$of")
-            def bound(test: AnnotatedSIR): AnnotatedSIR =
-                SIR.Let(
-                  parameters.zip(arguments).zip(names).map {
-                      case ((parameter, argument), (_, name)) =>
-                          Binding(name, parameter.tp, argument)
-                  },
-                  SIR.renameFreeVars(test, names.toMap),
-                  SIR.LetFlags.None,
-                  noAnnotations
-                )
+        def through(outer: List[SIR.Var], arguments: List[SIR], suffix: String): Contract = {
+            val names = parameters.map(p => p.name -> s"${p.name}$$of$suffix").toMap
+            def bound(test: AnnotatedSIR) =
+                bindParameters(parameters, arguments, names, test, Map.empty)
             Contract(outer, expects.map(bound), bound(ensures), clauses)
         }
     }
+
+    /** `test`, of `parameters`, with each bound to its argument under its name in `names`, in one
+      * `let` evaluated in order, and `renames` for other names of `test`. The names are new ones:
+      * so an argument, of the caller's names, reads no parameter bound before it, as it would where
+      * a parameter of the caller and one of the function it calls had one name.
+      */
+    private def bindParameters(
+        parameters: List[SIR.Var],
+        arguments: List[SIR],
+        names: Map[String, String],
+        test: AnnotatedSIR,
+        renames: Map[String, String]
+    ): AnnotatedSIR =
+        SIR.Let(
+          parameters
+              .zip(arguments)
+              .map((parameter, argument) => Binding(names(parameter.name), parameter.tp, argument)),
+          SIR.renameFreeVars(test, names ++ renames),
+          SIR.LetFlags.None,
+          noAnnotations
+        )
 
     private object Contract {
 
@@ -737,6 +741,9 @@ object CallsAsUnknowns {
         def unknowns: List[Unknown] = byKey.values.toList
 
         def premises: List[Premise] = assumed.toList
+
+        /** Whether `name` is the variable of an unknown. */
+        def isUnknown(name: String): Boolean = byKey.valuesIterator.exists(_.ident.name == name)
 
         def assume(premise: Premise): Unit = assumed += premise
 
@@ -853,6 +860,7 @@ object CallsAsUnknowns {
         loops: Set[String],
         library: String => Boolean,
         contracts: Boolean,
+        variables: Set[String],
         table: Unknowns,
         close: AnnotatedSIR => SIR
     ) {
@@ -860,6 +868,7 @@ object CallsAsUnknowns {
         private val locals = mutable.ArrayBuffer.empty[Local]
         private val needed = mutable.Map.empty[Int, Set[Int]]
         private var nesting = 0
+        private var throughs = 0
         private val read = mutable.Map.empty[String, Option[Contract]]
 
         private def global(sir: SIR): Option[String] = sir match
@@ -890,7 +899,7 @@ object CallsAsUnknowns {
           * call of a function that has one, on all its arguments; none where the rewrite takes no
           * contracts.
           */
-        private def contractOf(name: String): Option[Contract] =
+        private def contractOf(name: String): Option[Contract] = {
             if !contracts then None
             else
                 read.get(name) match
@@ -899,6 +908,7 @@ object CallsAsUnknowns {
                         val contract = readContract(name, Set(name))
                         read(name) = contract
                         contract
+        }
 
         private def readContract(name: String, seen: Set[String]): Option[Contract] =
             definitions.get(name).flatMap { definition =>
@@ -913,7 +923,14 @@ object CallsAsUnknowns {
                                 .filterNot(seen)
                                 .flatMap(callee => readContract(callee, seen + callee))
                                 .filter(_.parameters.size == arguments.size)
-                                .map(_.through(parameters.map(_.param), arguments))
+                                .map { contract =>
+                                    throughs += 1
+                                    contract.through(
+                                      parameters.map(_.param),
+                                      arguments,
+                                      throughs.toString
+                                    )
+                                }
             }
 
         private def contracted(name: String): Boolean = contractOf(name).nonEmpty
@@ -1061,14 +1078,27 @@ object CallsAsUnknowns {
                 // the premise fail where the call does not return, and the premise is false there.
                 // A precondition is a premise of its own, whose program is false where the call
                 // fails: where it fails or is false, the guarantee is not assumed.
-                table.assume(
-                  Premise(
-                    precondition.map(test => close(where(hoisted(test, scope), false))),
-                    close(where(hoisted(guarantee, scope), true)),
-                    contract.clauses
-                  )
+                val programs = (
+                  precondition.map(test => where(hoisted(test, scope), false)),
+                  where(hoisted(guarantee, scope), true)
                 )
+                if (programs._1.toList :+ programs._2).forall(closed) then
+                    table.assume(
+                      Premise(programs._1.map(close), close(programs._2), contract.clauses)
+                    )
         }
+
+        /** Whether `program`, a premise, reads only what every premise has in scope: the
+          * statement's variables, the unknowns and the definitions. A premise binds the arguments
+          * again as the call has them, and a call whose key dropped a lambda's parameter, as that
+          * of a helper whose code does not read its argument, has arguments that read it: it gets
+          * no premise.
+          */
+        private def closed(program: AnnotatedSIR): Boolean =
+            freeNames(program).forall(name =>
+                variables(name) || table.isUnknown(name) || definitions.contains(name) ||
+                    isModuleName(name)
+            )
 
         private def written(sir: SIR): String = spine(sir)._1 match
             case SIR.Var(name, _, _)            => name
@@ -1262,10 +1292,22 @@ object CallsAsUnknowns {
             }
 
         /** Whether the key of the call `body` keeps the keys of all its arguments: it calls no
-          * definition whose call's key is that of its code ([[unfolded]]), which may drop one.
+          * definition whose call's key is that of its code ([[unfolded]]), which may drop one. The
+          * function called is known by its key, of `values` and `bound` at `depth`, as [[keyOf]]
+          * knows it: a local value that is a definition, as an inline instance's
+          * `let self = given_Ord in self(a, b)`, is that definition.
           */
-        private def keepsArguments(body: SIR): Boolean =
-            global(spine(unwrapped(body))._1).forall(name => loops(name) || contracted(name))
+        private def keepsArguments(
+            body: SIR,
+            values: Map[String, Key],
+            bound: Map[String, Int],
+            depth: Int
+        ): Boolean =
+            keyOf(spine(unwrapped(body))._1, values, bound, depth) match
+                case Key.Global(name) =>
+                    name == toData || name == fromData || !definitions.contains(name) ||
+                    loops(name) || contracted(name)
+                case _ => true
 
         /** The key of `sir`: `values` has the keys of the variables the program binds, and `bound`
           * the depth of those the key binds itself.
@@ -1334,14 +1376,11 @@ object CallsAsUnknowns {
                             case Nil => keyOf(body, named, scope, level)
                             case binding :: more =>
                                 val value = keyOf(binding.value, named, scope, level)
-                                if readsAsArgument(body, binding.name) && keepsArguments(body)
-                                then
-                                    nest(
-                                      more,
-                                      named + (binding.name -> value),
-                                      scope - binding.name,
-                                      level
-                                    )
+                                // The body as the key would have it, with the value in place.
+                                val placed = named + (binding.name -> value)
+                                if readsAsArgument(body, binding.name) &&
+                                    keepsArguments(body, placed, scope - binding.name, level)
+                                then nest(more, placed, scope - binding.name, level)
                                 else
                                     Key.Bind(
                                       value,
