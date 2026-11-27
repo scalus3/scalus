@@ -73,7 +73,7 @@ code; and a protocol of several validators with a thread token as the origin of 
 - The contracts a library function states in its code, with `ensuring`, are premises of the
   unknowns of its calls, and a proof names those it assumes (M1, item 1): vesting's fourth
   guarantee is proved of every context, assuming the contracts of `Value.eq`, `Value.minus` and
-  `Value.lovelace`.
+  `Value.lovelace`. A proof that rests on a contract no theorem proves is no theorem.
 - Results today rest on what G1 lists. Of the exit criteria of §9, phase 0's is met. Phase 1's is
   met but for one part: a suite without a negative control does not fail yet. The criteria of the
   other phases are met in part.
@@ -105,7 +105,8 @@ Done, 2026-11-26: merged as `f1a55ab6b`, with Lean-Proofs green.
    contract is cited as a premise, and named in the result, until item 2 proves it
    ([the call rule](verification-details/call-rule.md#steps), step 1). Done 2026-11-26: the
    contract is a chain of three, the `ensuring` of `Value.eq`, `Value.minus` and `Value.lovelace`,
-   and the fourth guarantee is proved of every context, naming them.
+   and the fourth guarantee is proved of every context assuming them: a result that is no theorem
+   (`ProvenAssuming`), and no lemma of another, until item 2.
 2. The proof of that contract: by hand, by induction over the map, as `isSignedBy`'s, or by
    `blaster-uplc` with the walks of `Value`'s arithmetic as unknowns (step 2).
 
