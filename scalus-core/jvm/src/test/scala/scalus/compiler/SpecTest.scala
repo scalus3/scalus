@@ -9,6 +9,8 @@ import scalus.cardano.onchain.plutus.v3.ScriptContext
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType}
 import scalus.compiler.sir.transform.EraseSpecifications
 import scalus.uplc.{Constant, PlutusV3}
+import scalus.uplc.Term.asTerm
+import scalus.uplc.eval.PlutusVM
 import scalus.uplc.builtin.Data
 
 /** The same function with and without its specification. */
@@ -173,6 +175,20 @@ class SpecTest extends AnyFunSuite {
         for (name, program) <- programs do
             assert(definitions(program).nonEmpty, name)
             assert(EraseSpecifications.reordered(program) == program, name)
+    }
+
+    test("a program that starts with a value of a match keeps it, where a clause is linked in") {
+        // The plugin names a match's scrutinee `_SpecTest.scala_L_C_match_scrutinee_1`: a name
+        // with a dot, as a definition's has. Where a program starts with it, and a function the
+        // program links states a clause, the erasure nests the definitions again. It took the
+        // value for one of them, which the code refers to as a local value and not as a
+        // definition, and dropped it.
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        val program = compile {
+            (SpecExamples.clampSpecified(BigInt(5), BigInt(0), BigInt(3)), BigInt(1)) match
+                case (clamped, one) => clamped + one
+        }
+        assert(program.toUplc().evaluate == BigInt(4).asTerm)
     }
 
     test("a script applied to its parameter has the same bytes with and without a specification") {

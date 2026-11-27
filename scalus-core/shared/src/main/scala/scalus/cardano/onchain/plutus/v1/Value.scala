@@ -5,6 +5,7 @@ import scalus.cardano.ledger
 import scalus.cardano.ledger.{AssetName, Coin, Hash, MultiAsset}
 import scalus.cardano.onchain.plutus.prelude
 import scalus.cardano.onchain.plutus.prelude.{!==, <=>, ===, Eq, List, Option, Ord, Order, PairList, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.Spec.ensuring
 import scalus.compiler.{Compile, Ignore}
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.Data.{fromData, toData}
@@ -90,8 +91,12 @@ object Value extends ValueOffchainOps {
       *   Value.lovelace(BigInt(1000000)).quantityOf(ByteString.fromString("policyId"), ByteString.fromString("tokenName")) === BigInt(0)
       *   Value.lovelace(BigInt(0)) === Value.zero
       *   }}}
+      *
+      * The `ensuring` clause is its contract, which a verifier reads and which is no part of the
+      * script ([[scalus.cardano.onchain.plutus.prelude.Spec]]): the value has `v` lovelace.
       */
-    def lovelace(v: BigInt): Value = apply(adaPolicyId, adaTokenName, v)
+    def lovelace(v: BigInt): Value =
+        apply(adaPolicyId, adaTokenName, v).ensuring(_.getLovelace === v)
 
     /** Creates a `Value` from a list of policy ids paired with their token amounts, without
       * validation.
@@ -347,8 +352,14 @@ object Value extends ValueOffchainOps {
       *   val value3 = Value.lovelace(BigInt(500000))
       *   Value.eq(value1, value3) === false
       *   }}}
+      *
+      * The `ensuring` clause is its contract, which a verifier reads and which is no part of the
+      * script ([[scalus.cardano.onchain.plutus.prelude.Spec]]): equal values have equal lovelace.
       */
-    def eq(a: Value, b: Value): Boolean = a.toSortedMap === b.toSortedMap
+    def eq(a: Value, b: Value): Boolean =
+        (a.toSortedMap === b.toSortedMap).ensuring(equal =>
+            !equal || a.getLovelace === b.getLovelace
+        )
 
     /** Tests if two `Value` instances are not equal.
       *
@@ -460,8 +471,16 @@ object Value extends ValueOffchainOps {
       *   val value2 = Value.lovelace(BigInt(500000))
       *   Value.minus(value1, value2) === Value.lovelace(BigInt(500000))
       *   }}}
+      *
+      * The `ensuring` clause is its contract, which a verifier reads and which is no part of the
+      * script ([[scalus.cardano.onchain.plutus.prelude.Spec]]): the lovelace of the difference is
+      * the difference of the lovelace. It holds of values whose keys are in ascending order, as the
+      * values of the type are.
       */
-    def minus(a: Value, b: Value): Value = binaryOpValues(a, b, subtractInteger)
+    def minus(a: Value, b: Value): Value =
+        binaryOpValues(a, b, subtractInteger).ensuring(
+          _.getLovelace === a.getLovelace - b.getLovelace
+        )
 
     /** Multiplies all token amounts in a `Value` by a specified factor.
       *

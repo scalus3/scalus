@@ -113,7 +113,13 @@ class SpecificationCoverageTest extends AnyFunSuite {
         )
         assert(
           statusOf(verifier, Clause.Kind.Ensuring) ==
-              ClauseStatus.Checked(List("increment_holds"), "stub", Set(ProofKind.Blaster), Nil)
+              ClauseStatus.Checked(
+                List("increment_holds"),
+                "stub",
+                Set(ProofKind.Blaster),
+                Nil,
+                Nil
+              )
         )
     }
 
@@ -137,7 +143,7 @@ class SpecificationCoverageTest extends AnyFunSuite {
         }
         assert(
           statusOf(verifierWith(same = true), Clause.Kind.Ensures) ==
-              ClauseStatus.Checked(List("in_other_words"), "stub", Set(ProofKind.Blaster), Nil)
+              ClauseStatus.Checked(List("in_other_words"), "stub", Set(ProofKind.Blaster), Nil, Nil)
         )
         assert(statusOf(verifierWith(same = false), Clause.Kind.Ensures) match
             case ClauseStatus.Unchecked(List("checked/ensures#1"), _) => true
@@ -199,8 +205,8 @@ class SpecificationCoverageTest extends AnyFunSuite {
             .statements
         verifier.prove(limited, stub(Set(limited.name)))
         assert(statusOf(verifier, Clause.Kind.Ensures) match
-            case ClauseStatus.Checked(_, _, _, List(within)) => within.contains("at most 2")
-            case _                                           => false)
+            case ClauseStatus.Checked(_, _, _, List(within), _) => within.contains("at most 2")
+            case _                                              => false)
     }
 
     test("a clause stays checked when another tactic of the same name tells statements otherwise") {
@@ -217,8 +223,8 @@ class SpecificationCoverageTest extends AnyFunSuite {
         val other = verifier.statement("other", forAll[BigInt](x => x == x))
         verifier.prove(other, stub(Set(other.name)))
         assert(statusOf(verifier, Clause.Kind.Ensures) match
-            case ClauseStatus.Checked(List("in_other_words"), _, _, _) => true
-            case _                                                     => false)
+            case ClauseStatus.Checked(List("in_other_words"), _, _, _, _) => true
+            case _                                                        => false)
     }
 
     test("code that is no function of its parameters is passed over, not failed on") {
@@ -267,7 +273,7 @@ class SpecificationCoverageTest extends AnyFunSuite {
         verifier.prove(owed, stub(Set(owed.name)))
         assert(
           statusOf(verifier, Clause.Kind.Expects) ==
-              ClauseStatus.Checked(List(owed.name), "stub", Set(ProofKind.Blaster), Nil)
+              ClauseStatus.Checked(List(owed.name), "stub", Set(ProofKind.Blaster), Nil, Nil)
         )
     }
 }

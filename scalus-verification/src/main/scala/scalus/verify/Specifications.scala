@@ -47,6 +47,37 @@ private[verify] object Specifications {
         head.expected.size + within.size
     }
 
+    /** The contract the body `term` of the function `name` states, as [[read]] reads it, in SIR:
+      * the preconditions, over the parameters; the guarantees of the parameters, each with the
+      * unused parameter of its `Spec.ensures`; the guarantee of the result, with its variable; and
+      * the clauses that state them. `None` where the body states no guarantee: a precondition alone
+      * says nothing of what a call returns.
+      */
+    final case class Stated(
+        preconditions: List[AnnotatedSIR],
+        ofParameters: List[(SIR.Var, SIR)],
+        ofResult: Option[(SIR.Var, SIR)],
+        clauses: List[Clause]
+    )
+
+    def stated(term: SIR, name: String): Option[Stated] = {
+        val head = statements(term)
+        // A postcondition that is no function literal, as `body.ensuring(predicate)`, is no
+        // contract this reads: [[read]] refuses it, and a function stated so has none here.
+        Option.when(literal(head.rest))(ensuring(head.rest, name)).flatMap { (inner, ofResult) =>
+            val within = if ofResult.isEmpty then Head(Nil, Nil, inner) else statements(inner)
+            val ofParameters = head.ensured ++ within.ensured
+            Option.when(ofParameters.nonEmpty || ofResult.nonEmpty)(
+              Stated(
+                head.expected ++ within.expected,
+                ofParameters,
+                ofResult,
+                clauses(term, name).filter(_.kind != Clause.Kind.Expects)
+              )
+            )
+        }
+    }
+
     def read[A, R](function: FunctionDef[A, R]): Option[FunctionContract[A, R]] = {
         val body = Obligations.body(function, function(Representation.Sir))
         val head = statements(body.term)
@@ -120,6 +151,14 @@ private[verify] object Specifications {
                 .filter(_ != Clause.Kind.Ensuring)
                 .map(Clause.at(apply, _, name, 1))
         case _ => None
+
+    /** Whether the `ensuring` that `term` is, where it is one, has a function literal for its
+      * condition, as [[ensuring]] needs.
+      */
+    private def literal(term: SIR): Boolean = ensuringNode(term) match
+        case Some(SIR.Apply(_, SIR.LamAbs(_, _, Nil, _), _, _)) => true
+        case Some(_)                                            => false
+        case None                                               => true
 
     /** The call of `ensuring` that `term` is, where it is one. */
     private def ensuringNode(term: SIR): Option[SIR] = term match
