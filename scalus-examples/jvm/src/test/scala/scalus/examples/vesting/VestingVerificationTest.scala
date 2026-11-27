@@ -21,7 +21,8 @@ import scala.concurrent.duration.*
   * (see `docs/design/verification-details/uplc-blaster.md`).
   *
   * Three groups of statements, from the most general to the most specific:
-  *   - the vesting schedule, `linearVesting`, and its contract, for every datum and time;
+  *   - the vesting schedule, `linearVesting`, and its contract, for every datum and time, and the
+  *     contracts of the library's `Value` that the validator relies on;
   *   - the validator on every script context, of any transaction: what it rejects before it reads
   *     the transaction;
   *   - withdrawals: who may withdraw, how much, what the validator's call of the schedule owes, and
@@ -38,8 +39,9 @@ import scala.concurrent.duration.*
   *     a list of unknown length. Of every context, the first, third and fourth guarantees are
   *     proved with the walks as unknowns (`CallsAsUnknowns`), resting on the tie of the validator
   *     to its program with unknowns (`ProofKind.BlasterOfUnknowns`); the fourth also on the
-  *     contracts the library's `Value` functions state, which are not proved yet, and which its
-  *     proof names. That everything can be withdrawn after the end is open.
+  *     contracts the library's `Value` functions state, of which those of `eq` and `lovelace` are
+  *     proved here, and `minus`'s is not proved yet, and its proof names it. That everything can be
+  *     withdrawn after the end is open.
   *
   * Without Lean, that is without `lake` and a built workspace, the tests pass on the results kept
   * beside this file (see [[LeanProofs]]). The tests tagged `Unfinished` are about what Lean does
@@ -204,6 +206,80 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
           forAnyAmount.meets(doesNotDecreaseForAnyAmount),
           explain(doesNotDecreaseForAnyAmount, forAnyAmount)
         )
+    }
+
+    // The library's `Value`
+
+    // The fourth guarantee assumes the contracts that `Value.eq`, `Value.minus` and
+    // `Value.lovelace` state in their code, at each call of them
+    // (docs/design/verification-details/call-rule.md), and its proof cites those proved here. Of a
+    // value, `getLovelace` reads the first entry only: the ada policy and token name are the empty
+    // bytes, the least keys, so the search of a map for them ends at its first entry. Lean runs
+    // `lovelace` and `eq` to their ends on values of any size, and proves their contracts.
+
+    private val lovelace = FunctionDef(Value.lovelace)
+    private val valueEq = FunctionDef(Value.eq)
+
+    verifier.addFunction(lovelace)
+    verifier.addFunction(valueEq)
+
+    /** The steps of the contract of `lovelace`, and of `eq`: those `Budget.Auto` came to
+      * (2026-11-27).
+      */
+    private val lovelaceBudget = 425
+    private val valueEqBudget = 687
+
+    /** The steps of a negative control of a contract: its first counterexample is real. */
+    private val libraryControlBudget = 100
+
+    /** The contracts `lovelace` and `eq` state in their code, and that they return, of every amount
+      * and of every two values.
+      */
+    private val lovelaceContractHolds = FunctionContract
+        .inSource(lovelace)
+        .map(stated =>
+            verifier
+                .statement("value.lovelace.stated_contract_holds", stated.returnsWhen(v => true))
+        )
+
+    private val valueEqContractHolds = FunctionContract
+        .inSource(valueEq)
+        .map(stated =>
+            verifier.statement(
+              "value.eq.stated_contract_holds",
+              stated.returnsWhen((a, b) => true)
+            )
+        )
+
+    private val lovelaceIsNotZero = verifier.refute(
+      "value.lovelace.is_not_zero",
+      contract(lovelace)(expects = v => true, ensures = v => value => !value.isZero).prop
+    )
+
+    private val equalLovelaceIsEqual = verifier.refute(
+      "value.eq.equal_lovelace_is_equal",
+      contract(valueEq)(
+        expects = (a, b) => true,
+        ensures = (a, b) => equal => equal || !(a.getLovelace === b.getLovelace)
+      ).prop
+    )
+
+    test("Value.lovelace's contract, stated in its code, holds of every amount") {
+        val stated = lovelaceContractHolds.getOrElse(fail("Value.lovelace states no contract"))
+        val result = verify(stated, lovelaceBudget)
+        assert(result.meets(stated), explain(stated, result))
+        // negative control: of no lovelace, the value is zero
+        val notZero = verify(lovelaceIsNotZero, libraryControlBudget)
+        assert(notZero.meets(lovelaceIsNotZero), explain(lovelaceIsNotZero, notZero))
+    }
+
+    test("Value.eq's contract, stated in its code, holds of every two values") {
+        val stated = valueEqContractHolds.getOrElse(fail("Value.eq states no contract"))
+        val result = verify(stated, valueEqBudget)
+        assert(result.meets(stated), explain(stated, result))
+        // negative control: the converse, as values of the same lovelace may hold other tokens
+        val converse = verify(equalLovelaceIsEqual, libraryControlBudget)
+        assert(converse.meets(equalLovelaceIsEqual), explain(equalLovelaceIsEqual, converse))
     }
 
     // The validator, on every script context
@@ -445,13 +521,17 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       forAllData[ScriptContext](ctx => accepts(ctx) ==>?: carriesTheState(ctx))
     )
 
-    // Proved only assuming the contracts of `Value.eq`, `Value.minus` and `Value.lovelace` (the
-    // test below), which is no theorem: declared open until they are proved.
+    // Proved only assuming the contract of `Value.minus` (the test below), which is no theorem:
+    // declared open until it is proved.
     verifier.open(
       stateIsCarried,
-      "proved only assuming the contracts of Value.eq, Value.minus and Value.lovelace, which " +
-          "are not proved yet (verification plan, M1 item 2)"
+      "proved only assuming the contract of Value.minus, which is not proved yet (verification " +
+          "plan, M1 item 2)"
     )
+
+    /** The clauses of the contract `Value.minus` states in its code. */
+    private val minusClauses =
+        FunctionContract.inSource(FunctionDef(Value.minus)).toList.flatMap(_.clauses)
 
     test("spend's fourth guarantee holds of every script context, with the library's contracts") {
         // As the first and the third, with each walk an unknown. The clause reads the lovelace of
@@ -459,13 +539,20 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // the spent one's less the lovelace withdrawn. What ties the two is the library's: the
         // contracts that `Value.eq`, `Value.minus` and `Value.lovelace` state in their code, which
         // the statement assumes of the unknowns of their calls
-        // (docs/design/verification-details/call-rule.md). No proof here proves them yet: the
-        // statement is proved only where they hold, which is no theorem, and the proof names them.
-        // It also assumes the contract of `linearVesting`, which the validator calls, and cites
-        // the proof of it as a lemma: so that proof comes first.
-        val schedule = statedContractHolds.getOrElse(fail("linearVesting states no contract"))
-        val scheduleResult = verify(schedule, scheduleBudget)
-        assert(scheduleResult.meets(schedule), explain(schedule, scheduleResult))
+        // (docs/design/verification-details/call-rule.md). The proof cites the proofs of the
+        // contracts of `eq` and `lovelace` as lemmas, and of `linearVesting`'s, which the
+        // validator also calls: so those proofs come first. No proof here proves `minus`'s yet:
+        // the statement is proved only where it holds, which is no theorem, and the proof names it.
+        val lemmas = List(
+          statedContractHolds -> scheduleBudget,
+          valueEqContractHolds -> valueEqBudget,
+          lovelaceContractHolds -> lovelaceBudget
+        )
+        lemmas.foreach { (statement, budget) =>
+            val stated = statement.getOrElse(fail("a function states no contract"))
+            val proved = verify(stated, budget)
+            assert(proved.meets(stated), explain(stated, proved))
+        }
         val result = verify(
           VerificationRequest(
             stateIsCarried,
@@ -476,13 +563,10 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         )
         assert(result.isProvenAssuming, explain(stateIsCarried, result))
         val proof = proofOf(result)
+        assert(minusClauses.nonEmpty && proof.premises.toSet == minusClauses.toSet, explain(result))
         assert(
-          proof.premises.map(_.file).forall(_.endsWith("plutus/v1/Value.scala")) &&
-              proof.premises.size == 3,
-          explain(result)
-        )
-        assert(
-          proof.usedLemmas.map(_.statement.name) == statedContractHolds.map(_.name).toList,
+          proof.usedLemmas.map(_.statement.name).toSet ==
+              lemmas.flatMap(_._1).map(_.name).toSet,
           explain(result)
         )
     }

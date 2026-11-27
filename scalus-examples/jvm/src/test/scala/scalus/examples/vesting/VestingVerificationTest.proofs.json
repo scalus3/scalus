@@ -56,12 +56,91 @@
         "the validator would not establish a precondition on the amount"
       ]
     },
+    "value.eq.equal_lovelace_is_equal": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "fdb7e690e906ef1d",
+      "programs": [
+        "16940cb266ee251d",
+        "dbb66c91c7e9bda0",
+        "0c04c7b53d43734c"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "a": {"map":[]},
+        "b": {"map":[{"k":{"bytes":"213021"},"v":{"map":[]}}]}
+      },
+      "tests": [
+        "Value.eq's contract, stated in its code, holds of every two values"
+      ]
+    },
+    "value.eq.stated_contract_holds": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "fe1227ccbe7a85bf",
+      "programs": [
+        "16940cb266ee251d",
+        "56aa7fd73cec882f",
+        "dbb66c91c7e9bda0",
+        "60c4f46fd03a83d5"
+      ],
+      "notes": {
+        "budget": "687",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "Value.eq's contract, stated in its code, holds of every two values",
+        "spend's fourth guarantee holds of every script context, with the library's contracts"
+      ]
+    },
+    "value.lovelace.is_not_zero": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "32d75de4c6562e2c",
+      "programs": [
+        "c6414c7d25a14c75",
+        "0025cf3d963465e6",
+        "880277063b67f010"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "v": 0
+      },
+      "tests": [
+        "Value.lovelace's contract, stated in its code, holds of every amount"
+      ]
+    },
+    "value.lovelace.stated_contract_holds": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "305dafbd53aa04d0",
+      "programs": [
+        "c6414c7d25a14c75",
+        "5c0de457fbb6f0d7",
+        "0025cf3d963465e6",
+        "322e265e6641cf3a"
+      ],
+      "notes": {
+        "budget": "425",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "Value.lovelace's contract, stated in its code, holds of every amount",
+        "spend's fourth guarantee holds of every script context, with the library's contracts"
+      ]
+    },
     "vesting.control.sample_leaving_another_datum_is_accepted": {
       "tactic": "uplc-blaster",
       "result": "proved",
       "statement": "2d3cb18e20f505f4",
       "programs": [
-        "0d0189874c3e50a4"
+        "d5bb94adb5d4010e"
       ],
       "notes": {
         "budget": "20000",
@@ -245,7 +324,7 @@
       "result": "proved",
       "statement": "d2494909ff2e8fd2",
       "programs": [
-        "874dc86236c2b70d"
+        "664f162b0bc60325"
       ],
       "notes": {
         "budget": "3300",
@@ -342,7 +421,7 @@
       "result": "proved",
       "statement": "2d3cb18e20f505f4",
       "programs": [
-        "cdfbaa5d75a38ed9"
+        "41479f14ce90e136"
       ],
       "notes": {
         "budget": "20000",
@@ -357,7 +436,7 @@
       "result": "proved",
       "statement": "87acb769a9c0ddb7",
       "programs": [
-        "a6672383690276d7"
+        "b0338c73f55aaeb5"
       ],
       "notes": {
         "budget": "20000",
@@ -372,7 +451,7 @@
       "result": "proved",
       "statement": "87acb769a9c0ddb7",
       "programs": [
-        "befe21c0e1449843"
+        "fb90aef02dfdd646"
       ],
       "notes": {
         "budget": "20000",
@@ -387,7 +466,7 @@
       "result": "proved",
       "statement": "2d3cb18e20f505f4",
       "programs": [
-        "7f0c2442ad142979"
+        "657afcd16115e8ac"
       ],
       "notes": {
         "budget": "20000",
@@ -402,7 +481,7 @@
       "result": "proved",
       "statement": "2d3cb18e20f505f4",
       "programs": [
-        "495453ced9b9667d"
+        "edf02792f60bc383"
       ],
       "notes": {
         "budget": "20000",
@@ -417,7 +496,7 @@
       "result": "proved",
       "statement": "87acb769a9c0ddb7",
       "programs": [
-        "67fea25543682765"
+        "4c17d1d8ba675e46"
       ],
       "notes": {
         "budget": "20000",

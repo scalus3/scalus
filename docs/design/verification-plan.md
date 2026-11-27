@@ -73,7 +73,9 @@ code; and a protocol of several validators with a thread token as the origin of 
 - The contracts a library function states in its code, with `ensuring`, are premises of the
   unknowns of its calls, and a proof names those it assumes (M1, item 1): vesting's fourth
   guarantee is proved of every context, assuming the contracts of `Value.eq`, `Value.minus` and
-  `Value.lovelace`. A proof that rests on a contract no theorem proves is no theorem.
+  `Value.lovelace`. A proof that rests on a contract no theorem proves is no theorem. Those of
+  `eq` and `lovelace` are proved by `blaster-uplc`, of values of any size, and the proof cites them
+  (M1, item 2): it rests on `minus`'s alone, which is not proved yet.
 - Results today rest on what G1 lists. Of the exit criteria of §9, phase 0's is met. Phase 1's is
   met but for one part: a suite without a negative control does not fail yet. The criteria of the
   other phases are met in part.
@@ -107,8 +109,12 @@ Done, 2026-11-26: merged as `f1a55ab6b`, with Lean-Proofs green.
    contract is a chain of three, the `ensuring` of `Value.eq`, `Value.minus` and `Value.lovelace`,
    and the fourth guarantee is proved of every context assuming them: a result that is no theorem
    (`ProvenAssuming`), and no lemma of another, until item 2.
-2. The proof of that contract: by hand, by induction over the map, as `isSignedBy`'s, or by
-   `blaster-uplc` with the walks of `Value`'s arithmetic as unknowns (step 2).
+2. The proof of those contracts ([the call rule](verification-details/call-rule.md#what-to-prove),
+   item 2, step 2). Of `eq` and `lovelace`, done 2026-11-27, by `blaster-uplc`, of values of any
+   size: `getLovelace` reads a value's first entry only, as the ada policy and token name are the
+   least keys, and `eq` is `equalsData`. The fourth guarantee cites both. Left: `minus`'s, a walk
+   over both values to their ends, which no run of a budget follows. By hand, by induction over
+   the maps, as `isSignedBy`'s; or by the rule for recursion (M4), from contracts of its loops.
 
 Decided: the library's contracts live in its code (§7, decision 2).
 
