@@ -8,7 +8,8 @@ which the overview says `blaster-uplc` cannot do, as it cannot abstract a callee
 code. [Calls as unknowns](multi-transaction.md#calls-as-unknowns-in-the-tactic) now does: it is the
 rule with the trivial contract, and moves into it.
 
-Status: proposed, 2026-11-25. Nothing of it is built but what [What exists](#what-exists) lists.
+Status: proposed, 2026-11-25. Step 1 is built, 2026-11-26: the contracts a function states in its
+code are premises of the unknowns of its calls ([What exists](#what-exists)).
 
 ## The rule
 
@@ -47,6 +48,41 @@ Where the rule is sound:
 
 ## What exists
 
+- The rule in `CallsAsUnknowns`
+  (`scalus-verification/src/main/scala/scalus/verify/uplcblaster/CallsAsUnknowns.scala`). A
+  function's contract is read from its code as linked into the program (`Specifications.stated`):
+  the `ensuring` and `Spec.ensures` its body ends or starts with, and `Spec.expects` as the guard.
+  A function whose code is a call of another on all its arguments has the other's contract, as
+  `valueEq` has `eq`'s; a postcondition that is no function literal is no contract. A call of a
+  function with a contract is an unknown whether it loops or not. Its premise is
+  `match u { None => true; Some(r) => let p = a in ensures(p, r) }`, with the values of the
+  program that the arguments read bound inside the `Some` case: they are part of the call's key,
+  and computed where it returned. Where the contract has a precondition, the premise is an
+  implication of two such tests, `expects(p) ==> ensures(p, r)`, whose first is false where the
+  call fails: so where the precondition fails, as `xs.head` on the empty list, the guarantee is
+  not assumed, and the premise does not fail with it. The result has a name of its own, which no
+  parameter has. The premise is rewritten as a program is, so a call in its arguments or its
+  condition is an unknown of the key it has in the program or in a clause, with a premise of its
+  own, up to four deep. A key takes a `let` whose value the body reads as an argument of a call
+  as that value in its place, where the call's key keeps its arguments' (a walk's): the inline
+  `v - w` is `let other = w in minus(v, other)`, and its key is that of `minus(v, w)`.
+  `withoutContracts` assumes none, for a statement that needs none.
+- A contract stated in the code is partial: it says nothing where the call fails, and an unknown
+  of the call may be `None`. A statement that reads what the call returns is stated where it
+  returns, as the rejecting form `==>?:` does, or with `succeeds(...) ==>:`.
+- What a proof rests on: `Proof.premises`, the clauses of the contracts it assumed. `Verifier.prove`
+  cites a premise as a lemma where a theorem of the verifier, of every value, states its clause
+  (`verifier.statement(name, FunctionContract.inSource(f))`, or `guarantees(f)`), and leaves the
+  others as premises. `Proof.assumed` adds what the lemmas rest on, and the result names it
+  ("assuming the contracts of ensuring at Value.scala:481, ..."), as does a clause's status in
+  `Verifier.specifications`. A clause's place is where its code states it: a condition that is an
+  inline function's code, as `a === b`, is placed where it was inlined to.
+- The library's contracts, as `ensuring` in `scalus-core`
+  (`scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Value.scala`):
+  `eq(a, b)` gives `!equal || a.getLovelace === b.getLovelace`, `minus(a, b)` gives
+  `r.getLovelace === a.getLovelace - b.getLovelace`, of values whose keys ascend as the type's do,
+  and `lovelace(v)` gives `r.getLovelace === v`. Off-chain they are checked, as every `ensuring`
+  is; they are no part of a script.
 - Contracts: `Props.contract`, `Props.totalContract`
   (`scalus-verification/src/main/scala/scalus/verify/Prop.scala:514`, `:569`), and those a
   function states in its body with `Spec`, read by `FunctionContract.inSource` (`Prop.scala:197`).
@@ -74,13 +110,13 @@ library functions are in `scalus-core/shared/src/main/scala/scalus/cardano/oncha
 | # | Statement | Of | Needed by | Status |
 |---|---|---|---|---|
 | 1 | the tie: in a run, a part that ends in a value can be replaced by the value | Lean's CEK machine, once | every proof with unknowns, so that it rests on no trusted rewrite (`ProofKind.BlasterOfUnknowns`, `Verifier.scala:127`) | not started |
-| 2 | `getLovelace(v - lovelace(a)) = getLovelace(v) - a`, and with `===`: `x === v - lovelace(a) ⇒ x.getLovelace = v.getLovelace - a` | `Value.getLovelace` (`v1/Value.scala:701`, by `quantityOf` `:777`), `Value.minus` (`:464`), `Value.lovelace` (`:94`) | vesting #4: the validator checks the value (`VestingValidator.scala:133`), the clause reads its lovelace (`:183`) | given by hand as a premise in the probe; not proved |
+| 2 | `getLovelace(v - lovelace(a)) = getLovelace(v) - a`, and with `===`: `x === v - lovelace(a) ⇒ x.getLovelace = v.getLovelace - a` | `Value.getLovelace` (`v1/Value.scala:701`, by `quantityOf` `:777`), `Value.minus` (`:480`), `Value.lovelace` (`:98`), `Value.eq` (`:359`) | vesting #4: the validator checks the value (`VestingValidator.scala:133`), the clause reads its lovelace (`:183`) | stated as a chain of three contracts, the `ensuring` of `eq`, `minus` and `lovelace`: `eq(x, y) ⇒ gl(x) = gl(y)`, `gl(minus(v, w)) = gl(v) - gl(w)`, `gl(lovelace(a)) = a`; assumed, not proved |
 | 3 | it returns `txSignedBy pk tx`, of any number of signatories | `TxInfo.isSignedBy` (`v3/Contexts.scala:1075`) | a statement that reads the signature as the ledger does | proved: `IsSignedBy.lean:189` |
 | 4 | it returns the input whose `outRef` is the given one, or fails where there is none; it ends | `TxInfo.findInputOrFail` (`v3/Contexts.scala:986`, its loop `:994-998`) | #3, #4: `lockedBy` (`VestingValidator.scala:167-168`) | not started |
 | 5 | it returns the one element of which the predicate holds, or fails; it ends | `List.findUniqueOrFail`, `List.findUniqueOrElse` (`prelude/List.scala:1119`, `:1139`) | the validator's check of one vesting input (`VestingValidator.scala:82`), #4's continuing output (`v3/Contexts.scala:1046`) | not started |
 | 6 | each ends | `TxInfo.findInputsByCredential`, `findOutputsByCredential` (`v3/Contexts.scala:1019`, `:1029`), the folds over values (`VestingValidator.scala:110-111`) | the rejecting form of #4, which runs the validator past them | not started |
-| 7 | vesting #4 of the validator itself, of every context, with the contract of 2 | `vesting.spend.state_is_carried` (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:432`), clause `VestingValidator.scala:64-66`, `carriesTheRest` `:174-184` | the step of the vesting thread ([several transactions](multi-transaction.md#vesting)) | not finished by Lean as written (`VestingVerificationTest.scala:437`) |
-| 8 | #1 and #3 again under the rule, with no contract used | `VestingVerificationTest.scala:365`, `:406` | that the move of `CallsAsUnknowns` keeps them | proved with `CallsAsUnknowns` |
+| 7 | vesting #4 of the validator itself, of every context, with the contract of 2 | `vesting.spend.state_is_carried` (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:439`), clause `VestingValidator.scala:64-66`, `carriesTheRest` `:174-184` | the step of the vesting thread ([several transactions](multi-transaction.md#vesting)) | proved with `CallsAsUnknowns`, assuming the three contracts of 2, at 2400 steps in two minutes (`:444`, 2026-11-26); it cites the proof of `linearVesting`'s contract, which the validator also calls |
+| 8 | #1 and #3 again under the rule, which they need no contract for: proved `withoutContracts`, assuming none | `VestingVerificationTest.scala:365`, `:406` | that the move of `CallsAsUnknowns` keeps them | proved with `CallsAsUnknowns` |
 
 2 is a lemma about a walk over a map of any size: proved by hand, by induction, as 3 was, or by
 `blaster-uplc` with the walks of `Value`'s arithmetic as unknowns where that is enough. 4 to 6 are
@@ -97,13 +133,15 @@ of loops over a list, each as `loop_returns` of `isSignedBy` (`IsSignedBy.lean:1
 - **The kind.** A proof rests on the tie and on the contracts it cites. With the tie proved (1),
   it is a proof of the statement as written, of the kind of its parts.
 - **The library's contracts.** Stated with `Spec` in the library's source, as `spend` states its
-  guarantees, they leave its compiled code as it is (`SpecTest`); or next to it, as statements of
-  a suite of the library's contracts.
+  guarantees, they leave its compiled code as it is (`SpecTest`). Decided so (open question 3).
 
 ## Steps
 
 1. Contracts as premises of unknowns, in `CallsAsUnknowns`; the contract of 2 stated, and #4 (7)
-   proved with it, resting on 2 as trusted until it is proved.
+   proved with it, resting on 2 as trusted until it is proved. Done 2026-11-26. Its control, the
+   validator without its datum check, has a counterexample under the premises, which the replay
+   finds no context for: a refutation with unknowns is confirmed only where Lean's context
+   realizes them. The context that refutes it is a sample the copy accepts.
 2. The proof of 2.
 3. The lemmas that loops end (4 to 6), where a statement in the rejecting form needs them.
 4. The tie (1).
@@ -116,5 +154,7 @@ of loops over a list, each as `loop_returns` of `isSignedBy` (`IsSignedBy.lean:1
 2. **The rewrite on SIR or on UPLC.** The tie is a lemma about two programs. Made on UPLC, the
    program with unknowns is the program with a part replaced; made on SIR, as now, the two are
    compiled each on its own, and are related only through the source.
-3. **Where the library's contracts live**: in `scalus-core`, with `Spec`, or in
-   `scalus-verification`.
+3. **Where the library's contracts live.** Decided 2026-11-26: in `scalus-core`, with `Spec`, in
+   the code of the functions they are of. The tactic reads them where the program links the
+   function, and a contract of an inline function is inlined with its loop, which may answer open
+   question 1.

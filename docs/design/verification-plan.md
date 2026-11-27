@@ -70,6 +70,10 @@ code; and a protocol of several validators with a thread token as the origin of 
 - The thread and its lemma in Scalus's Lean library (`ScalusProofs.Thread`), and the vesting
   theorem of every thread, from the third and fourth guarantees as hypotheses.
 - The last three were merged with PR #488 on 2026-11-26.
+- The contracts a library function states in its code, with `ensuring`, are premises of the
+  unknowns of its calls, and a proof names those it assumes (M1, item 1): vesting's fourth
+  guarantee is proved of every context, assuming the contracts of `Value.eq`, `Value.minus` and
+  `Value.lovelace`.
 - Results today rest on what G1 lists. Of the exit criteria of §9, phase 0's is met. Phase 1's is
   met but for one part: a suite without a negative control does not fail yet. The criteria of the
   other phases are met in part.
@@ -99,21 +103,25 @@ Done, 2026-11-26: merged as `f1a55ab6b`, with Lean-Proofs green.
 1. Contracts as premises of unknowns in `CallsAsUnknowns`. The contract of `getLovelace` after
    `minus` is stated, and the fourth guarantee of the validator itself is proved with it. The
    contract is cited as a premise, and named in the result, until item 2 proves it
-   ([the call rule](verification-details/call-rule.md#steps), step 1).
+   ([the call rule](verification-details/call-rule.md#steps), step 1). Done 2026-11-26: the
+   contract is a chain of three, the `ensuring` of `Value.eq`, `Value.minus` and `Value.lovelace`,
+   and the fourth guarantee is proved of every context, naming them.
 2. The proof of that contract: by hand, by induction over the map, as `isSignedBy`'s, or by
    `blaster-uplc` with the walks of `Value`'s arithmetic as unknowns (step 2).
 
-Decide first: where the library's contracts live (§7, decision 2).
+Decided: the library's contracts live in its code (§7, decision 2).
 
 Exit: vesting's four guarantees are proved of every script context. The validator without its
-datum check refutes the fourth guarantee, while the first three still hold.
+datum check refutes the fourth guarantee, while the first three still hold. With calls as
+unknowns, Lean's counterexample of that control is of no context (call rule, step 1), so the
+refutation is to come from a context: the sample the copy accepts, or a search with limits.
 
 ### M2. The call rule beyond vesting (G2)
 
 1. The statements tagged `Unfinished` in the example suites, through calls as unknowns and the
-   contracts they need. On 2026-11-26 the tests tagged so are: 19 of the payment splitters, 8 of
-   vesting (the fourth guarantee among them, which M1 proves), 6 of HTLC and 2 of the one-shot
-   minting policy.
+   contracts they need. On 2026-11-26 the tests tagged so are: 19 of the payment splitters, 6 of
+   vesting (no longer the fourth guarantee, which M1 proves, nor its control), 6 of HTLC and 2 of
+   the one-shot minting policy.
 2. The contracts those statements need of the library: `findInputOrFail`, `findUniqueOrFail` and
    the other walks of the call rule's table (items 4 to 6). A call whose value a claim needs must
    return, so its contract says that it ends (step 3): total correctness, where a premise needs
@@ -285,10 +293,11 @@ model names.
   `DataEncoding` ([Lean types](verification-details/lean-types.md#what-comes-next), item 1).
 - **The PlutusCore pin's comment.** nau/PlutusCoreBlaster#1 was merged into #40's branch on
   2026-11-11, so the fork can point at #40's branch. M5's item 1 moves the pin again.
-- **`SIRLinker.isDefinition`** takes a binding for a definition when its name has a dot
-  (`SIRLinker.scala:433`). So it also takes the plugin's local names (`_File.scala_L_C_match_…`)
-  for definitions. Found while building calls as unknowns. To be checked, and filed if it is a
-  bug.
+- **`SIRLinker.isDefinition`** took a binding for a definition when its name had a dot, and so
+  also the plugin's names of a match's values (`_File.scala_L_C_match_…`). It was a bug: where a
+  program starts with such a value and links a function that states a clause, the erasure of the
+  clauses dropped the value. Found by the `Value` contracts of M1 (a closed statement of the HTLC
+  suite) and fixed 2026-11-26, with a test in `SpecTest`.
 
 ## 5. Upstream
 
@@ -323,8 +332,10 @@ Checked on GitHub, 2026-11-26.
 1. Whether the second axis of §1 (M6 to M9: properties over several transactions, the AMM by
    hand, Lean models, off-chain code, a protocol of several validators) is part of this plan, or
    a plan of its own.
-2. Where the library's contracts live: in `scalus-core`, stated with `Spec`, or in
-   `scalus-verification` (call rule, open question 3). It blocks M1.
+2. Where the library's contracts live. Decided 2026-11-26: in `scalus-core`, stated with `Spec`
+   in the functions' code, as `ensuring` of `Value.eq`, `Value.minus` and `Value.lovelace`
+   ([the call rule](verification-details/call-rule.md#the-librarys-contracts)). They are one
+   function's each, and a contract of several functions is a chain of them.
 3. How an inline function's contract is found: by its loop's term or by its source position (call
    rule, open question 1). It blocks M2.
 4. The rewrite of calls on SIR or on UPLC (call rule, open question 2). It blocks M3's items 3
