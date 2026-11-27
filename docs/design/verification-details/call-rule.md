@@ -73,10 +73,15 @@ Where the rule is sound:
 - What a proof rests on: `Proof.premises`, the clauses of the contracts it assumed. `Verifier.prove`
   cites a premise as a lemma where a theorem of the verifier, of every value, states its clause
   (`verifier.statement(name, FunctionContract.inSource(f))`, or `guarantees(f)`), and leaves the
-  others as premises. `Proof.assumed` adds what the lemmas rest on, and the result names it
-  ("assuming the contracts of ensuring at Value.scala:481, ..."), as does a clause's status in
-  `Verifier.specifications`. A clause's place is where its code states it: a condition that is an
-  inline function's code, as `a === b`, is placed where it was inlined to.
+  others as premises. A proof with premises left is `VerificationResult.ProvenAssuming`, of the
+  weaker statement that the statement holds where the contracts do, as `ProvenWithin` is of one
+  within a bound. It is not proved (`meets` is false), and no theorem: no later proof cites it, no
+  tactic is given it, and it is not written into the Lean workspace. Its result names the
+  contracts ("a proof, assuming the contracts of ensuring at Value.scala:481, ..., which are not
+  proved"), and its clause is not checked in `Verifier.specifications`, which says so. Once a
+  theorem proves each contract, the proof cites them and is `Proven`. A clause's place is where
+  its code states it: a condition that is an inline function's code, as `a === b`, is placed where
+  it was inlined to.
 - The library's contracts, as `ensuring` in `scalus-core`
   (`scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Value.scala`):
   `eq(a, b)` gives `!equal || a.getLovelace === b.getLovelace`, `minus(a, b)` gives
@@ -115,7 +120,7 @@ library functions are in `scalus-core/shared/src/main/scala/scalus/cardano/oncha
 | 4 | it returns the input whose `outRef` is the given one, or fails where there is none; it ends | `TxInfo.findInputOrFail` (`v3/Contexts.scala:986`, its loop `:994-998`) | #3, #4: `lockedBy` (`VestingValidator.scala:167-168`) | not started |
 | 5 | it returns the one element of which the predicate holds, or fails; it ends | `List.findUniqueOrFail`, `List.findUniqueOrElse` (`prelude/List.scala:1119`, `:1139`) | the validator's check of one vesting input (`VestingValidator.scala:82`), #4's continuing output (`v3/Contexts.scala:1046`) | not started |
 | 6 | each ends | `TxInfo.findInputsByCredential`, `findOutputsByCredential` (`v3/Contexts.scala:1019`, `:1029`), the folds over values (`VestingValidator.scala:110-111`) | the rejecting form of #4, which runs the validator past them | not started |
-| 7 | vesting #4 of the validator itself, of every context, with the contract of 2 | `vesting.spend.state_is_carried` (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:439`), clause `VestingValidator.scala:64-66`, `carriesTheRest` `:174-184` | the step of the vesting thread ([several transactions](multi-transaction.md#vesting)) | proved with `CallsAsUnknowns`, assuming the three contracts of 2, at 2400 steps in two minutes (`:444`, 2026-11-26); it cites the proof of `linearVesting`'s contract, which the validator also calls |
+| 7 | vesting #4 of the validator itself, of every context, with the contract of 2 | `vesting.spend.state_is_carried` (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:439`), clause `VestingValidator.scala:64-66`, `carriesTheRest` `:174-184` | the step of the vesting thread ([several transactions](multi-transaction.md#vesting)) | proved with `CallsAsUnknowns` assuming the three contracts of 2, at 2400 steps in two minutes (2026-11-26): `ProvenAssuming`, no theorem, its clause open until 2 is proved; it cites the proof of `linearVesting`'s contract, which the validator also calls |
 | 8 | #1 and #3 again under the rule, which they need no contract for: proved `withoutContracts`, assuming none | `VestingVerificationTest.scala:365`, `:406` | that the move of `CallsAsUnknowns` keeps them | proved with `CallsAsUnknowns` |
 
 2 is a lemma about a walk over a map of any size: proved by hand, by induction, as 3 was, or by
