@@ -42,7 +42,13 @@ class LeanManualTest extends AnyFunSuite {
 
     test("the axioms say what a proof rests on") {
         def judged(axioms: String*) =
-            LeanManual.judgedAxioms(axioms.toList, "Vault", statementModule, "Vault.Proofs.p")
+            LeanManual.judgedAxioms(
+              axioms.toList,
+              "Vault",
+              statementModule,
+              "Vault.Proofs.p",
+              false
+            )
         val lean = List("propext", "Classical.choice", "Quot.sound")
         assert(judged(lean*) == Right(ProofKind.LeanKernelOfOptimizedRuns -> Nil))
         assert(judged() == Right(ProofKind.LeanKernelOfOptimizedRuns -> Nil))
@@ -52,6 +58,12 @@ class LeanManualTest extends AnyFunSuite {
           judged((lean :+ "Blaster.Tactic.blasterProven")*).left.exists(_.contains("blasterProven"))
         )
         assert(judged((lean :+ "Lean.ofReduceBool")*) == Right(ProofKind.LeanNative -> Nil))
+        // Of a statement of runs of any number of steps there is no optimized run: a proof on
+        // Lean's axioms is of the runs as Lean defines them.
+        assert(
+          LeanManual.judgedAxioms(lean, "Vault", statementModule, "Vault.Proofs.p", true) ==
+              Right(ProofKind.LeanKernel -> Nil)
+        )
         // A result Scalus kept, cited as a lemma, by the module of its statement.
         assert(
           judged((lean :+ "Vault.Generated.clamp_returns.proved")*) ==
@@ -150,6 +162,24 @@ class LeanManualTest extends AnyFunSuite {
         )
         assert(proved.text.contains("axiom proved : statement"), proved.text)
         assert(!proved.text.contains("to be proved by hand"), proved.text)
+    }
+
+    test("a statement of runs of any number of steps is written of Lean's runs, with no budget") {
+        val clamp = FunctionDef(Math.clamp)
+        val inRange = forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
+            (lo <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+        )
+        val lowered = UplcBlaster.lower(inRange, FunctionTable(clamp)).fold(fail(_), identity)
+        val written = UplcBlaster.anyRunStatementModule(lowered, 400000, statementModule, "p")
+        assert(written.text.contains("at any number of steps of the machine"), written.text)
+        assert(written.text.contains("it is written to be proved by hand"), written.text)
+        assert(!written.text.contains("axiom proved"), written.text)
+        // Each test is read of the run itself, which `#prep_uplc_run` does not optimize.
+        assert(written.text.contains("ScalusProofs.Runs.returns"), written.text)
+        assert(written.text.contains("import ScalusProofs.Runs"), written.text)
+        assert(!written.text.contains("#prep_uplc_run"), written.text)
+        assert(UplcBlaster.statementModuleOf(written.text).isEmpty, "no budget in the header")
+        assert(written.programs.map(_._2) == lowered.leaves)
     }
 
     test("a proof's sources are its module and the proofs it imports, and only they are hashed") {
