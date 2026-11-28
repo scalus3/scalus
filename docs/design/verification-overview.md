@@ -1407,9 +1407,11 @@ runs themselves: each test is `ScalusProofs.Runs.returns … true` of the progra
 reads it, and a `denotes` is `ScalusProofs.Runs.succeeds`, with no `#prep_uplc_run`. A proof of it
 on Lean's own axioms is of the run as Lean defines it, of kind `LeanKernel`. Scalus's Lean library
 has the means: a big-step semantics of PlutusCore's CEK machine, `ScalusProofs.BigStep.Big`,
-proved to agree with the machine's runs over any stack (`Big.run`), and `big_step`, which applies
-its rules where the term and the values decide them. A loop is then an induction over its list,
-with no state of the machine written by hand. The first such proof is of `Value.minus`'s contract
+proved sound for the machine's runs: what a derivation says a part computes, the machine computes,
+over any stack (`Big.run`). The converse, a derivation of each run, is not proved, and a proof that
+a program returns needs only this direction. `big_step` applies its rules where the term and the
+values decide them. A loop is then an induction over its list, with no state of the machine
+written by hand. The first such proof is of `Value.minus`'s contract
 (`scalus-examples/jvm/src/test/lean/LinearVesting/LinearVesting/Proofs/ValueMinus.lean`,
 2026-11-27): five loops, and a model of what `minus` returns.
 

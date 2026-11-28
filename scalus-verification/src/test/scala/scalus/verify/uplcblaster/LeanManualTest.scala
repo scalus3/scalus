@@ -2,11 +2,12 @@ package scalus.verify.uplcblaster
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.prelude.Math
-import scalus.verify.{FunctionDef, FunctionTable, ProofKind}
+import scalus.verify.{FunctionDef, FunctionTable, ProofKind, Verifier}
 import scalus.verify.Props.*
+import scalus.verify.lean.{LeanServer, LeanServerProvider}
 import scalus.verify.lean.LeanServer.{Message, Progress, Reached, Severity, Started}
 
-import java.nio.file.Files
+import java.nio.file.{Files, Path}
 import scala.concurrent.duration.*
 
 /** What the tactic `lean-manual` reads of Lean's answer, and what it writes, without Lean. Its
@@ -60,10 +61,14 @@ class LeanManualTest extends AnyFunSuite {
         assert(judged((lean :+ "Lean.ofReduceBool")*) == Right(ProofKind.LeanNative -> Nil))
         // Of a statement of runs of any number of steps there is no optimized run: a proof on
         // Lean's axioms is of the runs as Lean defines them.
-        assert(
-          LeanManual.judgedAxioms(lean, "Vault", statementModule, "Vault.Proofs.p", true) ==
-              Right(ProofKind.LeanKernel -> Nil)
-        )
+        def ofAnyRun(axioms: String*) =
+            LeanManual.judgedAxioms(axioms.toList, "Vault", statementModule, "Vault.Proofs.p", true)
+        assert(ofAnyRun(lean*) == Right(ProofKind.LeanKernel -> Nil))
+        // As of a statement of a budget: evaluation is native, and sorry and Blaster's axiom are
+        // no proof.
+        assert(ofAnyRun((lean :+ "Lean.ofReduceBool")*) == Right(ProofKind.LeanNative -> Nil))
+        assert(ofAnyRun((lean :+ "sorryAx")*).isLeft)
+        assert(ofAnyRun((lean :+ "Blaster.Tactic.blasterProven")*).isLeft)
         // A result Scalus kept, cited as a lemma, by the module of its statement.
         assert(
           judged((lean :+ "Vault.Generated.clamp_returns.proved")*) ==
@@ -180,6 +185,47 @@ class LeanManualTest extends AnyFunSuite {
         assert(!written.text.contains("#prep_uplc_run"), written.text)
         assert(UplcBlaster.statementModuleOf(written.text).isEmpty, "no budget in the header")
         assert(written.programs.map(_._2) == lowered.leaves)
+    }
+
+    test(
+      "a proof by hand of runs of any number of steps writes that statement, and is kept apart"
+    ) {
+        val clamp = FunctionDef(Math.clamp)
+        val verifier = Verifier.empty
+        verifier.addFunction(clamp)
+        val inRange = verifier.statement(
+          "clamp_in_range",
+          forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
+              (lo <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+          )
+        )
+        val root = Files.createTempDirectory("scalus-lean-manual")
+        try
+            val workspace = root.resolve("Vault")
+            Files.createDirectories(workspace)
+            Files.writeString(workspace.resolve("lean-toolchain"), "leanprover/lean4:v4.24.0\n")
+            val servers = new LeanServerProvider {
+                def server(): Either[String, LeanServer] = Left("no Lean here")
+                override def workspace: Option[Path] = Some(root.resolve("Vault"))
+            }
+            val anyRun = LeanManual.ofAnyRun("Vault.Proofs.Clamp", "Vault.Proofs.Clamp.p", servers)
+            val budgeted = LeanManual("Vault.Proofs.Clamp", "Vault.Proofs.Clamp.p", 120, servers)
+            val ofAnyRun =
+                anyRun.prepare(verifier.goalOf(inRange)).fold(r => fail(r.toString), identity)
+            val ofBudget =
+                budgeted.prepare(verifier.goalOf(inRange)).fold(r => fail(r.toString), identity)
+            val written = anyRun.statementModule(ofAnyRun, workspace).written.text
+            assert(written.contains("at any number of steps of the machine"), written)
+            assert(written.contains("ScalusProofs.Runs.returns"), written)
+            assert(!written.contains("#prep_uplc_run"), written)
+            val writtenAtBudget = budgeted.statementModule(ofBudget, workspace).written.text
+            assert(writtenAtBudget.contains("at 120 steps of the machine"), writtenAtBudget)
+            // A result of the one statement is none of the other, though both are of one goal.
+            val anyRunPrint = anyRun.fingerprint(ofAnyRun).getOrElse(fail("no fingerprint"))
+            val budgetPrint = budgeted.fingerprint(ofBudget).getOrElse(fail("no fingerprint"))
+            assert(anyRunPrint.statement != budgetPrint.statement)
+            assert(anyRunPrint.programs == budgetPrint.programs)
+        finally scalus.verify.lean.Directories.remove(root)
     }
 
     test("a proof's sources are its module and the proofs it imports, and only they are hashed") {

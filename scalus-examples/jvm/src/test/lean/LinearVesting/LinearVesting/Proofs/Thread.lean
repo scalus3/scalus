@@ -14,8 +14,9 @@ The two hypotheses are guarantees `VestingValidator.spend` states, each of one s
 which `VestingVerificationTest` states of the compiled validator:
 - #3, `vesting.spend.unvested_stays_locked`: proved of every script context, with the walks as
   unknowns (`ProofKind.BlasterOfUnknowns`);
-- #4, `vesting.spend.state_is_carried`: open; of the validator with its walks given, and the lemma
-  on `Value` as a premise, it is proved (`VestingWalksProbeTest`).
+- #4, `vesting.spend.state_is_carried`: proved of every script context, with the walks as
+  unknowns and the contracts of `Value.eq`, `Value.minus` and `Value.lovelace`, each proved
+  (`ProofKind.BlasterOfUnknowns`).
 Each hypothesis is its guarantee read with `==>:`: where the validator accepts, the clause holds.
 Scalus states them in the rejecting form, `==>?:`, which says so where the clause returns; that it
 returns wherever the validator accepts is tested on samples (`VestingVerificationTest`, "spend's

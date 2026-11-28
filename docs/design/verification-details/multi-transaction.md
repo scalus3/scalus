@@ -292,8 +292,9 @@ proved in Lean with each walk's termination, replaces the trust.
      unknown is never outside its type, as it has no premise of it: the replay of the statement
      with unknowns takes it as it is, and the statement as written decides.
    - Of the validator itself, Lean finishes #4 of no contexts, nor of one input and two outputs in
-     10 minutes; the clause is open in `VestingVerificationTest`. With the walks as unknowns it
-     needs the lemma on `Value`, step 2.
+     10 minutes. With the walks as unknowns it needs the lemma on `Value`, step 2: it is proved so
+     of every context (2026-11-27), with the contracts of `Value.eq`, `Value.minus` and
+     `Value.lovelace` proved ([the call rule](call-rule.md#what-to-prove), item 2).
    - Vesting's #1, of the validator itself, is proved of every context at 983 steps (2026-11-25,
      `vesting.spend.beneficiary_signed` in `VestingVerificationTest`; in the probe suite, at 937
      steps in 497 s). The clause's `isSignedBy` and the validator's are one unknown, and the
@@ -394,15 +395,16 @@ of Scalus's Lean library; adding them makes every kept result stale once.
   `withdrawn_at_most_vested_later`, at any later time, for an amount that is not negative, with
   the schedule's not decreasing
   (`scalus-examples/jvm/src/test/lean/LinearVesting/LinearVesting/Proofs/Thread.lean`). A
-  withdrawal of everything ends the thread. #3 is proved of the validator, #4 is open. A
+  withdrawal of everything ends the thread. #3 and #4 are proved of the validator. A
   hypothesis is its guarantee read with `==>:`, where Scalus proves the rejecting form `==>?:`:
   that the clause returns wherever the validator accepts is tested on samples, not proved. That
   each hypothesis is the statement Scalus proved is step 4.
-- The statements proved with calls as unknowns, in the workspace, for a proof by hand to cite: #1
-  and #3 are `LinearVesting.Generated.vesting_spend_beneficiary_signed` and
-  `vesting_spend_unvested_stays_locked`, of the validator's own programs, of runs of any number of
-  steps ([statements as Lean modules](lean-export.md#a-statement-as-a-lean-module)). Step 4 starts
-  from them.
+- The statements proved with calls as unknowns, in the workspace, for a proof by hand to cite: #1,
+  #3 and #4 are `LinearVesting.Generated.vesting_spend_beneficiary_signed`,
+  `vesting_spend_unvested_stays_locked` and `vesting_spend_state_is_carried`, of the validator's
+  own programs, of runs of any number of steps
+  ([statements as Lean modules](lean-export.md#a-statement-as-a-lean-module)). Step 4 starts from
+  them.
 
 ## Steps
 

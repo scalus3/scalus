@@ -74,7 +74,8 @@ final class LeanManual private (
     override val name: String = "lean-manual"
 
     /** The tactic that lowers the statement, and writes its module. Its budget is the module's: the
-      * lowering itself does not depend on it.
+      * lowering itself does not depend on it, but on whether the budget is `Within`, which no
+      * statement by hand is. Of a statement of runs of any number of steps, `Auto` stands for none.
       */
     private def lowering: UplcBlaster = {
         val blaster = UplcBlaster(budget.fold(Budget.Auto)(Budget.LeanSteps(_)), servers)
@@ -96,22 +97,17 @@ final class LeanManual private (
         val id = LeanProofs.moduleName(prepared.goal.statement.name)
         val (moduleName, file) = LeanWorkspace.generated(workspace, id)
         val directory = workspace.relativize(file.getParent.resolve(id)).toString
-        val heartbeats = lowering.maxHeartbeats
         LeanManual.Written(
           moduleName,
           file,
           directory,
-          budget.fold(
-            UplcBlaster.anyRunStatementModule(prepared.asWritten, heartbeats, moduleName, directory)
-          )(steps =>
-              UplcBlaster.statementModule(
-                prepared.asWritten,
-                steps,
-                None,
-                heartbeats,
-                moduleName,
-                directory
-              )
+          UplcBlaster.written(
+            prepared.asWritten,
+            budget,
+            None,
+            lowering.maxHeartbeats,
+            moduleName,
+            directory
           )
         )
     }
@@ -276,13 +272,17 @@ final class LeanManual private (
         servers.workspace
             .filter(workspace => Files.isRegularFile(workspace.resolve("lean-toolchain")))
             .map { workspace =>
-                val (statement, programs) = UplcBlaster.identity(prepared.lowered)
+                val (checked, programs) = UplcBlaster.identity(prepared.lowered)
+                // A statement of runs of any number of steps is read otherwise than the check of a
+                // budget reads it: its text is the statement's too.
+                val statement =
+                    budget.fold(s"any $checked ${UplcBlaster.anyRunText(prepared.asWritten)}")(
+                      steps => s"$steps $checked"
+                    )
                 Fingerprint(
                   LeanWorkspace.environment(workspace) +
                       (LeanManual.proofsPart -> LeanManual.proofsHash(workspace, module)),
-                  Fingerprint.hash(
-                    s"$name $module $theorem ${budget.fold("any")(_.toString)} $statement"
-                  ),
+                  Fingerprint.hash(s"$name $module $theorem $statement"),
                   programs
                 )
             }

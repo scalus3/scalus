@@ -325,6 +325,18 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         val result = proveValueMinus(stated)
         assert(result.meets(stated), explain(stated, result))
         assert(proofOf(result).kinds == Set(ProofKind.LeanKernel), explain(result))
+        // Of a sample, the contract's tests hold as the Scalus CEK runs them: `minus` returns, a
+        // guarantee of the statement and no premise, and the lovelace of the difference is the
+        // difference.
+        val withTokens = Value.lovelace(BigInt(5)) + Value(hex"aa", hex"bb", BigInt(7))
+        assert(
+          holdsAsImplicationOn(
+            stated,
+            Constant.Data(withTokens.toData),
+            Constant.Data(Value.lovelace(BigInt(3)).toData)
+          ),
+          stated.name
+        )
         // negative control: of the sum, which two lovelace less one refutes
         val ofTheSum = verify(minusOfTheSum, minusControlBudget)
         assert(ofTheSum.meets(minusOfTheSum), explain(minusOfTheSum, ofTheSum))
@@ -586,8 +598,10 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         )
         lemmas.foreach { (statement, prove) =>
             val stated = statement.getOrElse(fail("a function states no contract"))
-            val proved = prove(stated)
-            assert(proved.meets(stated), explain(stated, proved))
+            // A contract its own test proved is a theorem already, and is not proved again.
+            if !verifier.theorems.exists(_.statement.name == stated.name) then
+                val proved = prove(stated)
+                assert(proved.meets(stated), explain(stated, proved))
         }
         val result = verify(
           VerificationRequest(
