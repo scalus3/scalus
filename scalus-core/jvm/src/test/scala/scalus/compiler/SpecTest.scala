@@ -55,6 +55,12 @@ object SpecExamples {
 
     def within(x: BigInt, limit: BigInt): Boolean = x <= limit
 
+    /** Where it returns, as `checkedSpecified` says what holds where it does. */
+    def checkedReturning(x: BigInt, limit: BigInt): Unit = {
+        Spec.returnsWhen(within(x, limit))
+        if x <= limit then () else throw new RuntimeException("above the limit")
+    }
+
     def doubled(x: BigInt): BigInt = x + x
 
     def squared(x: BigInt): BigInt = x * x
@@ -139,6 +145,11 @@ class SpecTest extends AnyFunSuite {
               PlutusV3.compile(SpecExamples.checkedSpecified).program.cborEncoded.toSeq ==
                   PlutusV3.compile(SpecExamples.checked).program.cborEncoded.toSeq,
               s"checked with $options"
+            )
+            assert(
+              PlutusV3.compile(SpecExamples.checkedReturning).program.cborEncoded.toSeq ==
+                  PlutusV3.compile(SpecExamples.checked).program.cborEncoded.toSeq,
+              s"checked, stated where it returns, with $options"
             )
     }
 
@@ -239,6 +250,10 @@ class SpecTest extends AnyFunSuite {
         val erased = EraseSpecifications(specified)
         assert(!mentions(erased, EraseSpecifications.Ensures))
         assert(!mentions(erased, "SpecExamples$.within"))
+        val returning = compile(SpecExamples.checkedReturning)
+        assert(mentions(returning, EraseSpecifications.ReturnsWhen))
+        assert(!mentions(EraseSpecifications(returning), EraseSpecifications.ReturnsWhen))
+        assert(!mentions(EraseSpecifications(returning), "SpecExamples$.within"))
         // Code without clauses is not touched.
         val plain = compile(SpecExamples.checked)
         assert(EraseSpecifications(plain) == plain)
@@ -259,6 +274,14 @@ class SpecTest extends AnyFunSuite {
           ).getMessage == "above the limit"
         )
         assertThrows[SpecificationError](SpecExamples.checkedSpecified(BigInt(0), BigInt(-1)))
+        // Nor is `returnsWhen`: where it says the function returns and the function fails, the
+        // failure is the function's own.
+        assert(SpecExamples.checkedReturning(BigInt(1), BigInt(5)) == ())
+        assert(
+          intercept[RuntimeException](
+            SpecExamples.checkedReturning(BigInt(5), BigInt(1))
+          ).getMessage == "above the limit"
+        )
         // A violated specification is no failure of the script, which carries none: a test that
         // expects the script to fail, with an `OnchainError` or any exception, does not pass on it.
         val violated: Throwable =

@@ -51,8 +51,8 @@ side stays in the backends: Lean 4, Blaster and Z3 today.
   and checks what `forAll` does, and `forAllDataLimited`, which bounds the lengths of a variable's
   collections (§6.2);
 - contracts (§3.7): `contract`, `totalContract`, `returnsWhen` and `failsWhen` beside a function,
-  and in its body `Spec.expects`, `Spec.ensures` and `ensuring`, which are in scalus-core's prelude,
-  are erased before lowering and are read by `FunctionContract.inSource`. `verifier.guarantees` and
+  and in its body `Spec.expects`, `Spec.ensures`, `Spec.returnsWhen` and `ensuring`, which are in
+  scalus-core's prelude, are erased before lowering and are read by `FunctionContract.inSource`. `verifier.guarantees` and
   `verifier.obligations` state what a validator's clauses promise and what a call owes;
 - the kept results (§5.6): a run without Lean passes on the results committed beside a suite;
 - one Lean server that runs the checks

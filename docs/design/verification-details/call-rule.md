@@ -82,6 +82,11 @@ Where the rule is sound:
   theorem proves each contract, the proof cites them and is `Proven`. A clause's place is where
   its code states it: a condition that is an inline function's code, as `a === b`, is placed where
   it was inlined to.
+- Where a call returns: `Spec.returnsWhen(c)` at the head of a function's code, its contract's
+  `c ==>: succeeds(f, parameters)`, is the premise `pre && c ==> unknown is some value` of the
+  unknown of its call, with its condition computed where the call is made, as it is of the
+  arguments alone (2026-11-28). So a statement that needs a call to return, as one past a lookup,
+  has what it needs where the contract's condition holds (step 3).
 - The library's contracts, as `ensuring` in `scalus-core`
   (`scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Value.scala`):
   `eq(a, b)` gives `!equal || a.getLovelace === b.getLovelace`, `minus(a, b)` gives
@@ -179,9 +184,15 @@ to be proved by hand as `minus`'s loops are, with `ScalusProofs.BigStep`.
 
 ## Open questions
 
-1. **A contract of an inline function.** `findInputOrFail` and `findUniqueOrFail` are `inline`:
-   in the caller's code there is no call of them, only their loop (`v3/Contexts.scala:994-998`).
-   Their contract is to be found by the loop's term, or by its source position.
+1. **A contract of an inline function.** Decided 2026-11-28: by the code around the loop.
+   `findInputOrFail` and `findUniqueOrFail` are `inline`: in the caller's code there is no call
+   of them, only their loop (`v3/Contexts.scala:994-998`). A contract they state in their code is
+   inlined with the loop: the `ensuring` and the head clauses of an expression whose code is a
+   loop are that loop's contract, which `CallsAsUnknowns` assumes of its unknown, with no
+   parameters, as the inlining wrote the arguments into the conditions. The clause's place is
+   where the inline function states it, so a theorem of the function's own contract, declared
+   with a wrapper (`FunctionDef.named(…, (tx, ref) => tx.findInputOrFail(ref))`), states the
+   same clause, and a proof cites it.
 2. **The rewrite on SIR or on UPLC.** The tie is a lemma about two programs. Made on UPLC, the
    program with unknowns is the program with a part replaced; made on SIR, as now, the two are
    compiled each on its own, and are related only through the source.

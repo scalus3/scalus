@@ -3,7 +3,7 @@ package scalus.verify.uplcblaster
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude
-import scalus.cardano.onchain.plutus.prelude.require
+import scalus.cardano.onchain.plutus.prelude.{fail as failWith, require}
 import scalus.cardano.onchain.plutus.prelude.Spec
 import scalus.cardano.onchain.plutus.prelude.Spec.ensuring
 import scalus.compiler.Compile
@@ -82,6 +82,21 @@ object CallsAsUnknownsContracts {
     def swapped(a: BigInt, b: BigInt): BigInt = difference(b, a)
 
     def outer(a: BigInt, b: BigInt): BigInt = swapped(a, b)
+
+    /** The head of a list, stated where it returns. */
+    def headOf(xs: prelude.List[BigInt]): BigInt = {
+        Spec.returnsWhen(!xs.isEmpty)
+        xs.head
+    }
+
+    /** A lookup with its contract around its loop, inline as `TxInfo.findInputOrFail` is. */
+    inline def firstPositive(xs: prelude.List[BigInt]): BigInt = {
+        Spec.returnsWhen(xs.exists(_ > BigInt(0)))
+        def go(ys: prelude.List[BigInt]): BigInt = ys match
+            case prelude.List.Nil             => failWith("no positive element")
+            case prelude.List.Cons(y, others) => if y > BigInt(0) then y else go(others)
+        go(xs)
+    }.ensuring(found => found > BigInt(0))
 
     private val notNegative: BigInt => Boolean = n => n >= BigInt(0)
 
@@ -506,6 +521,73 @@ class CallsAsUnknownsTest extends AnyFunSuite with LeanProofsSuite {
         case VerificationResult.Proven(proof)         => proof
         case VerificationResult.ProvenAssuming(proof) => proof
         case other                                    => fail(s"no proof: $other")
+
+    private val firstPositiveReturns =
+        forAll[prelude.List[BigInt]](xs =>
+            xs.exists(_ > BigInt(0)) ==>: succeeds(CallsAsUnknownsContracts.firstPositive(xs))
+        )
+
+    test("a contract stated around a loop, as an inline function's, is assumed of its unknown") {
+        // The loop is an unknown, and so is `exists`, of the claim and of the clause alike: where
+        // it holds, the loop's unknown is a value, and where that is a value, it is positive.
+        assert(unknownsOf(firstPositiveReturns).size == 2, unknownsOf(firstPositiveReturns))
+        val assumed = assumedOf(firstPositiveReturns)
+        assert(
+          assumed.map(_.kind).toSet == Set(Clause.Kind.ReturnsWhen, Clause.Kind.Ensuring),
+          assumed
+        )
+        assert(assumed.forall(_.file.endsWith("CallsAsUnknownsTest.scala")), assumed)
+        // Without contracts, none.
+        val bare = CallsAsUnknowns
+            .rewrite(firstPositiveReturns, CallsAsUnknowns.inLibrary, contracts = false)
+            .fold(reason => fail(reason), identity)
+        assert(bare.assumed.isEmpty, bare.assumed)
+    }
+
+    private val firstPositiveReturnsStatement =
+        verifier.statement("calls_as_unknowns.first_positive_returns", firstPositiveReturns)
+
+    test(
+      "where a loop's contract says it returns, a statement that it does is proved assuming it"
+    ) {
+        val result = verify(VerificationRequest(firstPositiveReturnsStatement, unknowns))
+        assert(result.isProvenAssuming, explain(firstPositiveReturnsStatement, result))
+        assert(
+          proofOf(result).premises.map(_.kind).contains(Clause.Kind.ReturnsWhen),
+          proofOf(result).premises
+        )
+    }
+
+    private val headOf = FunctionDef(CallsAsUnknownsContracts.headOf)
+    verifier.addFunction(headOf)
+
+    private val headOfContract = verifier.statement(
+      "calls_as_unknowns.head_of_contract",
+      FunctionContract.inSource(headOf).getOrElse(fail("headOf states no contract"))
+    )
+
+    private val headOfReturns = verifier.statement(
+      "calls_as_unknowns.head_of_returns",
+      forAll[prelude.List[BigInt]](xs =>
+          !xs.isEmpty ==>: succeeds(CallsAsUnknownsContracts.headOf(xs))
+      )
+    )
+
+    test("a call's unknown is a value where its contract says the call returns, and cites it") {
+        // Where the list is not empty, the unknown of `headOf` is a value: the premise of its
+        // `returnsWhen`. With the contract proved, the proof cites it, and is a theorem.
+        val assuming = verify(VerificationRequest(headOfReturns, unknowns))
+        assert(assuming.isProvenAssuming, explain(headOfReturns, assuming))
+        assert(
+          proofOf(assuming).premises.map(_.kind) == List(Clause.Kind.ReturnsWhen),
+          proofOf(assuming).premises
+        )
+        val contract = verify(headOfContract)
+        assert(contract.meets(headOfContract), explain(headOfContract, contract))
+        val proved = verify(VerificationRequest(headOfReturns, unknowns))
+        assert(proved.meets(headOfReturns), explain(headOfReturns, proved))
+        assert(proofOf(proved).usedLemmas.map(_.statement.name) == List(headOfContract.name))
+    }
 
     test("a refutation whose unknown is no value its walk returns is spurious") {
         // A length is never negative, but an unknown of it can be: the replay on the statement as

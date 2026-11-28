@@ -148,8 +148,9 @@ statements that the first three still hold of the copy.
    predicate holds. It is stated and proved at each call, with the lambda written there in place
    of the predicate.
 
-Decide first: how an inline function's contract is found (§7, decision 3). `findInputOrFail` and
-`findUniqueOrFail` are inline.
+Decided: an inline function's contract is found by the code around its loop (§7, decision 3).
+`findInputOrFail` and `findUniqueOrFail` are inline, and state where they return with
+`Spec.returnsWhen`.
 
 Exit: each statement tagged `Unfinished` in the example suites finishes, or its reason names the
 lemma or the upstream issue it waits for.
@@ -355,8 +356,10 @@ Checked on GitHub, 2026-11-26.
    in the functions' code, as `ensuring` of `Value.eq`, `Value.minus` and `Value.lovelace`
    ([the call rule](verification-details/call-rule.md#the-librarys-contracts)). They are one
    function's each, and a contract of several functions is a chain of them.
-3. How an inline function's contract is found: by its loop's term or by its source position (call
-   rule, open question 1). It blocks M2.
+3. How an inline function's contract is found. Decided 2026-11-28: by the code around its loop,
+   the `ensuring` and the head clauses of an expression whose code is a loop, which are the loop's
+   contract and no guarantees of the code it is inlined into (call rule, open question 1). Where a
+   function returns is stated in its code too, with `Spec.returnsWhen`.
 4. The rewrite of calls on SIR or on UPLC (call rule, open question 2). It blocks M3's items 3
    and 4; G4 needs UPLC.
 5. Where mappings are declared: in the verifier, or as an annotation on the function (overview,

@@ -12,8 +12,8 @@ import scala.util.boundary
   *
   * A clause is a call of a function of the `Spec` module, which the compiler plugin leaves in the
   * SIR as it leaves any call, so that a verifier can read it there. It is not part of the script:
-  *   - `Spec.expects(c)` and `Spec.ensures(c)` are removed, with their conditions, which are not
-  *     evaluated;
+  *   - `Spec.expects(c)`, `Spec.ensures(c)` and `Spec.returnsWhen(c)` are removed, with their
+  *     conditions, which are not evaluated;
   *   - `body.ensuring(r => c)` becomes `body`;
   *   - the definitions of the `Spec` functions, which linking put around the code, are dropped, and
   *     so is the definition of a function that only the clauses used: a function written for the
@@ -34,7 +34,10 @@ object EraseSpecifications {
     /** The name in SIR of the function behind `Spec.ensures`, applied to `_ => condition`. */
     val Ensures: String = "scalus.cardano.onchain.plutus.prelude.Spec$.holdsOnReturn"
 
-    private val functions = Set(Expects, Ensuring, Ensures)
+    /** The name in SIR of the function behind `Spec.returnsWhen`, applied to `_ => condition`. */
+    val ReturnsWhen: String = "scalus.cardano.onchain.plutus.prelude.Spec$.returnsWhere"
+
+    private val functions = Set(Expects, Ensuring, Ensures, ReturnsWhen)
 
     def apply(sir: SIR): SIR =
         if refersTo(sir, functions) then reordered(new Pass().erased(sir)) else sir
@@ -100,12 +103,12 @@ object EraseSpecifications {
         case SIR.Decl(data, _) =>
             throw new IllegalStateException(s"the declaration of ${data.name} is in an application")
 
-    /** `Spec.expects(condition)` or `Spec.ensures(condition)`: a clause written as a statement, one
-      * application of its function.
+    /** `Spec.expects(condition)`, `Spec.ensures(condition)` or `Spec.returnsWhen(condition)`: a
+      * clause written as a statement, one application of its function.
       */
     private def isStatement(sir: SIR): Boolean = sir match
         case SIR.Apply(SIR.ExternalVar(_, name, _, _), _, _, _) =>
-            name == Expects || name == Ensures
+            name == Expects || name == Ensures || name == ReturnsWhen
         case SIR.Cast(term, _, _) => isStatement(term)
         case _                    => false
 
@@ -129,7 +132,7 @@ object EraseSpecifications {
 
         private def erase(sir: AnnotatedSIR): AnnotatedSIR = sir match {
             case SIR.Apply(SIR.ExternalVar(_, name, _, _), condition, _, anns)
-                if name == Expects || name == Ensures =>
+                if name == Expects || name == Ensures || name == ReturnsWhen =>
                 removed(condition)
                 SIR.Const(Constant.Unit, SIRType.Unit, anns)
             // body.ensuring(condition) is Spec.ensuring(body)(condition)

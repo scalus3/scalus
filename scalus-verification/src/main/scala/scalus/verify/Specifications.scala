@@ -19,9 +19,15 @@ import scalus.uplc.Constant
   *
   * The contract is the one `Props.contract` builds from the same conditions (prop-semantics.md §6):
   * over the function's parameters, the conjunction of the `expects` conditions is the precondition,
-  * and each of the others a guarantee, `whenReturns(f, parameters)(r => q)`. A clause further
-  * inside the body, in a branch or after a local value, is not part of the contract;
-  * [[Verifier.guarantees]] reads it.
+  * each `ensures` and the `ensuring` a guarantee, `whenReturns(f, parameters)(r => q)`, and each
+  * `returnsWhen(c)` the guarantee that the function returns where `c` holds, as
+  * `FunctionContract.returnsWhen` states it. A clause further inside the body, in a branch or after
+  * a local value, is not part of the contract; [[Verifier.guarantees]] reads it.
+  *
+  * A contract stated around a loop is the loop's: the `ensuring` and the head clauses of an
+  * expression that is a walk, as an inline function's code is where it is inlined
+  * ([[loopClauses]]). Its clauses are no guarantee of the function they are inlined into, as those
+  * of a function it calls are not.
   */
 private[verify] object Specifications {
 
@@ -30,12 +36,33 @@ private[verify] object Specifications {
     private def constant(value: Boolean): AnnotatedSIR =
         SIR.Const(Constant.Bool(value), SIRType.Boolean, annotations)
 
-    /** The clauses written as statements that a body starts with, and what follows them. */
+    /** The clauses written as statements that a body starts with, and what follows them: the
+      * conditions of `expects`, and the unused parameter and the condition of each `ensures` and
+      * `returnsWhen`.
+      */
     private final case class Head(
         expected: List[AnnotatedSIR],
         ensured: List[(SIR.Var, SIR)],
+        returning: List[(SIR.Var, SIR)],
         rest: SIR
-    )
+    ) {
+        def ++(further: Head): Head =
+            Head(
+              expected ++ further.expected,
+              ensured ++ further.ensured,
+              returning ++ further.returning,
+              further.rest
+            )
+    }
+
+    private def noHead(rest: SIR): Head = Head(Nil, Nil, Nil, rest)
+
+    /** A clause written as a statement. */
+    private enum Statement {
+        case Expected(condition: AnnotatedSIR)
+        case Ensured(unit: SIR.Var, condition: SIR)
+        case Returning(unit: SIR.Var, condition: SIR)
+    }
 
     /** How many `Spec.expects` clauses of the body `term` are part of the contract [[read]] makes
       * of it: those the body starts with, also inside what `ensuring` is applied to.
@@ -49,14 +76,16 @@ private[verify] object Specifications {
 
     /** The contract the body `term` of the function `name` states, as [[read]] reads it, in SIR:
       * the preconditions, over the parameters; the guarantees of the parameters, each with the
-      * unused parameter of its `Spec.ensures`; the guarantee of the result, with its variable; and
-      * the clauses that state them. `None` where the body states no guarantee: a precondition alone
-      * says nothing of what a call returns.
+      * unused parameter of its `Spec.ensures`; the guarantee of the result, with its variable; the
+      * conditions where the function returns, each with the unused parameter of its
+      * `Spec.returnsWhen`; and the clauses that state them. `None` where the body states no
+      * guarantee: a precondition alone says nothing of what a call returns.
       */
     final case class Stated(
         preconditions: List[AnnotatedSIR],
         ofParameters: List[(SIR.Var, SIR)],
         ofResult: Option[(SIR.Var, SIR)],
+        returning: List[(SIR.Var, SIR)],
         clauses: List[Clause]
     )
 
@@ -65,17 +94,28 @@ private[verify] object Specifications {
         // A postcondition that is no function literal, as `body.ensuring(predicate)`, is no
         // contract this reads: [[read]] refuses it, and a function stated so has none here.
         Option.when(literal(head.rest))(ensuring(head.rest, name)).flatMap { (inner, ofResult) =>
-            val within = if ofResult.isEmpty then Head(Nil, Nil, inner) else statements(inner)
+            val within = if ofResult.isEmpty then noHead(inner) else statements(inner)
             val ofParameters = head.ensured ++ within.ensured
-            Option.when(ofParameters.nonEmpty || ofResult.nonEmpty)(
+            val returning = head.returning ++ within.returning
+            Option.when(ofParameters.nonEmpty || ofResult.nonEmpty || returning.nonEmpty)(
               Stated(
                 head.expected ++ within.expected,
                 ofParameters,
                 ofResult,
+                returning,
                 clauses(term, name).filter(_.kind != Clause.Kind.Expects)
               )
             )
         }
+    }
+
+    /** What follows the contract that `term` states, where it states one: the code of the body
+      * under its head clauses and its `ensuring`.
+      */
+    def code(term: SIR): SIR = {
+        val head = statements(term)
+        val (inner, ofResult) = ensuring(head.rest, "")
+        if ofResult.isEmpty then head.rest else statements(inner).rest
     }
 
     def read[A, R](function: FunctionDef[A, R]): Option[FunctionContract[A, R]] = {
@@ -83,10 +123,14 @@ private[verify] object Specifications {
         val head = statements(body.term)
         // The postcondition of the result is on what follows the clauses, or around them all.
         val (inner, ofResult) = ensuring(head.rest, function.name)
-        val within = if ofResult.isEmpty then Head(Nil, Nil, inner) else statements(inner)
+        val within = if ofResult.isEmpty then noHead(inner) else statements(inner)
         val preconditions = head.expected ++ within.expected
         val ofParameters = head.ensured ++ within.ensured
-        Option.when(preconditions.nonEmpty || ofParameters.nonEmpty || ofResult.nonEmpty) {
+        val returning = head.returning ++ within.returning
+        Option.when(
+          preconditions.nonEmpty || ofParameters.nonEmpty || ofResult.nonEmpty ||
+              returning.nonEmpty
+        ) {
             // A condition is an expression of the function's body, so the definitions around the
             // function are around it too.
             def expression[T](sir: SIR): PropExpr[T] = PropExpr.SIRExpr[T](body.wrapped(sir))
@@ -102,10 +146,25 @@ private[verify] object Specifications {
             // A condition of the parameters alone holds wherever the function returns, whatever
             // it returns.
             val returned = SIR.Var("$result", inner.tp, annotations)
+            // Where a condition holds of the parameters, the function returns: a total call, of
+            // whatever it returns.
+            def returnsWhere(unit: SIR.Var, condition: SIR): Prop =
+                Prop.Implies(
+                  Prop.Bool(
+                    expression(Obligations.bind(unit, Obligations.unit, condition))
+                  ),
+                  Prop.Call[A, R](
+                    function.ref,
+                    argument(variables),
+                    new PropExpr.Ident[R](returned.name, variables.size.toLong, returned.tp),
+                    total = true,
+                    Prop.Bool(PropExpr.SIRExpr(constant(true)))
+                  )
+                )
             val guarantees =
                 ofParameters.map((unit, condition) =>
                     guarantee(returned, Obligations.bind(unit, Obligations.unit, condition))
-                ) ++ ofResult.map(guarantee(_, _))
+                ) ++ ofResult.map(guarantee(_, _)) ++ returning.map(returnsWhere(_, _))
             FunctionContract.of[A, R](
               function.ref,
               variables,
@@ -173,7 +232,9 @@ private[verify] object Specifications {
             Some(apply)
         case _ => None
 
-    /** `Spec.expects(c)` and `Spec.ensures(c)` statements at the start of `term`, in order. */
+    /** `Spec.expects(c)`, `Spec.ensures(c)` and `Spec.returnsWhen(c)` statements at the start of
+      * `term`, in order.
+      */
     private def statements(term: SIR): Head = term match
         case SIR.Decl(_, inner)    => statements(inner)
         case SIR.Cast(inner, _, _) => statements(inner)
@@ -181,37 +242,126 @@ private[verify] object Specifications {
             val clauses = bindings.map(binding => clause(binding.value))
             val leading = clauses.takeWhile(_.nonEmpty).flatten
             val here = Head(
-              leading.collect { case Left(condition) => condition },
-              leading.collect { case Right(stated) => stated },
+              leading.collect { case Statement.Expected(condition) => condition },
+              leading.collect { case Statement.Ensured(unit, condition) => unit -> condition },
+              leading.collect { case Statement.Returning(unit, condition) => unit -> condition },
               term
             )
             if leading.size < bindings.size then
                 // What follows is the rest of this let, clauses removed.
                 here.copy(rest = SIR.Let(bindings.drop(leading.size), body, flags, anns))
-            else
-                val further = statements(body)
-                Head(
-                  here.expected ++ further.expected,
-                  here.ensured ++ further.ensured,
-                  further.rest
-                )
-        case other => Head(Nil, Nil, other)
+            else here ++ statements(body)
+        case other => noHead(other)
 
-    /** A clause written as a statement: the condition of an `expects`, or the unused parameter and
-      * the condition of an `ensures`.
-      */
-    private def clause(sir: SIR): Option[Either[AnnotatedSIR, (SIR.Var, SIR)]] = sir match
+    /** A clause written as a statement. */
+    private def clause(sir: SIR): Option[Statement] = sir match
         case SIR.Apply(SIR.ExternalVar(_, EraseSpecifications.Expects, _, _), condition, _, _) =>
-            Some(Left(condition))
+            Some(Statement.Expected(condition))
         case SIR.Apply(
               SIR.ExternalVar(_, EraseSpecifications.Ensures, _, _),
               SIR.LamAbs(unit, condition, Nil, _),
               _,
               _
             ) =>
-            Some(Right(unit -> condition))
+            Some(Statement.Ensured(unit, condition))
+        case SIR.Apply(
+              SIR.ExternalVar(_, EraseSpecifications.ReturnsWhen, _, _),
+              SIR.LamAbs(unit, condition, Nil, _),
+              _,
+              _
+            ) =>
+            Some(Statement.Returning(unit, condition))
         case SIR.Cast(inner, _, _) => clause(inner)
         case _                     => None
+
+    /** Whether `sir` is a loop: a recursive local function applied to all its parameters. */
+    def isLoop(sir: SIR): Boolean = sir match
+        case SIR.Decl(_, inner)    => isLoop(inner)
+        case SIR.Cast(inner, _, _) => isLoop(inner)
+        case SIR.Let(List(binding), body, flags, _) if flags.isRec =>
+            def parameters(value: SIR): Int = value match
+                case SIR.LamAbs(_, inner, _, _) => 1 + parameters(inner)
+                case _                          => 0
+            def applied(term: SIR, arguments: Int): Boolean = term match
+                case SIR.Apply(f, _, _, _) => applied(f, arguments + 1)
+                case SIR.Var(name, _, _)   => name == binding.name && arguments > 0
+                case SIR.Cast(inner, _, _) => applied(inner, arguments)
+                case _                     => false
+            parameters(binding.value) > 0 && applied(body, 0)
+        case _ => false
+
+    /** The calls of the clauses of the contracts stated around loops inside `term`, by identity: an
+      * `ensuring` whose body, under its head clauses, is a loop, and those head clauses; or head
+      * clauses that a loop follows. They are the loops' contracts, as an inline function's is where
+      * it is inlined, and no part of the contract of the function `term` is the body of: the
+      * contract `term` states itself, at its head, is left out.
+      */
+    def loopClauses(term: SIR): java.util.Set[SIR] = {
+        val found = java.util.Collections.newSetFromMap(
+          new java.util.IdentityHashMap[SIR, java.lang.Boolean]
+        )
+        // The calls of the clause statements a term starts with, and what follows them.
+        def leading(term: SIR): (List[SIR], SIR) = term match
+            case SIR.Decl(_, inner)    => leading(inner)
+            case SIR.Cast(inner, _, _) => leading(inner)
+            case SIR.Let(bindings, body, flags, anns) =>
+                val here = bindings.takeWhile(binding => clause(binding.value).nonEmpty)
+                // The call itself, as `Obligations.sites` finds it.
+                def call(value: SIR): SIR = value match
+                    case SIR.Cast(inner, _, _) => call(inner)
+                    case other                 => other
+                if here.size < bindings.size then
+                    here.map(b => call(b.value)) -> SIR.Let(
+                      bindings.drop(here.size),
+                      body,
+                      flags,
+                      anns
+                    )
+                else
+                    val (further, rest) = leading(body)
+                    (here.map(b => call(b.value)) ++ further, rest)
+            case other => Nil -> other
+        // The clause calls of the contract `sir` states, and the code under it.
+        def contract(sir: SIR): (List[SIR], SIR) = {
+            val (head, rest) = leading(sir)
+            ensuringNode(rest) match
+                case Some(node @ SIR.Apply(SIR.Apply(_, body, _, _), _, _, _)) =>
+                    val (within, code) = leading(body)
+                    (head ++ (node :: within), code)
+                case _ => head -> rest
+        }
+        def visit(sir: SIR, own: Boolean): Unit = {
+            val (calls, code) = contract(sir)
+            if !own && calls.nonEmpty && isLoop(code) then calls.foreach(found.add)
+            children(sir).foreach(visit(_, own = false))
+        }
+        val (own, code) = contract(term)
+        // The code under the function's own contract is visited, and so are the conditions of its
+        // clauses: an `ensuring`'s body is that code.
+        def condition(call: SIR): SIR = call match
+            case SIR.Apply(_, argument, _, _) => argument
+            case other                        => other
+        visit(code, own = true)
+        own.foreach(call => visit(condition(call), own = false))
+        found
+    }
+
+    /** The terms `sir` is made of. */
+    private def children(sir: SIR): List[SIR] = sir match
+        case SIR.Decl(_, term)                 => List(term)
+        case SIR.Let(bindings, body, _, _)     => bindings.map(_.value) :+ body
+        case SIR.LamAbs(_, term, _, _)         => List(term)
+        case SIR.Apply(f, arg, _, _)           => List(f, arg)
+        case SIR.Select(scrutinee, _, _, _)    => List(scrutinee)
+        case SIR.And(a, b, _)                  => List(a, b)
+        case SIR.Or(a, b, _)                   => List(a, b)
+        case SIR.Not(a, _)                     => List(a)
+        case SIR.IfThenElse(c, t, f, _, _)     => List(c, t, f)
+        case SIR.Error(message, _, _)          => List(message)
+        case SIR.Constr(_, _, arguments, _, _) => arguments
+        case SIR.Match(scrutinee, cases, _, _) => scrutinee :: cases.map(_.body)
+        case SIR.Cast(term, _, _)              => List(term)
+        case _                                 => Nil
 
     /** What `ensuring` is applied to, and the result variable and condition of that clause; or
       * `term` itself, when it is no `ensuring`.

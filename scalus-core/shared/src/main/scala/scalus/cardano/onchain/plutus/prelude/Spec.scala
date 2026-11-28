@@ -4,13 +4,18 @@ import scalus.cardano.onchain.SpecificationError
 import scalus.compiler.Compile
 
 /** The contract of a function, written in its body, next to the code it describes: what its callers
-  * owe, and what it guarantees.
+  * owe, what it guarantees where it returns, and where it returns.
   *
   * {{{
   * def clamp(x: BigInt, lo: BigInt, hi: BigInt): BigInt = {
   *     Spec.expects(lo <= hi)
   *     (if x < lo then lo else if x > hi then hi else x).ensuring(r => lo <= r && r <= hi)
   * }
+  *
+  * inline def findInputOrFail(outRef: TxOutRef): TxInInfo = {
+  *     Spec.returnsWhen(self.inputs.exists(_.outRef === outRef))
+  *     ...
+  * }.ensuring(input => input.outRef === outRef)
   *
   * inline override def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ref: TxOutRef): Unit = {
   *     Spec.ensures(tx.isSignedBy(configOf(datum).beneficiary))
@@ -48,6 +53,21 @@ object Spec {
 
     /** The function behind [[ensures]], which keeps the condition unevaluated. */
     def holdsOnReturn(condition: Unit => Boolean): Unit = ()
+
+    /** Where `condition` holds of the parameters, and the precondition does, the function returns:
+      * it ends, and does not fail. Written at the head of the body, with the `expects` clauses.
+      * [[ensures]] and [[ensuring]] say what holds wherever the function returns; this says where
+      * it returns. A function that fails on purpose where an input is wrong, as a lookup that fails
+      * where nothing is found, states with it where it does not fail, which no precondition can:
+      * its callers owe nothing.
+      *
+      * It is not evaluated off-chain: at the head of the body it is not known yet whether the
+      * function returns.
+      */
+    inline def returnsWhen(inline condition: Boolean): Unit = returnsWhere(_ => condition)
+
+    /** The function behind [[returnsWhen]], which keeps the condition unevaluated. */
+    def returnsWhere(condition: Unit => Boolean): Unit = ()
 
     extension [A](body: A) {
 

@@ -2,7 +2,7 @@ package scalus.verify.uplcblaster
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.cardano.onchain.plutus.prelude.{require, List as PList, Spec}
+import scalus.cardano.onchain.plutus.prelude.{fail as failWith, require, List as PList, Spec}
 import scalus.cardano.onchain.plutus.prelude.Spec.ensuring
 import scalus.compiler.Compile
 import scalus.compiler.sir.SIRType
@@ -105,6 +105,32 @@ object SpecifiedExamples {
         (x + BigInt(1)).ensuring(r => r <= limit)
     }
 
+    /** The head of a list, stated where it returns: where the list is not empty. */
+    def headOf(xs: PList[BigInt]): BigInt = {
+        Spec.returnsWhen(!xs.isEmpty)
+        xs.head
+    }
+
+    /** It does not return where it says it does: of the empty list it fails. */
+    def headOfWrongly(xs: PList[BigInt]): BigInt = {
+        Spec.returnsWhen(true)
+        xs.head
+    }
+
+    /** A lookup that fails where nothing is found, with its contract around its loop, inline as
+      * `TxInfo.findInputOrFail` is.
+      */
+    inline def firstPositive(xs: PList[BigInt]): BigInt = {
+        Spec.returnsWhen(xs.exists(_ > BigInt(0)))
+        def go(ys: PList[BigInt]): BigInt = ys match
+            case PList.Nil             => failWith("no positive element")
+            case PList.Cons(y, others) => if y > BigInt(0) then y else go(others)
+        go(xs)
+    }.ensuring(found => found > BigInt(0))
+
+    /** A caller of the lookup: the lookup's contract is its loop's, and no guarantee of this. */
+    def afterFirstPositive(xs: PList[BigInt]): BigInt = firstPositive(xs) + BigInt(1)
+
     /** Its precondition is written after another statement, where it is part of no contract. */
     def expectsLate(x: BigInt, limit: BigInt): BigInt = {
         val doubled = x + x
@@ -159,6 +185,13 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
     private val boundedWrongly = FunctionDef(SpecifiedExamples.boundedWrongly)
     private val expectsLate = FunctionDef(SpecifiedExamples.expectsLate)
     private val entry = FunctionDef.named("entry", (x: BigInt) => SpecifiedHandler.entry(x))
+    private val headOf = FunctionDef(SpecifiedExamples.headOf)
+    private val headOfWrongly = FunctionDef(SpecifiedExamples.headOfWrongly)
+    private val afterFirstPositive = FunctionDef(SpecifiedExamples.afterFirstPositive)
+    private val firstPositive = FunctionDef.named(
+      "first_positive",
+      (xs: PList[BigInt]) => SpecifiedExamples.firstPositive(xs)
+    )
 
     private def inSource[A, R](function: FunctionDef[A, R]): FunctionContract[A, R] =
         FunctionContract.inSource(function).getOrElse(fail(s"${function.name} states no contract"))
@@ -188,6 +221,45 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
             case other => fail(s"expected a partial call with a test, got $other")
         // A clause further inside is no part of the contract.
         assert(FunctionContract.inSource(branch).isEmpty)
+    }
+
+    test("a function states where it returns, which its contract guarantees") {
+        // `returnsWhen(c)` is `c ==>: succeeds(f, parameters)`, as `FunctionContract.returnsWhen`
+        // states it.
+        inSource(headOf).guarantees match
+            case List(Prop.Implies(Prop.Bool(_), Prop.Call(function, _, _, true, Prop.Bool(_)))) =>
+                assert(function == headOf.ref)
+            case other => fail(s"expected a condition and a total call, got $other")
+        assert(inSource(headOf).clauses.map(_.kind) == List(Clause.Kind.ReturnsWhen))
+        proven(inSource(headOf).prop, 80, headOf)
+        // negative control: of the empty list it fails
+        refuted(inSource(headOfWrongly).prop, 80, headOfWrongly)
+    }
+
+    test(
+      "a contract stated around a loop is the loop's, no guarantee of the code it is inlined in"
+    ) {
+        // `firstPositive` is inline: in its caller's code, its clauses are around its loop. They
+        // are the lookup's contract, and the caller states none, as of a function it calls.
+        val verifier = Verifier.empty
+        verifier.addFunction(afterFirstPositive)
+        assert(verifier.specifications.isEmpty, verifier.specifications.map(_.describe))
+        assert(verifier.guarantees(afterFirstPositive.ref).statements.isEmpty)
+        // Of the lookup itself, they are its own contract.
+        val contract = inSource(firstPositive)
+        assert(
+          contract.clauses.map(_.kind).toSet == Set(Clause.Kind.ReturnsWhen, Clause.Kind.Ensuring),
+          contract.clauses
+        )
+        verifier.addFunction(firstPositive)
+        assert(
+          verifier.specifications.map(_.clause).toSet == contract.clauses.toSet,
+          verifier.specifications.map(_.describe)
+        )
+        // An inline handler's clauses, which are around no loop, are still its entry's guarantees.
+        val handled = Verifier.empty
+        handled.addFunction(entry)
+        assert(handled.specifications.nonEmpty)
     }
 
     test("a contract read from the body is proved about the compiled function") {
