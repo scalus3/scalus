@@ -73,9 +73,13 @@ code; and a protocol of several validators with a thread token as the origin of 
 - The contracts a library function states in its code, with `ensuring`, are premises of the
   unknowns of its calls, and a proof names those it assumes (M1, item 1): vesting's fourth
   guarantee is proved of every context, assuming the contracts of `Value.eq`, `Value.minus` and
-  `Value.lovelace`. A proof that rests on a contract no theorem proves is no theorem. Those of
-  `eq` and `lovelace` are proved by `blaster-uplc`, of values of any size, and the proof cites them
-  (M1, item 2): it rests on `minus`'s alone, which is not proved yet.
+  `Value.lovelace`. A proof that rests on a contract no theorem proves is no theorem.
+- The three contracts are proved (M1, item 2): `eq`'s and `lovelace`'s by `blaster-uplc`, of
+  values of any size, and `minus`'s by hand, of runs of any number of steps, on Lean's own axioms.
+  The fourth guarantee cites them, and is a theorem of every context, as the first and the third.
+  `minus`'s proof is the first of a statement about the run as Lean defines it, with only Lean's
+  axioms (G5's check), with a big-step semantics of the CEK machine in Scalus's Lean library
+  (`ScalusProofs.BigStep`).
 - Results today rest on what G1 lists. Of the exit criteria of §9, phase 0's is met. Phase 1's is
   met but for one part: a suite without a negative control does not fail yet. The criteria of the
   other phases are met in part.
@@ -110,11 +114,13 @@ Done, 2026-11-26: merged as `f1a55ab6b`, with Lean-Proofs green.
    and the fourth guarantee is proved of every context assuming them: a result that is no theorem
    (`ProvenAssuming`), and no lemma of another, until item 2.
 2. The proof of those contracts ([the call rule](verification-details/call-rule.md#what-to-prove),
-   item 2, step 2). Of `eq` and `lovelace`, done 2026-11-27, by `blaster-uplc`, of values of any
+   item 2, step 2). Done 2026-11-27. `eq`'s and `lovelace`'s by `blaster-uplc`, of values of any
    size: `getLovelace` reads a value's first entry only, as the ada policy and token name are the
-   least keys, and `eq` is `equalsData`. The fourth guarantee cites both. Left: `minus`'s, a walk
-   over both values to their ends, which no run of a budget follows. By hand, by induction over
-   the maps, as `isSignedBy`'s; or by the rule for recursion (M4), from contracts of its loops.
+   least keys, and `eq` is `equalsData`. `minus`'s by hand
+   (`scalus-examples/jvm/src/test/lean/LinearVesting/LinearVesting/Proofs/ValueMinus.lean`): it
+   walks both values to their ends, which no run of a budget follows, so its statement is written
+   of runs of any number of steps (`LeanManual.ofAnyRun`), and each of its five loops is a lemma by
+   induction over its list. The fourth guarantee cites the three, and is a theorem.
 
 Decided: the library's contracts live in its code (§7, decision 2).
 
@@ -122,6 +128,10 @@ Exit: vesting's four guarantees are proved of every script context. The validato
 datum check refutes the fourth guarantee, while the first three still hold. With calls as
 unknowns, Lean's counterexample of that control is of no context (call rule, step 1), so the
 refutation is to come from a context: the sample the copy accepts, or a search with limits.
+
+Status, 2026-11-27: the four guarantees are proved of every script context, and the copy without
+the datum check accepts a sample that leaves the rest under another datum. Left of the exit: the
+statements that the first three still hold of the copy.
 
 ### M2. The call rule beyond vesting (G2)
 
@@ -133,7 +143,7 @@ refutation is to come from a context: the sample the copy accepts, or a search w
    the other walks of the call rule's table (items 4 to 6). A call whose value a claim needs must
    return, so its contract says that it ends (step 3): total correctness, where a premise needs
    only partial correctness. Until M4, these contracts are proved by hand, by induction, as
-   `isSignedBy`'s.
+   `Value.minus`'s loops are (`ScalusProofs.BigStep`).
 3. `findUniqueOrFail`'s contract speaks of its predicate: it returns the one element of which the
    predicate holds. It is stated and proved at each call, with the lambda written there in place
    of the predicate.
@@ -147,9 +157,11 @@ lemma or the upstream issue it waits for.
 ### M3. The call rule proved, and the run as Lean defines it (G4, G5)
 
 1. **A spike of the tie**, 2 to 3 days: the lemma for one replaced subterm, in a fragment of the
-   CEK machine without builtins. It measures what items 3 and 4 cost. The only data point so far
-   is `isSignedBy`'s proof, one loop in about a day, and the estimate for items 3 and 4 before the
-   spike, one to two months of Lean work, is a guess.
+   CEK machine without builtins. It measures what items 3 and 4 cost. The data points so far are
+   proofs of programs: `isSignedBy`'s, one loop in about a day, stepping the machine by hand, and
+   `Value.minus`'s, five loops and a model within a day, with the big-step semantics of
+   `ScalusProofs.BigStep`. The estimate for items 3 and 4 before the spike, one to two months of
+   Lean work, is a guess.
 2. **A spike of `prepared = run`**, 1 to 2 days, on the AMM's redemption, where `rfl` gives up
    after 46 s: Blaster's rewriting lemmas (`Blaster/Optimize/Lemmas`) as `simp` rules
    ([overview §6.4](verification-overview.md#64-lean-manual)).

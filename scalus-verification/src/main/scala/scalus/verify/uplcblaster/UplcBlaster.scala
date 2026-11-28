@@ -5466,12 +5466,47 @@ object UplcBlaster {
         maxHeartbeats: Int,
         module: String,
         directory: String
+    ): StatementModule =
+        written(
+          goal,
+          Option.unless(kind.contains(ProofKind.BlasterOfUnknowns))(budget),
+          kind,
+          maxHeartbeats,
+          module,
+          directory
+        )
+
+    /** The Lean module `module` that states `goal` of runs of any number of steps, for a proof by
+      * hand: `def statement : Prop`, over the programs of the statement's tests as
+      * [[statementModule]] reads them, with a test claimed or assumed read as
+      * `ScalusProofs.Runs.returns … true` and a `denotes` as `ScalusProofs.Runs.succeeds`
+      * ([[anyRunBody]]). No budget bounds it: it is the statement of programs that walk lists of
+      * any length, which no run of a budget follows, and which a proof by hand proves by induction.
+      * No proof of Scalus found it, so the module has no axiom `proved`.
+      */
+    def anyRunStatementModule(
+        goal: Lowered,
+        maxHeartbeats: Int,
+        module: String,
+        directory: String
+    ): StatementModule = written(goal, None, None, maxHeartbeats, module, directory)
+
+    /** [[statementModule]] at `budget` steps, or of runs of any number of steps where there is
+      * none.
+      */
+    private def written(
+        goal: Lowered,
+        budget: Option[Int],
+        kind: Option[ProofKind],
+        maxHeartbeats: Int,
+        module: String,
+        directory: String
     ): StatementModule = {
         val paths = goal.leaves.indices.map(index => s"$directory/Leaf$index.flat").toVector
         val hashes = goal.programHashes.zipWithIndex.map((hash, index) => s"  leaf$index $hash")
         val named = if goal.name.isEmpty then "A statement" else s"The statement `${goal.name}`"
         val ofUnknowns = kind.contains(ProofKind.BlasterOfUnknowns)
-        val steps = if ofUnknowns then "any number of" else budget.toString
+        val steps = budget.fold("any number of")(_.toString)
         val header =
             s"""
                |/-!
@@ -5504,7 +5539,7 @@ object UplcBlaster {
             case kind =>
                 s"""
                    |
-                   |/-- That `statement` holds, as Scalus proved it: by the tactic `blaster-uplc`, at $budget
+                   |/-- That `statement` holds, as Scalus proved it: by the tactic `blaster-uplc`, at $steps
                    |    steps, a proof of the kind `$kind`. An axiom, and no proof that Lean checks: a
                    |    theorem that uses it rests on that result, and `#print axioms` names it. -/
                    |axiom proved : statement""".stripMargin
@@ -5517,13 +5552,13 @@ object UplcBlaster {
         StatementModule(
           document(
             paths,
-            if ofUnknowns then anyRunBody(goal, stated, prefix)
-            else body(goal, budget, stated, stated, prefix),
+            budget.fold(anyRunBody(goal, stated, prefix))(body(goal, _, stated, stated, prefix)),
             maxHeartbeats,
             module,
             header,
             prefix,
-            if ofUnknowns then (leanImports(goal) :+ libraryRuns).distinct else leanImports(goal)
+            if budget.isEmpty then (leanImports(goal) :+ libraryRuns).distinct
+            else leanImports(goal)
           ),
           paths.zip(goal.leaves)
         )

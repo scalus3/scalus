@@ -87,13 +87,20 @@ Where the rule is sound:
   `eq(a, b)` gives `!equal || a.getLovelace === b.getLovelace`, `minus(a, b)` gives
   `r.getLovelace === a.getLovelace - b.getLovelace`, of values whose keys ascend as the type's do,
   and `lovelace(v)` gives `r.getLovelace === v`. Off-chain they are checked, as every `ensuring`
-  is; they are no part of a script. The vesting suite proves those of `eq` and `lovelace`, each
-  with a negative control, and the fourth guarantee cites them
+  is; they are no part of a script. The vesting suite proves the three, each with a negative
+  control, and the fourth guarantee cites them
   (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala`,
-  "The library's `Value`"). A contract is stated of a function of the verifier, and a function of
-  the verifier is linked into each statement that calls it as its own program: so the programs of
-  the suite's other statements that call `eq` or `lovelace` changed with them, and were proved
-  again.
+  "The library's `Value`"): `eq`'s and `lovelace`'s by `blaster-uplc`, and `minus`'s by hand. A
+  contract is stated of a function of the verifier, and a function of the verifier is linked into
+  each statement that calls it as its own program: so the programs of the suite's other statements
+  that call them changed with them, and were proved again.
+- A proof by hand of a walk: `Value.minus`'s contract, of runs of any number of steps
+  (`LeanManual.ofAnyRun`), on Lean's own axioms
+  (`scalus-examples/jvm/src/test/lean/LinearVesting/LinearVesting/Proofs/ValueMinus.lean`). With a
+  big-step semantics of the CEK machine, proved to agree with its runs
+  (`scalus-verification/src/main/lean/ScalusProofs/BigStep.lean`), each of `minus`'s five loops is
+  a lemma by induction over its list, and `minus` computes a model of what it returns; at the
+  model's head is the difference of the heads' lovelace.
 - Contracts: `Props.contract`, `Props.totalContract`
   (`scalus-verification/src/main/scala/scalus/verify/Prop.scala:514`, `:569`), and those a
   function states in its body with `Spec`, read by `FunctionContract.inSource` (`Prop.scala:197`).
@@ -121,12 +128,12 @@ library functions are in `scalus-core/shared/src/main/scala/scalus/cardano/oncha
 | # | Statement | Of | Needed by | Status |
 |---|---|---|---|---|
 | 1 | the tie: in a run, a part that ends in a value can be replaced by the value | Lean's CEK machine, once | every proof with unknowns, so that it rests on no trusted rewrite (`ProofKind.BlasterOfUnknowns`, `Verifier.scala:127`) | not started |
-| 2 | `getLovelace(v - lovelace(a)) = getLovelace(v) - a`, and with `===`: `x === v - lovelace(a) ⇒ x.getLovelace = v.getLovelace - a` | `Value.getLovelace` (`v1/Value.scala:720`, by `quantityOf` `:796`), `Value.minus` (`:480`), `Value.lovelace` (`:98`), `Value.eq` (`:359`) | vesting #4: the validator checks the value (`VestingValidator.scala:133`), the clause reads its lovelace (`:183`) | stated as a chain of three contracts, the `ensuring` of `eq`, `minus` and `lovelace`: `eq(x, y) ⇒ gl(x) = gl(y)`, `gl(minus(v, w)) = gl(v) - gl(w)`, `gl(lovelace(a)) = a`. `eq`'s and `lovelace`'s proved by `blaster-uplc`, of values of any size, in the vesting suite (`value.eq.stated_contract_holds`, `value.lovelace.stated_contract_holds`, 2026-11-27); `minus`'s assumed, not proved |
+| 2 | `getLovelace(v - lovelace(a)) = getLovelace(v) - a`, and with `===`: `x === v - lovelace(a) ⇒ x.getLovelace = v.getLovelace - a` | `Value.getLovelace` (`v1/Value.scala:720`, by `quantityOf` `:796`), `Value.minus` (`:480`), `Value.lovelace` (`:98`), `Value.eq` (`:359`) | vesting #4: the validator checks the value (`VestingValidator.scala:133`), the clause reads its lovelace (`:183`) | stated as a chain of three contracts, the `ensuring` of `eq`, `minus` and `lovelace`: `eq(x, y) ⇒ gl(x) = gl(y)`, `gl(minus(v, w)) = gl(v) - gl(w)`, `gl(lovelace(a)) = a`. Proved, in the vesting suite (2026-11-27): `eq`'s and `lovelace`'s by `blaster-uplc`, of values of any size (`value.eq.stated_contract_holds`, `value.lovelace.stated_contract_holds`), and `minus`'s by hand, by induction over the maps (`value.minus.stated_contract_holds`, `LinearVesting/Proofs/ValueMinus.lean`) |
 | 3 | it returns `txSignedBy pk tx`, of any number of signatories | `TxInfo.isSignedBy` (`v3/Contexts.scala:1075`) | a statement that reads the signature as the ledger does | proved: `IsSignedBy.lean:189` |
 | 4 | it returns the input whose `outRef` is the given one, or fails where there is none; it ends | `TxInfo.findInputOrFail` (`v3/Contexts.scala:986`, its loop `:994-998`) | #3, #4: `lockedBy` (`VestingValidator.scala:167-168`) | not started |
 | 5 | it returns the one element of which the predicate holds, or fails; it ends | `List.findUniqueOrFail`, `List.findUniqueOrElse` (`prelude/List.scala:1119`, `:1139`) | the validator's check of one vesting input (`VestingValidator.scala:82`), #4's continuing output (`v3/Contexts.scala:1046`) | not started |
 | 6 | each ends | `TxInfo.findInputsByCredential`, `findOutputsByCredential` (`v3/Contexts.scala:1019`, `:1029`), the folds over values (`VestingValidator.scala:110-111`) | the rejecting form of #4, which runs the validator past them | not started |
-| 7 | vesting #4 of the validator itself, of every context, with the contract of 2 | `vesting.spend.state_is_carried` (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:519`), clause `VestingValidator.scala:64-66`, `carriesTheRest` `:174-184` | the step of the vesting thread ([several transactions](multi-transaction.md#vesting)) | proved with `CallsAsUnknowns` assuming the three contracts of 2, at 2400 steps in two minutes (2026-11-26); it cites the proofs of the contracts of `eq` and `lovelace` (2026-11-27), and of `linearVesting`'s, which the validator also calls, and rests on `minus`'s alone: `ProvenAssuming`, no theorem, its clause open until that contract is proved |
+| 7 | vesting #4 of the validator itself, of every context, with the contract of 2 | `vesting.spend.state_is_carried` (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:519`), clause `VestingValidator.scala:64-66`, `carriesTheRest` `:174-184` | the step of the vesting thread ([several transactions](multi-transaction.md#vesting)) | proved with `CallsAsUnknowns`, at 2400 steps in two minutes (2026-11-26), citing the proofs of the three contracts of 2 (2026-11-27) and of `linearVesting`'s, which the validator also calls: a theorem, of kind `BlasterOfUnknowns` |
 | 8 | #1 and #3 again under the rule, which they need no contract for: proved `withoutContracts`, assuming none | `VestingVerificationTest.scala:441`, `:483` | that the move of `CallsAsUnknowns` keeps them | proved with `CallsAsUnknowns` |
 
 Of 2, two of the three contracts need no induction. `getLovelace` reads a value's first entry
@@ -137,12 +144,12 @@ of a sorted map ends at the first key that is not less than the one it looks for
 their ends: its program has five loops (the merges of the policies and of the tokens, `List.map`,
 and two conversions between lists of pairs and `Data`), and UPLC computes the whole result before
 `getLovelace` reads its first entry. Its contract is a lemma of a walk over maps of any size,
-proved by hand, by induction, as 3 was; or by the rule for recursion (M4), from contracts of its
-loops, each proved by one pass through its body with its call of itself under the contract. The
-merge's is `gl(go(l, r)) = gl(l) - gl(r)`, of lists whose keys ascend: where it drops an entry
-that comes to nothing, it goes on to keys greater than the empty bytes. With the walks as
-unknowns and no contracts of them, nothing ties `minus`'s result to its arguments. 4 to 6 are of loops over a
-list, each as `loop_returns` of `isSignedBy` (`IsSignedBy.lean:103`).
+proved by hand, by induction (2026-11-27). With the walks as unknowns and no contracts of them,
+nothing ties `minus`'s result to its arguments; with the rule for recursion (M4), the contracts of
+its loops would each be proved by one pass through its body, as the merge's,
+`gl(go(l, r)) = gl(l) - gl(r)` of lists whose keys ascend: where it drops an entry that comes to
+nothing, it goes on to keys greater than the empty bytes. 4 to 6 are of loops over a list, each
+to be proved by hand as `minus`'s loops are, with `ScalusProofs.BigStep`.
 
 ## The move of `CallsAsUnknowns`
 
@@ -164,8 +171,8 @@ list, each as `loop_returns` of `isSignedBy` (`IsSignedBy.lean:103`).
    validator without its datum check, has a counterexample under the premises, which the replay
    finds no context for: a refutation with unknowns is confirmed only where Lean's context
    realizes them. The context that refutes it is a sample the copy accepts.
-2. The proof of 2. Of `eq` and `lovelace`, done 2026-11-27, by `blaster-uplc`: #4 cites them,
-   and rests on `minus`'s contract alone, which is not proved yet.
+2. The proof of 2. Done 2026-11-27: `eq`'s and `lovelace`'s by `blaster-uplc`, `minus`'s by hand,
+   of runs of any number of steps. #4 cites the three, and is a theorem.
 3. The lemmas that loops end (4 to 6), where a statement in the rejecting form needs them.
 4. The tie (1).
 

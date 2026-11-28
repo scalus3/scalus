@@ -147,6 +147,13 @@ verifyByHand(
 )
 ```
 
+A statement of a walk over a list of any length holds at no budget. Without the budget,
+`verifyByHand(statement, module, theorem)` (`LeanManual.ofAnyRun`) writes the statement of runs of
+any number of steps, its tests read as `ScalusProofs.Runs.returns` and `succeeds`
+(`UplcBlaster.anyRunStatementModule`), and the header says "at any number of steps". Vesting's
+suite proves `Value.minus`'s contract so (`LinearVesting/Proofs/ValueMinus.lean`), with the
+big-step semantics of `ScalusProofs.BigStep`.
+
 - **The statement's module is written as the others are.** Where the proofs export, `leanExport`
   writes it; where they do not, the workspace's module is held to the code, as the text the
   tactic would write now. A module that is missing, or of other programs, fails the test, and says
@@ -160,7 +167,8 @@ verifyByHand(
   `#print axioms <theorem>`. An error, as a theorem of another statement (`type mismatch`), is no
   proof.
 - **The axioms say what the proof rests on.** Lean's own only: `LeanKernelOfOptimizedRuns`, the
-  kernel, of the runs as Blaster's optimizer gives them (overview §6.4). `Lean.ofReduceBool`:
+  kernel, of the runs as Blaster's optimizer gives them (overview §6.4); or, of a statement of runs
+  of any number of steps, `LeanKernel`, the kernel, of the runs as Lean defines them. `Lean.ofReduceBool`:
   `LeanNative`. `<Package>.Generated.<name>.proved`: a lemma, the statement of that module, which is
   to be among the verifier's theorems, and which the proof records as used. The module is to state
   the axiom, as the module of a statement Scalus proved does, and a second check has Lean take each

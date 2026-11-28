@@ -4,7 +4,7 @@
       "Blaster": "a06919767488",
       "CardanoLedgerApi": "3dd048e3eb86",
       "PlutusCore": "71872c19a90b",
-      "ScalusProofs": "9377250e3610679e",
+      "ScalusProofs": "cb3161c407c6fa81",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },

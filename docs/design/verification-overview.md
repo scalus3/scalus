@@ -1400,6 +1400,19 @@ longer rests on Z3 or on `blasterProven`, but still rests on Blaster's optimizer
 Until then, the kind of such a proof says what it rests on: the kernel, over the optimized run,
 and not the kernel over the program.
 
+**A statement of runs of any number of steps.** A statement of a walk over a list of any length
+holds at no budget: its programs run longer than any fixed number of steps on long enough lists.
+`LeanManual.ofAnyRun` (`verifyByHand(statement, module, theorem)`, with no budget) writes it of the
+runs themselves: each test is `ScalusProofs.Runs.returns … true` of the program as `#import_uplc`
+reads it, and a `denotes` is `ScalusProofs.Runs.succeeds`, with no `#prep_uplc_run`. A proof of it
+on Lean's own axioms is of the run as Lean defines it, of kind `LeanKernel`. Scalus's Lean library
+has the means: a big-step semantics of PlutusCore's CEK machine, `ScalusProofs.BigStep.Big`,
+proved to agree with the machine's runs over any stack (`Big.run`), and `big_step`, which applies
+its rules where the term and the values decide them. A loop is then an induction over its list,
+with no state of the machine written by hand. The first such proof is of `Value.minus`'s contract
+(`scalus-examples/jvm/src/test/lean/LinearVesting/LinearVesting/Proofs/ValueMinus.lean`,
+2026-11-27): five loops, and a model of what `minus` returns.
+
 **What Blaster proved, as a lemma of a proof by hand.** "What Blaster proves holds" is no theorem
 of Lean: Blaster closes a goal with the axiom `blasterProven : ∀ {α}, α`, and rebuilds no proof. So
 a statement Scalus proved is written with an axiom of its own, `proved : statement`, in the

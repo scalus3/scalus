@@ -551,6 +551,13 @@ final class LeanProofs private (
     ): VerificationResult =
         verify(VerificationRequest(statement, LeanManual(module, theorem, budget, lean)))
 
+    /** [[verifyByHand]] of the statement as written of runs of any number of steps
+      * ([[LeanManual.ofAnyRun]]): of programs that walk lists of any length, which a proof by hand
+      * proves by induction.
+      */
+    def verifyByHand(statement: Statement, module: String, theorem: String): VerificationResult =
+        verify(VerificationRequest(statement, LeanManual.ofAnyRun(module, theorem, lean)))
+
     /** The module of `statement` that `tactic` checks a proof by hand of: written where these
       * proofs export, as the modules of the statements proved are, and held to the code where they
       * do not ([[heldToTheCode]]), before a result kept of it is taken: the proof imports it. The

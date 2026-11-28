@@ -1,11 +1,20 @@
 {
   "environment": {
+    "lean-manual": {
+      "Blaster": "a06919767488",
+      "CardanoLedgerApi": "3dd048e3eb86",
+      "LinearVesting": "cfdfdce352d08b72",
+      "PlutusCore": "71872c19a90b",
+      "ScalusProofs": "cb3161c407c6fa81",
+      "proofs": "128c40abf2043339",
+      "toolchain": "leanprover/lean4:v4.24.0"
+    },
     "uplc-blaster": {
       "Blaster": "a06919767488",
       "CardanoLedgerApi": "3dd048e3eb86",
       "LinearVesting": "cfdfdce352d08b72",
       "PlutusCore": "71872c19a90b",
-      "ScalusProofs": "9377250e3610679e",
+      "ScalusProofs": "cb3161c407c6fa81",
       "toolchain": "leanprover/lean4:v4.24.0"
     },
     "uplc-blaster-unknowns": {
@@ -13,7 +22,7 @@
       "CardanoLedgerApi": "3dd048e3eb86",
       "LinearVesting": "cfdfdce352d08b72",
       "PlutusCore": "71872c19a90b",
-      "ScalusProofs": "9377250e3610679e",
+      "ScalusProofs": "cb3161c407c6fa81",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },
@@ -132,6 +141,42 @@
       },
       "tests": [
         "Value.lovelace's contract, stated in its code, holds of every amount",
+        "spend's fourth guarantee holds of every script context, with the library's contracts"
+      ]
+    },
+    "value.minus.lovelace_of_the_sum": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "2d3cb18e20f505f4",
+      "programs": [
+        "235e16be38aa51e5"
+      ],
+      "notes": {
+        "budget": "2000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "Value.minus's contract, stated in its code, holds of every two values"
+      ]
+    },
+    "value.minus.stated_contract_holds": {
+      "tactic": "lean-manual",
+      "result": "proved",
+      "statement": "fd2de881d6770254",
+      "programs": [
+        "16940cb266ee251d",
+        "a9488482530dfd8a",
+        "2307d370d3a2fe43",
+        "790714f7fdfdd625"
+      ],
+      "notes": {
+        "axioms": "propext, Classical.choice, Quot.sound",
+        "cited": "",
+        "kind": "LeanKernel",
+        "theorem": "LinearVesting.Proofs.ValueMinus.minus_contract"
+      },
+      "tests": [
+        "Value.minus's contract, stated in its code, holds of every two values",
         "spend's fourth guarantee holds of every script context, with the library's contracts"
       ]
     },
@@ -324,7 +369,7 @@
       "result": "proved",
       "statement": "d2494909ff2e8fd2",
       "programs": [
-        "664f162b0bc60325"
+        "9abcdd81fc1dbd5e"
       ],
       "notes": {
         "budget": "3300",

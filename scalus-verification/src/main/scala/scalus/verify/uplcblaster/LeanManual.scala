@@ -14,11 +14,14 @@ import scala.jdk.CollectionConverters.*
   *
   * The statement is written into the workspace as the module `<Package>.Generated.<name>`, as
   * `blaster-uplc` lowers it, as written, at `budget` steps, and without the axiom `proved`: no
-  * proof of Scalus found it ([[UplcBlaster.statementModule]]). [[LeanProofs]] writes it where its
-  * proofs export. The tactic holds the workspace's module, and its programs, to the statement as
-  * the code has it now. `theorem`, a theorem of the module `module`, which is under
-  * `<Package>/Proofs`, is to prove the module's `statement`. Lake builds both modules, as Lean's
-  * server does not build an import that is out of date, and the tactic has Lean elaborate
+  * proof of Scalus found it ([[UplcBlaster.statementModule]]). Without a budget
+  * ([[LeanManual.ofAnyRun]]), it is written of runs of any number of steps
+  * ([[UplcBlaster.anyRunStatementModule]]): the statement of programs that walk lists of any
+  * length, as a proof by induction proves it. [[LeanProofs]] writes it where its proofs export. The
+  * tactic holds the workspace's module, and its programs, to the statement as the code has it now.
+  * `theorem`, a theorem of the module `module`, which is under `<Package>/Proofs`, is to prove the
+  * module's `statement`. Lake builds both modules, as Lean's server does not build an import that
+  * is out of date, and the tactic has Lean elaborate
   * {{{
   * import <module>
   * import <the statement's module>
@@ -27,7 +30,9 @@ import scala.jdk.CollectionConverters.*
   * }}}
   * and reads what the proof rests on from the axioms:
   *   - Lean's own (`propext`, `Classical.choice`, `Quot.sound`): Lean's kernel, of the programs'
-  *     runs as Blaster's optimizer gives them, [[ProofKind.LeanKernelOfOptimizedRuns]];
+  *     runs as Blaster's optimizer gives them, [[ProofKind.LeanKernelOfOptimizedRuns]]; or, of a
+  *     statement of runs of any number of steps, which has no optimized run, of the runs as Lean
+  *     defines them, [[ProofKind.LeanKernel]];
   *   - `Lean.ofReduceBool`: it evaluates with `native_decide`, [[ProofKind.LeanNative]];
   *   - `<Package>.Generated.<other>.proved`: it cites what Scalus proved of another statement,
   *     which is then one of the proof's lemmas, and is to be among the verifier's theorems. The
@@ -51,7 +56,9 @@ import scala.jdk.CollectionConverters.*
 final class LeanManual private (
     val module: String,
     val theorem: String,
-    val budget: Int,
+    /** The steps the statement is written at, or none where it is of runs of any number of steps.
+      */
+    val budget: Option[Int],
     val servers: LeanServerProvider,
     val timeout: FiniteDuration,
     /** How the statement's variables are mapped, or none where it was not said: as for
@@ -59,16 +66,18 @@ final class LeanManual private (
       */
     val mapping: Option[VariableMapping]
 ) extends Tactic {
-    require(budget > 0, "the budget of a statement proved by hand must be positive")
+    require(budget.forall(_ > 0), "the budget of a statement proved by hand must be positive")
     require(timeout.length > 0, "the lean-manual timeout must be positive")
 
     override type Prepared = LeanManual.Prepared
 
     override val name: String = "lean-manual"
 
-    /** The tactic that lowers the statement, and writes its module. */
+    /** The tactic that lowers the statement, and writes its module. Its budget is the module's: the
+      * lowering itself does not depend on it.
+      */
     private def lowering: UplcBlaster = {
-        val blaster = UplcBlaster(Budget.LeanSteps(budget), servers)
+        val blaster = UplcBlaster(budget.fold(Budget.Auto)(Budget.LeanSteps(_)), servers)
         mapping.fold(blaster)(blaster.withMapping)
     }
 
@@ -81,23 +90,28 @@ final class LeanManual private (
         lowering.prepare(goal).map(lowered => LeanManual.Prepared(goal, lowered))
 
     /** The module of the statement in `workspace`, as this tactic writes it: without the axiom
-      * `proved`, of the statement as written at the budget.
+      * `proved`, of the statement as written at the budget, or of runs of any number of steps.
       */
     def statementModule(prepared: Prepared, workspace: Path): LeanManual.Written = {
         val id = LeanProofs.moduleName(prepared.goal.statement.name)
         val (moduleName, file) = LeanWorkspace.generated(workspace, id)
         val directory = workspace.relativize(file.getParent.resolve(id)).toString
+        val heartbeats = lowering.maxHeartbeats
         LeanManual.Written(
           moduleName,
           file,
           directory,
-          UplcBlaster.statementModule(
-            prepared.asWritten,
-            budget,
-            None,
-            lowering.maxHeartbeats,
-            moduleName,
-            directory
+          budget.fold(
+            UplcBlaster.anyRunStatementModule(prepared.asWritten, heartbeats, moduleName, directory)
+          )(steps =>
+              UplcBlaster.statementModule(
+                prepared.asWritten,
+                steps,
+                None,
+                heartbeats,
+                moduleName,
+                directory
+              )
           )
         )
     }
@@ -175,7 +189,8 @@ final class LeanManual private (
               messages,
               LeanWorkspace.packageName(workspace),
               statementModule,
-              theorem
+              theorem,
+              budget.isEmpty
             )
             (kind, axioms, cited) = read
             lemmas <- LeanManual
@@ -265,7 +280,9 @@ final class LeanManual private (
                 Fingerprint(
                   LeanWorkspace.environment(workspace) +
                       (LeanManual.proofsPart -> LeanManual.proofsHash(workspace, module)),
-                  Fingerprint.hash(s"$name $module $theorem $budget $statement"),
+                  Fingerprint.hash(
+                    s"$name $module $theorem ${budget.fold("any")(_.toString)} $statement"
+                  ),
                   programs
                 )
             }
@@ -364,7 +381,7 @@ object LeanManual {
         budget: Int,
         servers: LeanServerProvider
     ): LeanManual =
-        new LeanManual(module, theorem, budget, servers, defaultTimeout, None)
+        new LeanManual(module, theorem, Some(budget), servers, defaultTimeout, None)
 
     /** [[apply]], with the check given up after `timeout`. */
     def apply(
@@ -374,7 +391,22 @@ object LeanManual {
         servers: LeanServerProvider,
         timeout: FiniteDuration
     ): LeanManual =
-        new LeanManual(module, theorem, budget, servers, timeout, None)
+        new LeanManual(module, theorem, Some(budget), servers, timeout, None)
+
+    /** `theorem`, of the module `module` of the servers' workspace, proves the statement it is
+      * asked of, written of runs of any number of steps ([[UplcBlaster.anyRunStatementModule]]).
+      */
+    def ofAnyRun(module: String, theorem: String, servers: LeanServerProvider): LeanManual =
+        new LeanManual(module, theorem, None, servers, defaultTimeout, None)
+
+    /** [[ofAnyRun]], with the check given up after `timeout`. */
+    def ofAnyRun(
+        module: String,
+        theorem: String,
+        servers: LeanServerProvider,
+        timeout: FiniteDuration
+    ): LeanManual =
+        new LeanManual(module, theorem, None, servers, timeout, None)
 
     /** A statement as the tactic lowered it, with the goal whose lemmas a proof may cite. */
     final case class Prepared(goal: Goal, lowered: UplcBlaster.Lowered) {
@@ -394,15 +426,16 @@ object LeanManual {
     )
 
     /** A proof by hand that Lean took: the theorem, its module, the axioms it rests on, the kind
-      * they make it, the budget of the statement, the hashes of its programs, and the hash of the
-      * module of each statement it cites, by the module's name in `Generated`.
+      * they make it, the budget of the statement (none of a statement of runs of any number of
+      * steps), the hashes of its programs, and the hash of the module of each statement it cites,
+      * by the module's name in `Generated`.
       */
     final case class Artifact(
         theorem: String,
         module: String,
         axioms: List[String],
         kind: ProofKind,
-        budget: Int,
+        budget: Option[Int],
         programHashes: List[String],
         cited: List[(String, String)],
         kept: Boolean
@@ -589,7 +622,8 @@ object LeanManual {
         messages: List[Message],
         packageName: String,
         statementModule: String,
-        theorem: String
+        theorem: String,
+        ofAnyRun: Boolean
     ): Either[ExecutionResult, (ProofKind, List[String], List[String])] = {
         val errors = messages.filter(_.severity == Severity.Error)
         if errors.nonEmpty then
@@ -604,20 +638,23 @@ object LeanManual {
                 axioms <- axiomsOf(messages, theorem).toRight(
                   LeanManual.failure(s"Lean did not say the axioms of $theorem")
                 )
-                judged <- judgedAxioms(axioms, packageName, statementModule, theorem).left
+                judged <- judgedAxioms(axioms, packageName, statementModule, theorem, ofAnyRun).left
                     .map(LeanManual.failure(_))
             } yield (judged._1, axioms, judged._2)
     }
 
     /** The kind of a proof of the statement of `statementModule` that rests on `axioms`, and the
       * names of the modules of the statements whose results it cites (`<id>` of
-      * `<packageName>.Generated.<id>.proved`), or why it is no proof.
+      * `<packageName>.Generated.<id>.proved`), or why it is no proof. `ofAnyRun` is whether the
+      * statement is of runs of any number of steps, which Lean defines: a proof on Lean's axioms
+      * alone is then of the runs themselves, and not of Blaster's optimization of them.
       */
     def judgedAxioms(
         axioms: List[String],
         packageName: String,
         statementModule: String,
-        theorem: String
+        theorem: String,
+        ofAnyRun: Boolean
     ): Either[String, (ProofKind, List[String])] = {
         val proved = s"$packageName.${LeanWorkspace.GeneratedDirectory}."
         def cited(axiom: String): Option[String] =
@@ -645,6 +682,7 @@ object LeanManual {
         else
             val kind =
                 if axioms.exists(nativeAxioms) then ProofKind.LeanNative
+                else if ofAnyRun then ProofKind.LeanKernel
                 else ProofKind.LeanKernelOfOptimizedRuns
             Right(kind -> axioms.flatMap(cited))
     }
