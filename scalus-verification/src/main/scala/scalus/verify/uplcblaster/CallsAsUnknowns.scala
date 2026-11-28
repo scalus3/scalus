@@ -637,24 +637,29 @@ object CallsAsUnknowns {
     private final case class Contract(
         parameters: List[SIR.Var],
         expects: Option[AnnotatedSIR],
-        ensures: AnnotatedSIR,
+        ensures: Option[AnnotatedSIR],
+        returns: Option[AnnotatedSIR],
         clauses: List[Clause]
     ) {
 
         /** The tests the contract makes of a call on `arguments` that returned the value named
-          * `returned`: the precondition, of the arguments, where there is one, and the guarantee,
-          * of them and of what the call returned. The parameters are bound to the arguments under
-          * names of their own, with `suffix`.
+          * `returned`: the precondition, of the arguments, where there is one; the guarantee, of
+          * them and of what the call returned; and the condition where the call returns, of the
+          * arguments. The parameters are bound to the arguments under names of their own, with
+          * `suffix`.
           */
         def at(
             arguments: List[SIR],
             returned: String,
             suffix: String
-        ): (Option[AnnotatedSIR], AnnotatedSIR) = {
+        ): (Option[AnnotatedSIR], Option[AnnotatedSIR], Option[AnnotatedSIR]) = {
             val names = parameters.map(p => p.name -> s"${p.name}$$contract$suffix").toMap
+            def bound(test: AnnotatedSIR, renames: Map[String, String]) =
+                bindParameters(parameters, arguments, names, test, renames)
             (
-              expects.map(bindParameters(parameters, arguments, names, _, Map.empty)),
-              bindParameters(parameters, arguments, names, ensures, Map(resultName -> returned))
+              expects.map(bound(_, Map.empty)),
+              ensures.map(bound(_, Map(resultName -> returned))),
+              returns.map(bound(_, Map.empty))
             )
         }
 
@@ -666,8 +671,12 @@ object CallsAsUnknowns {
             val names = parameters.map(p => p.name -> s"${p.name}$$of$suffix").toMap
             def bound(test: AnnotatedSIR) =
                 bindParameters(parameters, arguments, names, test, Map.empty)
-            Contract(outer, expects.map(bound), bound(ensures), clauses)
+            Contract(outer, expects.map(bound), ensures.map(bound), returns.map(bound), clauses)
         }
+
+        /** The clauses of the guarantees of what the call returns, and of where it returns. */
+        def ofResult: List[Clause] = clauses.filter(_.kind != Clause.Kind.ReturnsWhen)
+        def ofReturning: List[Clause] = clauses.filter(_.kind == Clause.Kind.ReturnsWhen)
     }
 
     /** `test`, of `parameters`, with each bound to its argument under its name in `names`, in one
@@ -707,12 +716,17 @@ object CallsAsUnknowns {
                     SIR.renameFreeVarsInExpr(c, Map(result.name -> resultName))
                 )
             )
+            val returning = stated.returning.map((unit, condition) =>
+                Some(Obligations.bind(unit, Obligations.unit, condition))
+            )
             val guarantees = ofParameters ++ ofResult
-            Option.when(guarantees.forall(_.nonEmpty))(
+            def all(tests: List[AnnotatedSIR]) = tests.reduceOption(SIR.And(_, _, noAnnotations))
+            Option.when((guarantees ++ returning).forall(_.nonEmpty))(
               Contract(
                 parameters,
-                stated.preconditions.reduceOption(SIR.And(_, _, noAnnotations)),
-                guarantees.flatten.reduce(SIR.And(_, _, noAnnotations)),
+                all(stated.preconditions),
+                all(guarantees.flatten),
+                all(returning.flatten),
                 stated.clauses
               )
             )
@@ -984,6 +998,9 @@ object CallsAsUnknowns {
                 if flags.isRec && isValueType(sir.tp) &&
                     appliesFully(body, self, lambdas(function)._1.size) =>
                 walk(sir, scope, anns).getOrElse(structural(sir, scope))
+            // Clauses at the head of a loop, as an inline function's are where it is inlined.
+            case SIR.Let(_, _, _, anns) if startsWithClause(sir) =>
+                stated(sir, scope, anns).getOrElse(structural(sir, scope))
             case SIR.Apply(_, _, tp, anns) =>
                 val (head, arguments) = spine(sir)
                 // Specifications are no part of a program, and are erased before it is compiled:
@@ -992,15 +1009,22 @@ object CallsAsUnknowns {
                 nameOf(head) match
                     case Some(EraseSpecifications.Expects | EraseSpecifications.Ensures) => sir
                     case Some(EraseSpecifications.Ensuring) =>
-                        sir match
-                            case SIR.Apply(SIR.Apply(f, body, bodyTp, bodyAnns), condition, _, _) =>
-                                SIR.Apply(
-                                  SIR.Apply(f, go(body, scope), bodyTp, bodyAnns),
-                                  condition,
-                                  tp,
-                                  anns
-                                )
-                            case other => other
+                        stated(sir, scope, anns).getOrElse {
+                            sir match
+                                case SIR.Apply(
+                                      SIR.Apply(f, body, bodyTp, bodyAnns),
+                                      condition,
+                                      _,
+                                      _
+                                    ) =>
+                                    SIR.Apply(
+                                      SIR.Apply(f, go(body, scope), bodyTp, bodyAnns),
+                                      condition,
+                                      tp,
+                                      anns
+                                    )
+                                case other => other
+                        }
                     case _ => call(sir, head, arguments, tp, anns, scope)
             case _ => structural(sir, scope)
         }
@@ -1029,20 +1053,52 @@ object CallsAsUnknowns {
                 case _ => structural(sir, scope)
 
         /** The unknown of the walk `sir`, where its key is of the statement's variables, with the
-          * premise of its function's contract, where it has one, made with the unknown.
+          * premises of its function's contract, or of `stated`, the contract stated around it,
+          * where it has one, made with the unknown.
           */
         private def walk(
             sir: AnnotatedSIR,
             scope: Scope,
-            anns: AnnotationsDecl
+            anns: AnnotationsDecl,
+            stated: Option[Contract] = None
         ): Option[AnnotatedSIR] = {
             val key = keyOf(sir, scope.keys, Map.empty, 0)
             Option.when(key.hoistable) {
                 val (read, made) = table.reference(key, sir.tp, written(sir), anns)
-                made.foreach(assume(sir, key, _, scope))
+                made.foreach(assume(sir, key, _, scope, stated))
                 read
             }
         }
+
+        /** Whether `sir` starts with a clause written as a statement. */
+        private def startsWithClause(sir: SIR): Boolean = sir match
+            case SIR.Let(binding :: _, _, _, _) =>
+                spine(unwrapped(binding.value))._1 match
+                    case SIR.ExternalVar(_, name, _, _) =>
+                        name == EraseSpecifications.Expects || name == EraseSpecifications.Ensures ||
+                        name == EraseSpecifications.ReturnsWhen
+                    case _ => false
+            case _ => false
+
+        /** The unknown of the loop that `sir` states a contract around, with the premises of that
+          * contract: an inline function's, where it is inlined. Its conditions are the code's,
+          * written of the arguments the inlining put in place of the parameters, so the contract
+          * has none. None where the code under the contract is no loop, or no unknown.
+          */
+        private def stated(
+            sir: AnnotatedSIR,
+            scope: Scope,
+            anns: AnnotationsDecl
+        ): Option[AnnotatedSIR] =
+            if !contracts then None
+            else
+                for
+                    loop <- annotated(Specifications.code(sir))
+                    if Specifications.isLoop(loop) && isValueType(loop.tp)
+                    written <- Specifications.stated(sir, "an inline function")
+                    contract <- Contract.of(Nil, written)
+                    read <- walk(loop, scope, anns, Some(contract))
+                yield read
 
         /** Adds the premise of the contract of the function the walk `sir` calls, where it has one,
           * about `unknown`, the unknown of its key `key`: where the call returns, the contract
@@ -1052,12 +1108,23 @@ object CallsAsUnknowns {
           * call fails, and everything it computes, the values of the program it reads among them,
           * it computes where the call returns.
           */
-        private def assume(sir: AnnotatedSIR, key: Key, unknown: Unknown, scope: Scope): Unit = {
-            val (head, arguments) = spine(sir)
-            for
-                name <- global(head) if nesting < mostNested
-                contract <- contractOf(name) if contract.parameters.size == arguments.size
-            do
+        private def assume(
+            sir: AnnotatedSIR,
+            key: Key,
+            unknown: Unknown,
+            scope: Scope,
+            stated: Option[Contract]
+        ): Unit = {
+            val (head, called) = spine(sir)
+            val found = stated
+                .map(_ -> Nil)
+                .orElse(
+                  global(head)
+                      .flatMap(contractOf)
+                      .filter(_.parameters.size == called.size)
+                      .map(_ -> called)
+                )
+            for (contract, arguments) <- found if nesting < mostNested do
                 val suffix = table.premiseSuffix()
                 val returned = s"returned$$$suffix"
                 def where(test: AnnotatedSIR, otherwise: Boolean) =
@@ -1068,24 +1135,42 @@ object CallsAsUnknowns {
                   where(_, true),
                   SIR.Var(unknown.ident.name, unknown.ident.tp, noAnnotations)
                 )
-                val (expects, ensures) = contract.at(arguments, returned, suffix)
+                val (expects, ensures, returns) = contract.at(arguments, returned, suffix)
                 nesting += 1
                 val precondition = expects.map(go(_, inScope))
-                val guarantee = go(ensures, inScope)
+                val guarantee = ensures.map(go(_, inScope))
+                val returning = returns.map(go(_, scope))
                 nesting -= 1
                 // The values the arguments read are bound where the call returned: they are part
                 // of its key, so they are computed there. Bound outside, one that fails would make
                 // the premise fail where the call does not return, and the premise is false there.
                 // A precondition is a premise of its own, whose program is false where the call
                 // fails: where it fails or is false, the guarantee is not assumed.
-                val programs = (
-                  precondition.map(test => where(hoisted(test, scope), false)),
-                  where(hoisted(guarantee, scope), true)
-                )
-                if (programs._1.toList :+ programs._2).forall(closed) then
-                    table.assume(
-                      Premise(programs._1.map(close), close(programs._2), contract.clauses)
+                val condition = precondition.map(test => where(hoisted(test, scope), false))
+                guarantee.foreach { test =>
+                    val program = where(hoisted(test, scope), true)
+                    if (condition.toList :+ program).forall(closed) then
+                        table.assume(
+                          Premise(condition.map(close), close(program), contract.ofResult)
+                        )
+                }
+                // Where the call returns is said of the arguments, whatever the call does: so its
+                // condition is computed where the call is made, with the precondition's. Where it
+                // fails or is false, nothing is assumed.
+                returning.foreach { test =>
+                    val where = precondition.fold(test)(pre => SIR.And(pre, test, noAnnotations))
+                    val holds = hoisted(where, scope)
+                    val returned = table.whereReturned(
+                      unknown,
+                      s"returned$$$suffix",
+                      SIR.Const(Constant.Bool(true), SIRType.Boolean, noAnnotations),
+                      false
                     )
+                    if closed(holds) then
+                        table.assume(
+                          Premise(Some(close(holds)), close(returned), contract.ofReturning)
+                        )
+                }
         }
 
         /** Whether `program`, a premise, reads only what every premise has in scope: the

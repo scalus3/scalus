@@ -627,8 +627,12 @@ final class Verifier private (results: Option[KeptResults]) {
         val conditions = List.newBuilder[(Prop, Int)]
         // The clauses that have a statement.
         val stated = List.newBuilder[Clause]
-        // The `ensures` and `ensuring` clauses, numbered as [[specifications]] numbers them.
-        val clauses = clausesIn(function.name, body.term).filter(_._2.kind != Clause.Kind.Expects)
+        // The `ensures` and `ensuring` clauses, numbered as [[specifications]] numbers them. A
+        // `returnsWhen` says where the function returns, and not what holds there: its contract
+        // states it ([[FunctionContract.inSource]]).
+        val clauses = clausesIn(function.name, body.term).filter((_, clause) =>
+            clause.kind != Clause.Kind.Expects && clause.kind != Clause.Kind.ReturnsWhen
+        )
         clauses.zipWithIndex.foreach { case (((site, inLambda), clause), index) =>
             // Where the code states the clause: `Spec.ensures` is inline, and its call is at its
             // own definition ([[Clause.at]]).
@@ -1100,19 +1104,30 @@ final class Verifier private (results: Option[KeptResults]) {
         term: SIR
     ): List[((Obligations.Site, Boolean), Clause)] = {
         val seen = scala.collection.mutable.Map.empty[(String, Int, Int, Clause.Kind), Int]
-        Obligations.sites(term, clauseArities).flatMap { found =>
-            Clause.kindOf(found._1.callee).map { kind =>
-                val first = Clause.at(found._1.node, kind, function, 1)
-                val place = (first.file, first.line, first.column, kind)
-                val occurrence = seen.getOrElse(place, 0) + 1
-                seen(place) = occurrence
-                found -> first.copy(occurrence = occurrence)
+        // A contract stated around a loop is the loop's, as an inline function's is where it is
+        // inlined: the function's clauses are no guarantees of the code it is inlined into.
+        val ofLoops = Specifications.loopClauses(term)
+        Obligations
+            .sites(term, clauseArities)
+            .filterNot(found => ofLoops.contains(found._1.node))
+            .flatMap { found =>
+                Clause.kindOf(found._1.callee).map { kind =>
+                    val first = Clause.at(found._1.node, kind, function, 1)
+                    val place = (first.file, first.line, first.column, kind)
+                    val occurrence = seen.getOrElse(place, 0) + 1
+                    seen(place) = occurrence
+                    found -> first.copy(occurrence = occurrence)
+                }
             }
-        }
     }
 
     private val clauseArities =
-        Map(Obligations.Ensures -> 1, Obligations.Ensuring -> 2, Obligations.Expects -> 1)
+        Map(
+          Obligations.Ensures -> 1,
+          Obligations.Ensuring -> 2,
+          Obligations.Expects -> 1,
+          Obligations.ReturnsWhen -> 1
+        )
 
     /** Whether the code of a function here states a clause of a specification: whether
       * [[specifications]] has any, without saying how each stands.

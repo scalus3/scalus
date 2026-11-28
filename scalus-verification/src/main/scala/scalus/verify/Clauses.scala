@@ -35,6 +35,9 @@ object Clause {
 
         /** `Spec.expects(c)`: the function's callers establish `c`. */
         case Expects extends Kind("Spec.expects")
+
+        /** `Spec.returnsWhen(c)`: where `c` holds of the parameters, the function returns. */
+        case ReturnsWhen extends Kind("Spec.returnsWhen")
     }
 
     /** The clause at the node `node`, a call of the clause's function, of the kind `kind`, in the
@@ -44,14 +47,17 @@ object Clause {
       * argument where it is a lambda. `Spec.ensures` is inline: its call is that of
       * `Spec.holdsOnReturn(_ => condition)`, at the definition of `Spec.ensures`, and the code that
       * states the clause is where it was inlined to (the first place of [[SIRPosition]]'s
-      * `inlinedFrom`). `ensuring` and `Spec.expects` are not inline: their call is in that code. A
-      * condition that is an inline function's code, as `a === b`, has the place of that function's
-      * definition, and the places it was inlined to: its place is the first of them inside the
-      * call, or else in its file. The call itself is the place of a condition that has none.
+      * `inlinedFrom`); so is `Spec.returnsWhen`, whose call is that of `Spec.returnsWhere`.
+      * `ensuring` and `Spec.expects` are not inline: their call is in that code. A condition that
+      * is an inline function's code, as `a === b`, has the place of that function's definition, and
+      * the places it was inlined to: its place is the first of them inside the call, or else in its
+      * file. The call itself is the place of a condition that has none.
       */
     private[verify] def at(node: SIR, kind: Kind, function: String, occurrence: Int): Clause = {
         val call = positionOf(node)
-        val site = if kind == Kind.Ensures then call.inlinedFrom.headOption else Some(call)
+        val site =
+            if kind == Kind.Ensures || kind == Kind.ReturnsWhen then call.inlinedFrom.headOption
+            else Some(call)
         val stated = positionOf(condition(node))
         val places = (stated :: stated.inlinedFrom).filter(!_.file.isEmpty)
         val position = site.filter(!_.file.isEmpty) match
@@ -97,10 +103,11 @@ object Clause {
 
     /** The kind of the clause of a call of the function `name` in SIR, if it is one. */
     private[verify] def kindOf(name: String): Option[Kind] = name match
-        case Obligations.Ensures  => Some(Kind.Ensures)
-        case Obligations.Ensuring => Some(Kind.Ensuring)
-        case Obligations.Expects  => Some(Kind.Expects)
-        case _                    => None
+        case Obligations.Ensures     => Some(Kind.Ensures)
+        case Obligations.Ensuring    => Some(Kind.Ensuring)
+        case Obligations.Expects     => Some(Kind.Expects)
+        case Obligations.ReturnsWhen => Some(Kind.ReturnsWhen)
+        case _                       => None
 }
 
 /** How a clause of a function's specification stands in a verifier ([[Verifier.specifications]]).

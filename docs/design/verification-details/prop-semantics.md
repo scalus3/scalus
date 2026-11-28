@@ -287,8 +287,20 @@ contract from outside, in a proof suite, needs no clause: it is a statement of t
   compile (`import Spec.ensuring`). It is applied to the body's last expression, or to the whole
   body, `{ … }.ensuring(r => c)`. What it is applied to is then typed without the function's
   result type: a branch that is the literal `0` is written `BigInt(0)`.
-- **`Spec.total`** (open, overview §10 question 2) would make the contract total. Until then,
-  `.returnsWhen(_ => true)` on the contract says it.
+- **`Spec.returnsWhen(c)`, also at the top,** says where the function returns: where `c` holds
+  of the parameters, with the precondition, the function ends and does not fail. It is the
+  contract's `returnsWhen` (`c ==>: succeeds(f, parameters)`), stated in the code. A function that
+  fails on purpose where an input is wrong, as a lookup that fails where nothing is found, states
+  with it where it does not fail, which no precondition can: its callers owe nothing. It is not
+  evaluated off-chain. `Spec.returnsWhen(true)` makes a contract total; a contract written beside
+  the function says it with `.returnsWhen(_ => true)`.
+
+A contract stated around a loop is the loop's: the `ensuring` and the head clauses of an
+expression whose code is a walk, as an inline function's code is where it is inlined
+(`TxInfo.findInputOrFail`). Its clauses are no guarantees of the function it is inlined into, as
+those of a function it calls are not: `Verifier.guarantees` and `Verifier.specifications` leave
+them out (`Specifications.loopClauses`), and they are checked where the function itself is
+declared and its contract proved. The call rule assumes them of the loop's unknown.
 
 It means exactly the external contract `contract(clamp)(expects, ensures)` of §6.
 `FunctionContract.inSource(function)` reads it from the function's SIR (`Specifications.scala`), and

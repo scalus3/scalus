@@ -242,6 +242,11 @@ private[verify] object Obligations {
       */
     val Ensures: String = EraseSpecifications.Ensures
 
+    /** The name in SIR of the function behind `Spec.returnsWhen`: a clause is a call of it with
+      * `_ => condition`.
+      */
+    val ReturnsWhen: String = EraseSpecifications.ReturnsWhen
+
     val unit: AnnotatedSIR = SIR.Const(Constant.Unit, SIRType.Unit, annotations)
 
     /** `condition` about the value of `stated`, named `result`. */
