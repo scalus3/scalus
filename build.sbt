@@ -921,9 +921,10 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       // the project's own workspace, and these examples have none: their suites run in the
       // workspace of Scalus's Lean library (LeanProofs.libraryWorkspace), and
       // VestingVerificationTest runs in LinearVesting's, and AmmVerificationTest in Amm's, which
-      // require that library by its path. So this builds those three, in that order, and Amm's
-      // statements and proofs by hand (`AmmProofs`): a statement's module takes minutes to build,
-      // which is then not in the time limit of the check of a proof by hand. A new pin of Blaster
+      // require that library by its path. So this builds those three, in that order, and the
+      // proofs by hand with their statements: Amm's (`AmmProofs`), as a statement's module takes
+      // minutes to build, which is then not in the time limit of the check of a proof by hand, and
+      // LinearVesting's of `Value.minus`, so a proof that does not build fails here. A new pin of Blaster
       // or PlutusCore is then built before a check asks for it. UsdcxMintingPolicyVerificationTest is not a suite of
       // proofs and needs the Z3 of its own nix shell, so its workspace is not built here.
       leanBuild := Def.uncached {
@@ -937,7 +938,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
           for (
             (workspace, targets) <- Seq(
               library -> Nil,
-              vesting -> Nil,
+              vesting -> Seq("LinearVesting", "LinearVesting.Proofs.ValueMinus"),
               amm -> Seq("Amm", "AmmProofs")
             )
           ) {

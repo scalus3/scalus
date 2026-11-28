@@ -5096,6 +5096,13 @@ object UplcBlaster {
             .distinct
     }
 
+    /** The text of `goal` as a statement of runs of any number of steps states it, without its
+      * programs' names ([[anyRunBody]]): what a fingerprint of a proof of that statement has of it,
+      * which the check of a budget ([[identity]]) does not read.
+      */
+    private[uplcblaster] def anyRunText(goal: Lowered): String =
+        anyRunBody(goal, formula => s"def statement : Prop :=\n  $formula", "")
+
     /** The notes the tactic keeps with a result: the budget the check ran with, which a later
       * search starts at, and how the statement was decided.
       */
@@ -5494,7 +5501,7 @@ object UplcBlaster {
     /** [[statementModule]] at `budget` steps, or of runs of any number of steps where there is
       * none.
       */
-    private def written(
+    private[uplcblaster] def written(
         goal: Lowered,
         budget: Option[Int],
         kind: Option[ProofKind],
@@ -5531,10 +5538,12 @@ object UplcBlaster {
                    |/-- That `statement` holds, as Scalus proved it: by the tactic `blaster-uplc` with calls
                    |    as unknowns, a proof of the kind `BlasterOfUnknowns`. Blaster proved the statement
                    |    of the programs with each walk over a list an unknown, for every value of the
-                   |    unknowns, within a budget of steps, which implies it of any number of steps. That
-                   |    each program does what its form with unknowns does, with each unknown the value its
-                   |    walk returns, is tested, not proved. An axiom, and no proof that Lean checks: a
-                   |    theorem that uses it rests on that result, and `#print axioms` names it. -/
+                   |    unknowns that the contracts of their functions allow, within a budget of steps,
+                   |    which implies it of any number of steps. Each such contract is a theorem of Scalus
+                   |    of its own, which the result cites and rests on. That each program does what its
+                   |    form with unknowns does, with each unknown the value its walk returns, is tested,
+                   |    not proved. An axiom, and no proof that Lean checks: a theorem that uses it rests on
+                   |    that result, and `#print axioms` names it, but not the contracts it rests on. -/
                    |axiom proved : statement""".stripMargin
             case kind =>
                 s"""

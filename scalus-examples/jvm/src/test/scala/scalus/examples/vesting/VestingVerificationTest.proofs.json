@@ -6,7 +6,7 @@
       "LinearVesting": "cfdfdce352d08b72",
       "PlutusCore": "71872c19a90b",
       "ScalusProofs": "cb3161c407c6fa81",
-      "proofs": "128c40abf2043339",
+      "proofs": "ab4735ae528e5fca",
       "toolchain": "leanprover/lean4:v4.24.0"
     },
     "uplc-blaster": {
@@ -101,8 +101,7 @@
         "kind": "Blaster"
       },
       "tests": [
-        "Value.eq's contract, stated in its code, holds of every two values",
-        "spend's fourth guarantee holds of every script context, with the library's contracts"
+        "Value.eq's contract, stated in its code, holds of every two values"
       ]
     },
     "value.lovelace.is_not_zero": {
@@ -140,8 +139,7 @@
         "kind": "Blaster"
       },
       "tests": [
-        "Value.lovelace's contract, stated in its code, holds of every amount",
-        "spend's fourth guarantee holds of every script context, with the library's contracts"
+        "Value.lovelace's contract, stated in its code, holds of every amount"
       ]
     },
     "value.minus.lovelace_of_the_sum": {
@@ -162,7 +160,7 @@
     "value.minus.stated_contract_holds": {
       "tactic": "lean-manual",
       "result": "proved",
-      "statement": "fd2de881d6770254",
+      "statement": "0fbcb30348739ab5",
       "programs": [
         "16940cb266ee251d",
         "a9488482530dfd8a",
@@ -176,8 +174,7 @@
         "theorem": "LinearVesting.Proofs.ValueMinus.minus_contract"
       },
       "tests": [
-        "Value.minus's contract, stated in its code, holds of every two values",
-        "spend's fourth guarantee holds of every script context, with the library's contracts"
+        "Value.minus's contract, stated in its code, holds of every two values"
       ]
     },
     "vesting.control.sample_leaving_another_datum_is_accepted": {
@@ -305,7 +302,6 @@
         "kind": "Blaster"
       },
       "tests": [
-        "spend's fourth guarantee holds of every script context, with the library's contracts",
         "the schedule's contract, stated in its body, holds of its compiled program"
       ]
     },

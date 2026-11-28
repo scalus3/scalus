@@ -10,8 +10,9 @@ of the type, whose keys ascend, and of runs of any number of steps: the program 
 lovelace of what it returns is the difference. `minus_contract` proves it, by hand, on Lean's own
 axioms: no run of a budget follows `minus`, which walks both values to their ends.
 
-The proof is of the statement's programs as Scalus compiled them (`Leaf1`, `Leaf2`, `Leaf3` of the
-statement's module), in three parts:
+The proof is of the statement's programs as Scalus compiled them, `Leaf1` (it returns) and `Leaf3`
+(the postcondition) of the statement's module; `Leaf2`, the success that the postcondition assumes,
+is not needed. In three parts:
 
 - What the programs compute, with `ScalusProofs.BigStep`: a lemma for each loop of `minus`, by
   induction over its list (the conversions between pairs and tuples, `List.map`, the merge of the
@@ -763,10 +764,6 @@ def leaf1Body : Term :=
   match LinearVesting_Generated_value_minus_stated_contract_holds_leaf1.script with
   | .Program _ b => b
 
-def leaf2Body : Term :=
-  match LinearVesting_Generated_value_minus_stated_contract_holds_leaf2.script with
-  | .Program _ b => b
-
 /-- The environment of `getLovelace`'s `get`, in the program of the postcondition. -/
 def envR3 (A B : List (Data × Data)) : Environment :=
   [.VCon (.Data (minusModel A B)), .VCon (.Data (.Map B)), .VCon (.Data (.Map A)), minusV, spV, mcV,
@@ -790,13 +787,6 @@ theorem leaf1_big (A B : List (Data × Data)) (hA : ∀ p ∈ A, isValPair p)
     (hB : ∀ p ∈ B, isValPair p) :
     Big default (.eval [] (applyParams leaf1Body [.Const (.Data (.Map A)), .Const (.Data (.Map B))]))
       (.VCon (.Bool true)) := by
-  have hm := minus_body A B hA hB
-  big_step [hm]
-
-theorem leaf2_big (A B : List (Data × Data)) (hA : ∀ p ∈ A, isValPair p)
-    (hB : ∀ p ∈ B, isValPair p) :
-    Big default (.eval [] (applyParams leaf2Body [.Const (.Data (.Map A)), .Const (.Data (.Map B))]))
-      (.VCon (.Data (minusModel A B))) := by
   have hm := minus_body A B hA hB
   big_step [hm]
 

@@ -73,10 +73,12 @@ def statement : Prop :=
 /-- That `statement` holds, as Scalus proved it: by the tactic `blaster-uplc` with calls
     as unknowns, a proof of the kind `BlasterOfUnknowns`. Blaster proved the statement
     of the programs with each walk over a list an unknown, for every value of the
-    unknowns, within a budget of steps, which implies it of any number of steps. That
-    each program does what its form with unknowns does, with each unknown the value its
-    walk returns, is tested, not proved. An axiom, and no proof that Lean checks: a
-    theorem that uses it rests on that result, and `#print axioms` names it. -/
+    unknowns that the contracts of their functions allow, within a budget of steps,
+    which implies it of any number of steps. Each such contract is a theorem of Scalus
+    of its own, which the result cites and rests on. That each program does what its
+    form with unknowns does, with each unknown the value its walk returns, is tested,
+    not proved. An axiom, and no proof that Lean checks: a theorem that uses it rests on
+    that result, and `#print axioms` names it, but not the contracts it rests on. -/
 axiom proved : statement
 
 end LinearVesting.Generated.vesting_spend_beneficiary_signed

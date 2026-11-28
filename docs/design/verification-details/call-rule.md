@@ -97,10 +97,11 @@ Where the rule is sound:
 - A proof by hand of a walk: `Value.minus`'s contract, of runs of any number of steps
   (`LeanManual.ofAnyRun`), on Lean's own axioms
   (`scalus-examples/jvm/src/test/lean/LinearVesting/LinearVesting/Proofs/ValueMinus.lean`). With a
-  big-step semantics of the CEK machine, proved to agree with its runs
-  (`scalus-verification/src/main/lean/ScalusProofs/BigStep.lean`), each of `minus`'s five loops is
-  a lemma by induction over its list, and `minus` computes a model of what it returns; at the
-  model's head is the difference of the heads' lovelace.
+  big-step semantics of the CEK machine, proved sound for its runs: what a derivation says a part
+  computes, the machine computes, over any stack
+  (`scalus-verification/src/main/lean/ScalusProofs/BigStep.lean`). With it, each of `minus`'s five
+  loops is a lemma by induction over its list, and `minus` computes a model of what it returns; at
+  the model's head is the difference of the heads' lovelace.
 - Contracts: `Props.contract`, `Props.totalContract`
   (`scalus-verification/src/main/scala/scalus/verify/Prop.scala:514`, `:569`), and those a
   function states in its body with `Spec`, read by `FunctionContract.inSource` (`Prop.scala:197`).
@@ -133,8 +134,8 @@ library functions are in `scalus-core/shared/src/main/scala/scalus/cardano/oncha
 | 4 | it returns the input whose `outRef` is the given one, or fails where there is none; it ends | `TxInfo.findInputOrFail` (`v3/Contexts.scala:986`, its loop `:994-998`) | #3, #4: `lockedBy` (`VestingValidator.scala:167-168`) | not started |
 | 5 | it returns the one element of which the predicate holds, or fails; it ends | `List.findUniqueOrFail`, `List.findUniqueOrElse` (`prelude/List.scala:1119`, `:1139`) | the validator's check of one vesting input (`VestingValidator.scala:82`), #4's continuing output (`v3/Contexts.scala:1046`) | not started |
 | 6 | each ends | `TxInfo.findInputsByCredential`, `findOutputsByCredential` (`v3/Contexts.scala:1019`, `:1029`), the folds over values (`VestingValidator.scala:110-111`) | the rejecting form of #4, which runs the validator past them | not started |
-| 7 | vesting #4 of the validator itself, of every context, with the contract of 2 | `vesting.spend.state_is_carried` (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:519`), clause `VestingValidator.scala:64-66`, `carriesTheRest` `:174-184` | the step of the vesting thread ([several transactions](multi-transaction.md#vesting)) | proved with `CallsAsUnknowns`, at 2400 steps in two minutes (2026-11-26), citing the proofs of the three contracts of 2 (2026-11-27) and of `linearVesting`'s, which the validator also calls: a theorem, of kind `BlasterOfUnknowns` |
-| 8 | #1 and #3 again under the rule, which they need no contract for: proved `withoutContracts`, assuming none | `VestingVerificationTest.scala:441`, `:483` | that the move of `CallsAsUnknowns` keeps them | proved with `CallsAsUnknowns` |
+| 7 | vesting #4 of the validator itself, of every context, with the contract of 2 | `vesting.spend.state_is_carried` (`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:579`), clause `VestingValidator.scala:64-66`, `carriesTheRest` `:174-184` | the step of the vesting thread ([several transactions](multi-transaction.md#vesting)) | proved with `CallsAsUnknowns`, at 2400 steps in two minutes (2026-11-26), citing the proofs of the three contracts of 2 (2026-11-27) and of `linearVesting`'s, which the validator also calls: a theorem, of kind `BlasterOfUnknowns` |
+| 8 | #1 and #3 again under the rule, which they need no contract for: proved `withoutContracts`, assuming none | `VestingVerificationTest.scala:501`, `:543` | that the move of `CallsAsUnknowns` keeps them | proved with `CallsAsUnknowns` |
 
 Of 2, two of the three contracts need no induction. `getLovelace` reads a value's first entry
 only: the ada policy and token name are the empty bytes, the least keys, and the compiled search
